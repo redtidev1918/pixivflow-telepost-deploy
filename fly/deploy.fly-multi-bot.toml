@@ -1,14 +1,14 @@
 # TelePost 多 bot 实例（一台机承载 BOT1 + BOT2 两个频道）
 # 模式：Webhook + 常驻一台（保证定时任务与投稿 bot 不被停机）
-# 部署：fly deploy -c deploy.your-app-name.toml --now
+# 从仓库根目录部署：fly deploy -c fly/deploy.fly-multi-bot.toml --now
 app = "your-app-name"
 primary_region = "sin"
 
 [build]
-  dockerfile = "Dockerfile"
-  build-target = "runtime-pixivflow"
+  dockerfile = "docker/combined.Dockerfile"
 
 [build.args]
+  TELEPOST_IMAGE = "ghcr.io/redtidev1918/telepost:2.9.0"
   PIXIVFLOW_VERSION = "2.7.0"
 
 [env]

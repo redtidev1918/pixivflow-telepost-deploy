@@ -3,7 +3,9 @@
 
 # 运行时数据（数据库、下载文件、日志、代理缓存）
 data/
+proxy-data/
 *.log
+*.upload
 
 # TelePost Fly 本地策略与凭据；只提交 *.example.json 模板
 fly/config/*.json
@@ -13,6 +15,7 @@ fly/data/
 
 # PixivFlow 运行时配置（含 refresh token，从 .env 注入）
 pixivflow/config/standalone.config.json
+pixivflow/config/config.json
 
 # IDE
 .idea/
