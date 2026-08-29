@@ -1,5 +1,10 @@
 # Changelog
 
+## [1.3.7] - 2026-08-29
+
+- 联合镜像 TelePost 升级到 **2.10.3**（审核队列预览发送增加节流与 `RetryAfter` 退避，多页图集入审核队列不再触发 Telegram flood 502）。
+- `TELEPOST_IMAGE` 统一升至 2.10.3；`PIXIVFLOW_VERSION` 保持 2.10.3。
+
 ## [1.3.6] - 2026-08-29
 
 - 联合镜像 TelePost 升级到 **2.10.2**（投稿入站文件数上限 10→50：多页插画/图集整本可投，发布侧自动按每组 ≤10 拆成多个 Telegram media group）。
