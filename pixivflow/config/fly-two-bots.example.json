@@ -26,33 +26,29 @@
   "schedules": [
     {
       "id": "bot1-daily",
-      "name": "Bot 1 daily ranking",
+      "name": "Bot1 daily テーマ甲 昨日热门 (NSFW)",
       "enabled": false,
-      "cron": "10 5 * * *",
+      "cron": "0 20 * * *",
       "timezone": "Asia/Shanghai",
       "targetIds": [
-        "bot1-illust-tag-a",
-        "bot1-novel-tag-a",
-        "bot1-illust-tag-b",
-        "bot1-novel-tag-b"
+        "bot1-illust-topic-a",
+        "bot1-novel-topic-a"
       ],
-      "timeout": 1200000,
+      "timeout": 1800000,
       "maxConsecutiveFailures": 5,
       "failureRetryDelay": 30000
     },
     {
       "id": "bot2-daily",
-      "name": "Bot 2 daily ranking",
+      "name": "Bot2 daily テーマ乙 昨日热门 (NSFW)",
       "enabled": false,
-      "cron": "30 5 * * *",
+      "cron": "30 20 * * *",
       "timezone": "Asia/Shanghai",
       "targetIds": [
-        "bot2-illust-tag-c",
-        "bot2-novel-tag-c",
-        "bot2-illust-tag-d",
-        "bot2-novel-tag-d"
+        "bot2-illust-topic-b",
+        "bot2-novel-topic-b"
       ],
-      "timeout": 1200000,
+      "timeout": 1800000,
       "maxConsecutiveFailures": 5,
       "failureRetryDelay": 30000
     }
@@ -84,11 +80,13 @@
           "title": "{{title}}",
           "tags": [
             "Pixiv",
-            "{{tag}}",
+            "{{topicTag}}",
             "{{workTags}}"
           ],
-          "note": "Pixiv ID: {{pixivId}}",
+          "note": "Pixiv 自动投稿\n作品ID：{{pixivId}}",
+          "link": "{{link}}",
           "anonymous": true,
+          "spoiler": "{{spoiler}}",
           "idempotency_key": "pixiv:bot1:{{type}}:{{pixivId}}"
         },
         "success": {
@@ -112,11 +110,13 @@
           "title": "{{title}}",
           "tags": [
             "Pixiv",
-            "{{tag}}",
+            "{{topicTag}}",
             "{{workTags}}"
           ],
-          "note": "Pixiv ID: {{pixivId}}",
+          "note": "Pixiv 自动投稿\n作品ID：{{pixivId}}",
+          "link": "{{link}}",
           "anonymous": true,
+          "spoiler": "{{spoiler}}",
           "idempotency_key": "pixiv:bot2:{{type}}:{{pixivId}}"
         },
         "success": {
@@ -134,12 +134,13 @@
   },
   "targets": [
     {
-      "id": "bot1-illust-tag-a",
+      "id": "bot1-illust-topic-a",
       "type": "illustration",
       "mode": "ranking",
       "rankingMode": "day",
       "rankingDate": "YESTERDAY",
-      "filterTag": "TAG_A",
+      "filterTag": "テーマ甲",
+      "r18": true,
       "limit": 1,
       "storageMode": "cache",
       "delivery": {
@@ -147,12 +148,13 @@
       }
     },
     {
-      "id": "bot1-novel-tag-a",
+      "id": "bot1-novel-topic-a",
       "type": "novel",
       "mode": "ranking",
       "rankingMode": "day",
       "rankingDate": "YESTERDAY",
-      "filterTag": "TAG_A",
+      "filterTag": "テーマ甲",
+      "r18": true,
       "limit": 1,
       "storageMode": "cache",
       "delivery": {
@@ -160,38 +162,13 @@
       }
     },
     {
-      "id": "bot1-illust-tag-b",
+      "id": "bot2-illust-topic-b",
       "type": "illustration",
       "mode": "ranking",
       "rankingMode": "day",
       "rankingDate": "YESTERDAY",
-      "filterTag": "TAG_B",
-      "limit": 1,
-      "storageMode": "cache",
-      "delivery": {
-        "target": "telepost-bot1"
-      }
-    },
-    {
-      "id": "bot1-novel-tag-b",
-      "type": "novel",
-      "mode": "ranking",
-      "rankingMode": "day",
-      "rankingDate": "YESTERDAY",
-      "filterTag": "TAG_B",
-      "limit": 1,
-      "storageMode": "cache",
-      "delivery": {
-        "target": "telepost-bot1"
-      }
-    },
-    {
-      "id": "bot2-illust-tag-c",
-      "type": "illustration",
-      "mode": "ranking",
-      "rankingMode": "day",
-      "rankingDate": "YESTERDAY",
-      "filterTag": "TAG_C",
+      "filterTag": "テーマ乙",
+      "r18": true,
       "limit": 1,
       "storageMode": "cache",
       "delivery": {
@@ -199,38 +176,13 @@
       }
     },
     {
-      "id": "bot2-novel-tag-c",
+      "id": "bot2-novel-topic-b",
       "type": "novel",
       "mode": "ranking",
       "rankingMode": "day",
       "rankingDate": "YESTERDAY",
-      "filterTag": "TAG_C",
-      "limit": 1,
-      "storageMode": "cache",
-      "delivery": {
-        "target": "telepost-bot2"
-      }
-    },
-    {
-      "id": "bot2-illust-tag-d",
-      "type": "illustration",
-      "mode": "ranking",
-      "rankingMode": "day",
-      "rankingDate": "YESTERDAY",
-      "filterTag": "TAG_D",
-      "limit": 1,
-      "storageMode": "cache",
-      "delivery": {
-        "target": "telepost-bot2"
-      }
-    },
-    {
-      "id": "bot2-novel-tag-d",
-      "type": "novel",
-      "mode": "ranking",
-      "rankingMode": "day",
-      "rankingDate": "YESTERDAY",
-      "filterTag": "TAG_D",
+      "filterTag": "テーマ乙",
+      "r18": true,
       "limit": 1,
       "storageMode": "cache",
       "delivery": {

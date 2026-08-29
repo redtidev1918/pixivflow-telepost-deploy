@@ -61,6 +61,37 @@ BOT1_REVIEW_CHAT_ID=-100xxxxxxxxxx
 Bot 2 使用对应的 `BOT2_*`。PixivFlow 模板中的两个 delivery target 固定投递到
 `/api/bot1/v1/submissions` 与 `/api/bot2/v1/submissions`。
 
+## 自动投稿的标题/简介/标签/链接/剧透
+
+PixivFlow 的 delivery 模板把投稿转成 TelePost 的 caption 字段，模板变量有
+`{{title}}`、`{{pixivId}}`、`{{type}}`、`{{tag}}`、`{{topic}}`、
+`{{workTags}}`、`{{link}}`（自动生成 Pixiv 作品/小说永久链接）、`{{topicTag}}`
+与 `{{spoiler}}`（R-18 自动为 `true`）。建议设计（已在示例配置中）：
+
+- `title` → `{{title}}`，频道内渲染为「🔖 标题」
+- `note` → 自动投稿来源与作品 ID，渲染为「📝 简介」
+- `tags` → `["Pixiv", "{{topicTag}}", "{{workTags}}"]`，来源主题 + 作品自身标签
+- `link` → `{{link}}`，渲染为「🔗 链接」
+- `spoiler` → `{{spoiler}}`：R-18 作品自动加 Telegram 剧透遮罩，非 R-18 不遮
+- `anonymous` → `true`，频道内不显示投稿人
+
+### 审核群预览回复链
+
+多页图集进入审核群时，TelePost 会把每一页/每个文件连续发送，并让后续每条消息回复上一条，
+在群内形成一组回复链，一眼看出是一份投稿。需要平铺发送时设 `REVIEW_PREVIEW_THREAD=0`。
+逐张发送仍保留限速与 `RetryAfter` 退避，批准后继续复用 Telegram `file_id`，不会重复上传媒体。
+
+### 单次手动测试（不等待 Cron）
+
+```bash
+# 在运行机器上执行一次，立即验证「昨日最热门 + 指定 tag + 含 R-18」链路：
+pixivflow download --config /app/data/pixivflow/config.json
+```
+
+新增/修改 target 并保存后，PixivFlow 会热重载；配合
+`mode: "ranking" + filterTag + rankingDate: "YESTERDAY" + r18: true + limit: 1`
+即得到「昨天最热门的某 tag 1 部插画/小说（含 R-18）」并投递到对应 Bot 的审核群。
+
 ## 远程变更
 
 PixivFlow 会监听配置文件；有效的新 JSON 通过完整校验后原子替换调度表，无需重启：
