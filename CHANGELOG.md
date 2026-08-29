@@ -1,5 +1,10 @@
 # Changelog
 
+## [1.3.2] - 2026-08-29
+
+- 联合镜像内置 PixivFlow 升级到 **2.10.2**：Topic 排名改为纯热度（metadata 只做门槛）；autocomplete 独立召回低置信 Tag；better-sqlite3 升 v12（修复 Node 22/24 退出崩溃）。
+- `PIXIVFLOW_VERSION` 统一升至 2.10.2。
+
 ## [1.3.1] - 2026-08-29
 
 - 联合镜像内置 PixivFlow 升级到 **2.10.1**：修复相对 `databasePath` 且进程工作目录与数据卷不一致时（容器 CLI）`topic-cache/` 可能写到非数据卷目录的问题；现在 Topic 缓存始终落在 SQLite 同级目录（持久卷 `/app/data/pixivflow/topic-cache/`）。
