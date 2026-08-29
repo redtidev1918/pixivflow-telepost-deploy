@@ -1,0 +1,193 @@
+# ============================================================================
+# PixivFlow Docker Compose 配置
+# ============================================================================
+# 
+# 本文件定义了两个服务：
+# 1. pixivflow - 定时任务服务（自动执行下载任务）
+# 2. pixivflow-webui - WebUI 管理界面（可选，提供 Web 管理界面）
+#
+# 使用说明：
+# - 启动定时任务：docker-compose up -d pixivflow
+# - 启动 WebUI：docker-compose up -d pixivflow-webui
+# - 同时启动两个服务：docker-compose up -d
+# - 查看日志：docker-compose logs -f pixivflow
+# - 停止服务：docker-compose down
+#
+# 详细文档：docs/DOCKER.md
+#
+# 环境变量配置：
+# 1. 复制 docker-env.example 为 .env: cp docker-env.example .env
+# 2. 编辑 .env 文件，配置代理等参数
+# 3. docker-compose 会自动读取 .env 文件
+# ============================================================================
+
+services:
+  # ============================================================================
+  # 定时任务服务
+  # 功能：自动执行定时下载任务，后台持续运行
+  # ============================================================================
+  pixivflow:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        - BUILDKIT_INLINE_CACHE=1
+    image: pixivflow:latest
+    container_name: pixivflow
+    restart: unless-stopped
+    
+    # 环境变量
+    env_file:
+      - ../.env
+    environment:
+      - NODE_ENV=production
+      - TZ=${TZ:-Asia/Shanghai}
+      # 跳过容器内自动登录（容器内无法进行交互式登录）
+      - PIXIV_SKIP_AUTO_LOGIN=true
+      # Docker 容器内路径配置
+      - PIXIV_DATABASE_PATH=${PIXIV_DATABASE_PATH:-/app/data/pixiv-downloader.db}
+      - PIXIV_DOWNLOAD_DIR=${PIXIV_DOWNLOAD_DIR:-/app/downloads}
+      - PIXIV_ILLUSTRATION_DIR=${PIXIV_ILLUSTRATION_DIR:-/app/downloads/illustrations}
+      - PIXIV_NOVEL_DIR=${PIXIV_NOVEL_DIR:-/app/downloads/novels}
+      # 日志级别
+      - PIXIV_LOG_LEVEL=${PIXIV_LOG_LEVEL:-info}
+      # 调度器配置
+      - PIXIV_SCHEDULER_ENABLED=${PIXIV_SCHEDULER_ENABLED:-true}
+      # 代理配置（从环境变量或 .env 文件读取）
+      - HTTP_PROXY=${HTTP_PROXY:-}
+      - HTTPS_PROXY=${HTTPS_PROXY:-}
+      - ALL_PROXY=${ALL_PROXY:-}
+      - http_proxy=${http_proxy:-}
+      - https_proxy=${https_proxy:-}
+      - all_proxy=${all_proxy:-}
+    
+    # 数据持久化
+    volumes:
+      # 配置文件目录
+      - ./config:/app/config:ro
+      # 数据目录（数据库和日志）
+      - ./data:/app/data
+      # 下载目录
+      - ./downloads:/app/downloads
+    
+    # 网络配置
+    network_mode: bridge
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    
+    # 资源限制（可选，根据需要取消注释）
+    # deploy:
+    #   resources:
+    #     limits:
+    #       cpus: '1'
+    #       memory: 512M
+    #     reservations:
+    #       cpus: '0.5'
+    #       memory: 256M
+    
+    # 健康检查
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('fs').existsSync('/app/data/pixiv-downloader.db') ? process.exit(0) : process.exit(1)"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # ============================================================================
+  # WebUI 服务（可选）
+  # 功能：提供现代化的 Web 管理界面
+  # 访问地址：http://localhost:3000
+  # 功能包括：文件浏览、统计查看、任务管理、实时日志等
+  # ============================================================================
+  pixivflow-webui:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        - BUILDKIT_INLINE_CACHE=1
+    image: pixivflow:latest
+    container_name: pixivflow-webui
+    restart: unless-stopped
+    
+    # 启动 WebUI 服务器
+    command: node dist/webui/index.js
+    
+    # 环境变量
+    env_file:
+      - ../.env
+    environment:
+      - NODE_ENV=production
+      - TZ=${TZ:-Asia/Shanghai}
+      # WebUI 服务器配置
+      - PORT=3000
+      - HOST=0.0.0.0
+      - STATIC_PATH=/app/webui-frontend/dist
+      # 可选:WebUI Basic Auth(公网暴露时强烈建议开启;两变量都设置才生效)
+      # - WEBUI_USERNAME=admin
+      # - WEBUI_PASSWORD=changeme
+      # 可选:WebUI 原生 HTTPS(证书需挂载进容器,如 - ./certs:/app/certs:ro)
+      # - WEBUI_TLS_CERT=/app/certs/fullchain.pem
+      # - WEBUI_TLS_KEY=/app/certs/privkey.pem
+      # Docker 容器内路径配置（必须使用容器内路径）
+      - PIXIV_DATABASE_PATH=${PIXIV_DATABASE_PATH:-/app/data/pixiv-downloader.db}
+      - PIXIV_DOWNLOAD_DIR=${PIXIV_DOWNLOAD_DIR:-/app/downloads}
+      - PIXIV_ILLUSTRATION_DIR=${PIXIV_ILLUSTRATION_DIR:-/app/downloads/illustrations}
+      - PIXIV_NOVEL_DIR=${PIXIV_NOVEL_DIR:-/app/downloads/novels}
+      # 日志级别
+      - PIXIV_LOG_LEVEL=${PIXIV_LOG_LEVEL:-info}
+      # 代理配置（从环境变量或 .env 文件读取）
+      - HTTP_PROXY=${HTTP_PROXY:-}
+      - HTTPS_PROXY=${HTTPS_PROXY:-}
+      - ALL_PROXY=${ALL_PROXY:-}
+      - http_proxy=${http_proxy:-}
+      - https_proxy=${https_proxy:-}
+      - all_proxy=${all_proxy:-}
+    
+    # 数据持久化（与定时任务服务共享）
+    volumes:
+      - ./config:/app/config:ro
+      - ./data:/app/data
+      - ./downloads:/app/downloads
+    
+    # 网络配置
+    network_mode: bridge
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    
+    # 端口映射
+    # 格式：宿主机端口:容器内端口
+    # 修改宿主机端口：将 "3000" 改为其他端口，如 "8080:3000"
+    ports:
+      - "${WEBUI_PORT:-3000}:3000"
+    
+    # 依赖关系
+    # WebUI 服务依赖于定时任务服务（共享数据）
+    # 如果只需要 WebUI，可以注释掉这个依赖
+    depends_on:
+      pixivflow:
+        condition: service_healthy
+    
+    # 健康检查（探测 /api/health；shell 形式确保 || 生效）
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --tries=1 --spider http://127.0.0.1:3000/api/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+# ============================================================================
+# 网络配置（可选）
+# ============================================================================
+# networks:
+#   default:
+#     name: pixivflow-network
+#     driver: bridge
+
+# ============================================================================
+# 卷配置（可选，用于数据持久化）
+# ============================================================================
+# volumes:
+#   pixivflow_data:
+#     driver: local
+#   pixivflow_downloads:
+#     driver: local
