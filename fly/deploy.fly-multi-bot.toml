@@ -17,7 +17,7 @@ primary_region = "sin"
   TZ = "Asia/Shanghai"
   RUN_MODE = "WEBHOOK"
   # 公网入口（run.py 会为每个 bot 生成 /webhook/botN 回调地址）
-  WEBHOOK_URL = "https://your-app-name.fly.dev"
+  WEBHOOK_URL = "https://your-app.fly.dev"
   # 双 bot 同机运行，simple 分词省内存；需要更高质量分词可改回 jieba
   SEARCH_ANALYZER = "simple"
   SEARCH_ENABLED = "false"
