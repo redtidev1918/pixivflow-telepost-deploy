@@ -1,5 +1,10 @@
 # Changelog
 
+## [1.3.6] - 2026-08-29
+
+- 联合镜像 TelePost 升级到 **2.10.2**（投稿入站文件数上限 10→50：多页插画/图集整本可投，发布侧自动按每组 ≤10 拆成多个 Telegram media group）。
+- `TELEPOST_IMAGE` 统一升至 2.10.2；`PIXIVFLOW_VERSION` 保持 2.10.3。
+
 ## [1.3.5] - 2026-08-29
 
 - 联合镜像 TelePost 升级到 **2.10.1**（修复 2.10.0 引入的父路由崩溃：`web.AppKey` 在守护线程上下文抛 `UnboundLocalError` 导致 8080 路由不可用；改用字符串 key 后 `/health` 与投稿 API 恢复）。
