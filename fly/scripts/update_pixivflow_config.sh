@@ -10,7 +10,7 @@ app_name=$1
 local_config=$2
 script_dir=$(cd "$(dirname "$0")" && pwd)
 repo_dir=$(cd "$script_dir/.." && pwd)
-fly_config=${FLY_CONFIG:-$repo_dir/deploy.your-app-name.toml}
+fly_config=${FLY_CONFIG:-$repo_dir/deploy.fly-multi-bot.toml}
 remote_config=/app/data/pixivflow/config.json
 remote_temp=/app/data/pixivflow/config.json.upload
 
