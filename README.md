@@ -1,216 +1,146 @@
-# PixivFlow + TelePost 部署套件
+# PixivFlow + TelePost Deploy
 
-**一套配置，随处部署。** 无论机器在国内还是国外、有无公网 IP、是 VPS 还是低配
-云主机，都能用同一套配置启动 PixivFlow（Pixiv 下载调度器）和 TelePost
-（Telegram 频道投稿机器人）。
+一个面向实际运行的私有部署套件：同一份配置可用于海外 VPS、国内服务器、无公网
+NAT 主机、Mac/Linux 本机和 Fly.io。默认镜像把一个 PixivFlow 调度器与 TelePost
+多 Bot supervisor 放在同一容器，适合 512 MiB 小机器，不启动 WebUI。
 
-[![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+## 网络模式
 
----
+| 机器条件 | 启动方式 | TelePost 模式 |
+|---|---|---|
+| 无公网，Telegram/Pixiv 可直连 | `docker compose up -d` | AUTO 自动选择 Polling |
+| 有域名且 80/443 可入站 | `docker compose --profile webhook up -d` | AUTO 选择 Webhook |
+| 国内网络，需要代理 | `docker compose --profile proxy up -d` | Polling + Mihomo |
+| Fly.io | `fly deploy -c fly/deploy.fly-multi-bot.toml` | Webhook |
 
-## 适用场景
-
-| 场景 | 网络 | 推荐模式 | 说明 |
-|---|---|---|---|
-| 🏠 家庭服务器 / 无公网 NAT | 无公网 IP | `POLLING` | TelePost 轮询 Telegram，PixivFlow 本地 HTTP 投递 |
-| 🌐 海外 VPS | 有公网 HTTPS | `WEBHOOK` / `AUTO` | Telegram 推送，延迟最低，可自动选择 |
-| 🏢 国内服务器 | 无公网 + GFW | `POLLING` + 可选代理 | 通过 Mihomo 代理访问 Pixiv 和 Telegram API |
-| ☁️ Fly.io 等平台 | 公网 HTTPS | `WEBHOOK` + Fly | 低至 512 MiB 的托管方案；资源有限时需按 [PERFORMANCE.md](docs/PERFORMANCE.md) 调整配置 |
-| 💻 本地开发/Mac | 任意 | `POLLING` | 本地开发测试，不依赖公网 |
-
-> 核心：TelePost 的 `RUN_MODE=AUTO` 会自动检测公网 Webhook 地址是否可达，
-> 可达则用 Webhook，否则回退 Polling——两种模式都暴露相同的 `/api/botN/v1/*`
-> HTTP API，PixivFlow 无需任何配置变更即可投递。
-
----
+Polling 与 Webhook 都提供相同的 `http://127.0.0.1:8080/api/botN/v1/*`，因此
+PixivFlow 的投递配置无需随网络模式改变。Webhook 注册失败时 AUTO 会回退 Polling。
 
 ## 快速开始
 
+需要 Docker 24+、Compose v2、Python 3（只用于本地校验）。
+
 ```bash
-# 1. 克隆本仓库
-git clone <本仓库URL> && cd pixivflow-telepost-deploy
+gh repo clone redtidev1918/pixivflow-telepost-deploy
+cd pixivflow-telepost-deploy
+./scripts/bootstrap.sh
+```
 
-# 2. 复制环境变量模板
-cp .env.example .env
+编辑 `.env`，至少填写 `BOT1_TOKEN`、`BOT1_CHANNEL_ID`、`BOT1_OWNER_ID`。启用
+PixivFlow 时再填写 `PIXIV_REFRESH_TOKEN` 和 Bot 内 `/gen_token` 生成的
+`TELEPOST_BOT1_SUBMIT_TOKEN`。编辑 `data/pixivflow/config.json`，替换 tag、Cron，
+并把需要的计划改成 `"enabled": true`。
 
-# 3. 编辑 .env，填入必要配置（至少 BOT1_TOKEN 和 CHANNEL_ID）
-vim .env
-
-# 4. 启动所有服务
+```bash
+./scripts/validate.sh
 docker compose up -d
-
-# 5. 查看日志
-docker compose logs -f
+docker compose ps
+curl http://127.0.0.1:8080/health
 ```
 
-> 首次启动 TelePost 容器会自动从 GitHub Container Registry 拉取预构建镜像，
-> 无需本地构建；如需自定义镜像（如包含 PixivFlow 联合运行），见 `fly/` 目录。
-
----
-
-## 目录结构
-
-```
-pixivflow-telepost-deploy/
-├── README.md               ← 本文件：套件总览
-├── docker-compose.yml      ← 主编排：启动所有服务
-├── .env.example            ← 环境变量模板（不含敏感值）
-├── .gitignore              ← 排除 .env、data/、*.log
-│
-├── telepost/               ← TelePost 服务配置
-│   ├── docker-compose.yml  ← 独立部署 TelePost
-│   ├── config.ini.example  ← config.ini 模板
-│   └── scripts/
-│
-├── pixivflow/              ← PixivFlow 服务配置
-│   ├── docker-compose.yml  ← 独立部署 PixivFlow
-│   ├── docker-env.example  ← PixivFlow 环境变量模板
-│   └── config/
-│       ├── standalone.example.json     ← 单 bot 配置示例
-│       └── fly-two-bots.example.json   ← 双 bot 联合部署示例
-│
-├── proxy/                  ← Mihomo 代理（可选，国内服务器用）
-│   ├── Dockerfile
-│   ├── docker-entrypoint.sh
-│   ├── config.example.yaml
-│   └── .env.example
-│
-├── fly/                    ← Fly.io 联合部署
-│   ├── Dockerfile          ← 多阶段构建（TelePost + PixivFlow 合体）
-│   ├── deploy.toml         ← Fly 部署配置
-│   ├── config/
-│   └── scripts/            ← 远程策略热更新脚本
-│
-├── docs/
-│   ├── SCENARIOS.md        ← 各场景详细部署指南
-│   ├── POLLING.md          ← Polling 模式（无公网）
-│   ├── WEBHOOK.md          ← Webhook 模式（有 HTTPS）
-│   └── MIHOMO.md           ← Mihomo 代理配置
-│
-└── scenarios/              ← 按场景组织的快捷配置
-    ├── cn-server/          ← 国内服务器完整配置
-    ├── overseas-vps/       ← 海外 VPS 完整配置
-    └── local-dev/          ← 本地开发完整配置
-```
-
----
-
-## 架构
-
-```
-┌─────────────────────────────────────────────────┐
-│                  docker-compose                  │
-│                                                   │
-│  ┌──────────┐    HTTP /api/botN/v1/*    ┌──────┐ │
-│  │ TelePost │◄───────────────────────────│PixivFlow│
-│  │ (Python) │    submission API          │(Node) │ │
-│  │  :8080   │───┬───────────────────────►│       │ │
-│  └────┬─────┘   │                        └──────┘ │
-│       │         │ POLLING/WEBHOOK                  │
-│       │   ┌─────┴──────┐                           │
-│       │   │ Telegram   │  Bot API                  │
-│       │   │  servers   │                           │
-│       │   └────────────┘                           │
-│       │                                            │
-│  ┌────┴──────┐  (可选，国内服务器)                  │
-│  │  Mihomo   │  SOCKS5/HTTP 代理                    │
-│  │  :7890    │                                      │
-│  └───────────┘                                      │
-└─────────────────────────────────────────────────┘
-```
-
-- **TelePost** 提供 Telegram Bot 接口（投稿/搜索/管理）和 HTTP API
-- **PixivFlow** 定时下载 Pixiv 作品，通过 HTTP API 投递到 TelePost
-- **Mihomo**（可选）为国内服务器提供代理访问
-- 所有组件共享 Docker 网络，通过容器名通信
-
----
-
-## 配置速览
-
-复制 `.env.example` 为 `.env`，至少设置以下两项：
+若 GHCR 镜像仍为私有，部署机先登录：
 
 ```bash
-# 必需：Telegram Bot Token（从 @BotFather 获取）
-BOT1_TOKEN=123456:ABCdef...
-
-# 必需：频道 ID（机器人需为频道管理员）
-BOT1_CHANNEL_ID=@your_channel
-
-# 可选：Pixiv Refresh Token（启用 PixivFlow 时需要）
-PIXIV_REFRESH_TOKEN=your_refresh_token...
+echo "$GHCR_READ_TOKEN" | docker login ghcr.io -u redtidev1918 --password-stdin
 ```
 
-其余配置项见 `.env.example` 内详细注释。
+拉取不可用时可以在仓库内构建：`docker compose build stack`。国内构建机可在
+`.env` 设置 `BUILD_HTTP_PROXY` / `BUILD_HTTPS_PROXY`。
 
----
+## 两个 Bot 与审核策略
 
-## 部署模式选择
+每个 Bot 使用自己的 Token、频道、审核群和 API 投稿 Token。默认示例是“仅 API
+投稿进审核群，普通聊天投稿不审核”：
 
-### 无公网 IP → Polling（默认）
+```dotenv
+BOT1_API_REVIEW_REQUIRED=true
+BOT1_CHAT_REVIEW_REQUIRED=false
+BOT1_REVIEW_CHAT_ID=-100xxxxxxxxxx
+```
 
-TelePost 自动轮询 Telegram 获取更新，无需配置任何域名或 HTTPS。
+Bot 2 使用对应的 `BOT2_*`。PixivFlow 模板中的两个 delivery target 固定投递到
+`/api/bot1/v1/submissions` 与 `/api/bot2/v1/submissions`。
+
+## 远程变更
+
+PixivFlow 会监听配置文件；有效的新 JSON 通过完整校验后原子替换调度表，无需重启：
 
 ```bash
-# 已在 .env 中默认设置，无需额外操作
-RUN_MODE=POLLING
+# 本机部署
+./scripts/update_pixivflow_config.sh ./my-config.json
+
+# 从 Mac 更新远端 VPS
+./scripts/push_pixivflow_config.sh user@server /opt/pixivflow-telepost ./my-config.json
 ```
 
-PixivFlow 通过 `http://telepost:8080/api/bot1/v1/submissions` 本地投递。
-
-### 有公网 HTTPS → Webhook
-
-TelePost 注册 Webhook 回调，Telegram 实时推送更新。
+TelePost 的频道/审核策略由启动环境读取，改变后必须短暂重启 Bot 进程，但数据库、
+缓存和 outbox 都保留：
 
 ```bash
-# .env 中设置
-RUN_MODE=WEBHOOK
-WEBHOOK_URL=https://your-domain.com
+cp config/telepost-policy.example.json ./telepost-policy.json
+./scripts/apply_telepost_policy.sh ./telepost-policy.json
+./scripts/push_telepost_policy.sh user@server /opt/pixivflow-telepost ./telepost-policy.json
 ```
 
-### 国内服务器 → 可选 Mihomo 代理
+详见 [远程更新](docs/REMOTE_UPDATES.md)。
+
+## 公网 Webhook
+
+域名 A/AAAA 记录指向服务器，放通 TCP 80/443 与 UDP 443，然后设置：
+
+```dotenv
+RUN_MODE=AUTO
+WEBHOOK_DOMAIN=bot.example.com
+WEBHOOK_URL=https://bot.example.com
+```
+
+执行 `docker compose --profile webhook up -d`。Caddy 自动申请证书；TelePost 为
+每个 Bot 注册独立的 `/webhook/botN` 路径。不要把 8080 直接暴露到公网。
+
+## 国内网络
+
+如已有稳定外部代理，直接设置 `HTTP_PROXY_URL` 与 `EGRESS_ALL_PROXY`。使用仓库内
+Mihomo 时设置 `SUB_URL`，并将两项代理地址设为 `http://proxy:7890`，再执行：
 
 ```bash
-# .env 中启用代理
-PROXY_ENABLED=true
-# PixivFlow 通过代理访问 Pixiv
-PIXIVFLOW_PROXY=http://proxy:7890
-# TelePost 通过代理访问 Telegram API
-TELEPOST_PROXY=http://proxy:7890
+docker compose --profile proxy up -d
 ```
 
-### Fly.io → 低成本托管
+Mihomo 通常还会占用 50–100 MiB。整机只有 512 MiB 时优先使用外部代理，或升级到
+1 GiB；不要靠删除失败缓存/outbox 换取表面上的低占用。详见
+[国内网络](docs/MIHOMO.md)。
 
-```bash
-cd fly/
-fly deploy -c deploy.your-app-name.toml --now
+## 512 MiB 建议
+
+- 最多两个 Bot，关闭搜索与 WebUI。
+- `download.concurrency=1`，两个计划至少错开 15–20 分钟。
+- `storageMode=cache` 配合 `delivery.deleteAfterDelivery=true`；成功后删除缓存，失败时
+  保留并进入 outbox 重试。
+- 保留 Compose 的日志轮转、128 MiB Node heap 与小 SQLite cache。
+- 通过 `/health` 观察 `process_rss`、磁盘、cache 和 delivery outbox 指标。
+
+完整说明见 [性能与容量](docs/PERFORMANCE.md)。
+
+## 目录
+
+```text
+docker-compose.yml                 主编排：联合容器 + 可选 Caddy/Mihomo
+docker/combined.Dockerfile         TelePost 2.9 + PixivFlow 2.7 轻量运行时
+data/                              数据库、下载缓存、outbox、实际配置（不入库）
+pixivflow/config/*.example.json    多计划安全模板
+config/telepost-policy.example.json 非敏感频道/审核策略模板
+scripts/                           初始化、校验、本机/SSH 原子更新
+fly/                               Fly.io 512 MiB 配置与更新脚本
+proxy/                             可选 Mihomo 镜像
 ```
 
-详见 [`fly/README.md`](fly/README.md)。性能调优见 [docs/PERFORMANCE.md](docs/PERFORMANCE.md)。
+## 安全边界
 
----
+- `.env`、`data/`、`proxy-data/` 和上传临时文件均被忽略。
+- Bot Token、Pixiv Refresh Token、投稿 Token、代理订阅 URL 只能放 `.env` 或平台
+  Secret，不得放 JSON 模板、Git 历史或聊天截图。
+- 根 API 默认只绑定 `127.0.0.1`；Webhook 通过 Caddy 反代。
+- 修改频道前先处理旧审核群中的 pending 投稿，并确认 Bot 已是新频道管理员。
 
-## 项目来源
-
-本套件整合以下开源项目：
-
-| 项目 | 仓库 | 说明 |
-|---|---|---|
-| [PixivFlow](https://github.com/redtidev1918/PixivFlow) | `redtidev1918/PixivFlow` | Pixiv 下载调度器，支持定时任务、自动投递到 TelePost |
-| [TelePost](https://github.com/redtidev1918/TelePost) | `redtidev1918/TelePost` | Telegram 频道投稿机器人，支持媒体/文档投稿、搜索、多 bot |
-| Mihomo (Clash.Meta) | `metacubex/mihomo` | 代理核心（可选），用于国内服务器访问外网 |
-
----
-
-## 安全说明
-
-- `.env`（含 Bot Token、Pixiv Refresh Token 等敏感信息）已被 `.gitignore` 排除，**永不入库**
-- 运行时数据（数据库、下载文件、日志）写入 `data/` 目录，同样被 `.gitignore` 排除
-- TelePost 的 HTTP API 使用 Bearer Token 鉴权，需通过 `/gen_token` 在 Telegram 内生成
-- 所有敏感值应通过环境变量或 Docker Secrets 注入，不写入配置文件
-
----
-
-## License
-
-MIT
+上游项目：[PixivFlow](https://github.com/redtidev1918/PixivFlow) ·
+[TelePost](https://github.com/redtidev1918/TelePost)

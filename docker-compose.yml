@@ -1,186 +1,122 @@
-# ============================================================================
-# PixivFlow + TelePost 部署套件 — 主编排文件
-# ============================================================================
-# 一套 Compose 启动所有服务，通过 .env 控制启用哪些组件。
-#
-# 使用方式：
-#   cp .env.example .env    # 编辑配置
-#   docker compose up -d    # 启动所有服务
-#   docker compose logs -f  # 查看日志
-#
-# 按场景选择：
-#   海外 VPS:  docker compose up -d telepost pixivflow
-#   国内服务器: docker compose up -d           # 含 proxy
-#   无公网 IP:  docker compose up -d telepost  # 默认 Polling
-#   仅 TelePost: docker compose -f telepost/docker-compose.yml up -d
-# ============================================================================
+name: pixivflow-telepost
 
 services:
-  # ============================================================================
-  # TelePost — Telegram 频道投稿机器人
-  # ============================================================================
-  telepost:
-    # 使用 GHCR 预构建镜像（由 TelePost CI 自动发布）
-    image: ghcr.io/redtidev1918/telepost:latest
-    container_name: telepost
+  stack:
+    image: ${STACK_IMAGE:-ghcr.io/redtidev1918/pixivflow-telepost-deploy:latest}
+    build:
+      context: .
+      dockerfile: docker/combined.Dockerfile
+      args:
+        TELEPOST_IMAGE: ${TELEPOST_IMAGE:-ghcr.io/redtidev1918/telepost:2.9.0}
+        PIXIVFLOW_VERSION: ${PIXIVFLOW_VERSION:-2.7.0}
+        HTTP_PROXY: ${BUILD_HTTP_PROXY:-}
+        HTTPS_PROXY: ${BUILD_HTTPS_PROXY:-}
     restart: unless-stopped
-
-    # 需要构建自定义镜像时取消注释以下 build 块
-    # build:
-    #   context: https://github.com/redtidev1918/TelePost.git
-    #   dockerfile: Dockerfile
-
-    # 端口映射
-    # 宿主机 8080 → 容器 8080（TelePost 路由/API 端口）
-    # 多 bot 时内部自动分配 8081/8082/... 给子进程
-    ports:
-      - "${TELEPOST_PORT:-8080}:8080"
-
-    # 环境变量（从 .env 文件读取）
-    env_file:
-      - .env
+    init: true
     environment:
-      - TZ=${TZ:-Asia/Shanghai}
-      # 运行模式
-      - RUN_MODE=${RUN_MODE:-AUTO}
-      - WEBHOOK_URL=${WEBHOOK_URL:-}
-      # Bot 配置 — 支持多 bot
-      - BOT1_TOKEN=${BOT1_TOKEN:-}
-      - BOT1_CHANNEL_ID=${BOT1_CHANNEL_ID:-}
-      - BOT1_OWNER_ID=${BOT1_OWNER_ID:-}
-      - BOT1_BOT_MODE=${BOT1_BOT_MODE:-MIXED}
-      - BOT1_API_REVIEW_REQUIRED=${BOT1_API_REVIEW_REQUIRED:-false}
-      - BOT1_CHAT_REVIEW_REQUIRED=${BOT1_CHAT_REVIEW_REQUIRED:-false}
-      - BOT1_SUBMIT_LIMIT_PER_HOUR=${BOT1_SUBMIT_LIMIT_PER_HOUR:-10}
-      - BOT1_SHOW_SUBMITTER=${BOT1_SHOW_SUBMITTER:-true}
-      # 多 bot 环境变量（通过 .env 传递）
-      - BOT2_TOKEN=${BOT2_TOKEN:-}
-      - BOT2_CHANNEL_ID=${BOT2_CHANNEL_ID:-}
-      - BOT2_OWNER_ID=${BOT2_OWNER_ID:-}
-      - BOT3_TOKEN=${BOT3_TOKEN:-}
-      - BOT3_CHANNEL_ID=${BOT3_CHANNEL_ID:-}
-      # 搜索配置
-      - SEARCH_ANALYZER=${SEARCH_ANALYZER:-simple}
-      - SEARCH_ENABLED=${SEARCH_ENABLED:-false}
-      # 代理（可选，国内服务器使用）
-      - HTTP_PROXY=${TELEPOST_PROXY:-}
-      - HTTPS_PROXY=${TELEPOST_PROXY:-}
-      # PixivFlow 联合部署（可选）
-      - PIXIVFLOW_ENABLED=${PIXIVFLOW_ENABLED:-false}
-      - PIXIVFLOW_CONFIG=${PIXIVFLOW_CONFIG:-/app/data/pixivflow/config.json}
-      - PIXIV_REFRESH_TOKEN=${PIXIV_REFRESH_TOKEN:-}
-      - PIXIV_DB_CACHE_KB=${PIXIV_DB_CACHE_KB:-4096}
-      - PIXIV_LOG_LEVEL=${PIXIV_LOG_LEVEL:-info}
-
-    # 数据持久化
+      TZ: ${TZ:-Asia/Shanghai}
+      RUN_MODE: ${RUN_MODE:-AUTO}
+      WEBHOOK_URL: ${WEBHOOK_URL:-}
+      WEBHOOK_PORT: 8080
+      HEALTH_PORT: 8080
+      API_ENABLED: "true"
+      BOT1_TOKEN: ${BOT1_TOKEN:-}
+      BOT1_CHANNEL_ID: ${BOT1_CHANNEL_ID:-}
+      BOT1_OWNER_ID: ${BOT1_OWNER_ID:-}
+      BOT1_BOT_MODE: ${BOT1_BOT_MODE:-MIXED}
+      BOT1_API_REVIEW_REQUIRED: ${BOT1_API_REVIEW_REQUIRED:-true}
+      BOT1_CHAT_REVIEW_REQUIRED: ${BOT1_CHAT_REVIEW_REQUIRED:-false}
+      BOT1_REVIEW_CHAT_ID: ${BOT1_REVIEW_CHAT_ID:-}
+      BOT1_WEBHOOK_SECRET_TOKEN: ${BOT1_WEBHOOK_SECRET_TOKEN:-}
+      BOT2_TOKEN: ${BOT2_TOKEN:-}
+      BOT2_CHANNEL_ID: ${BOT2_CHANNEL_ID:-}
+      BOT2_OWNER_ID: ${BOT2_OWNER_ID:-}
+      BOT2_BOT_MODE: ${BOT2_BOT_MODE:-MIXED}
+      BOT2_API_REVIEW_REQUIRED: ${BOT2_API_REVIEW_REQUIRED:-true}
+      BOT2_CHAT_REVIEW_REQUIRED: ${BOT2_CHAT_REVIEW_REQUIRED:-false}
+      BOT2_REVIEW_CHAT_ID: ${BOT2_REVIEW_CHAT_ID:-}
+      BOT2_WEBHOOK_SECRET_TOKEN: ${BOT2_WEBHOOK_SECRET_TOKEN:-}
+      PIXIVFLOW_ENABLED: ${PIXIVFLOW_ENABLED:-true}
+      PIXIVFLOW_CONFIG: /app/data/pixivflow/config.json
+      PIXIV_REFRESH_TOKEN: ${PIXIV_REFRESH_TOKEN:-}
+      TELEPOST_BOT1_SUBMIT_TOKEN: ${TELEPOST_BOT1_SUBMIT_TOKEN:-}
+      TELEPOST_BOT2_SUBMIT_TOKEN: ${TELEPOST_BOT2_SUBMIT_TOKEN:-}
+      NODE_OPTIONS: ${NODE_OPTIONS:---max-old-space-size=128}
+      MALLOC_ARENA_MAX: ${MALLOC_ARENA_MAX:-2}
+      SEARCH_ENABLED: ${SEARCH_ENABLED:-false}
+      SEARCH_ANALYZER: ${SEARCH_ANALYZER:-simple}
+      DB_CACHE_KB: ${DB_CACHE_KB:-1024}
+      PIXIV_DB_CACHE_KB: ${PIXIV_DB_CACHE_KB:-4096}
+      HTTP_PROXY: ${HTTP_PROXY_URL:-}
+      HTTPS_PROXY: ${HTTP_PROXY_URL:-}
+      ALL_PROXY: ${EGRESS_ALL_PROXY:-}
+      NO_PROXY: 127.0.0.1,localhost,stack,proxy
+      no_proxy: 127.0.0.1,localhost,stack,proxy
     volumes:
-      - ./data/telepost:/app/data
-      - ./data/pixivflow:/app/data/pixivflow
-      - ./data/logs:/app/logs
-      # 可选：挂载自定义 pixivflow 配置
-      # - ./pixivflow/config/fly-two-bots.example.json:/app/data/pixivflow/config.json:ro
-
-    # 健康检查
+      - ./data:/app/data
+    ports:
+      - "${BIND_ADDRESS:-127.0.0.1}:${HTTP_PORT:-8080}:8080"
+    mem_limit: ${MEMORY_LIMIT:-512m}
+    cpus: ${CPU_LIMIT:-1.0}
+    pids_limit: 256
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8080/health').read()"]
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/health', timeout=5).read()"]
       interval: 30s
       timeout: 10s
       retries: 3
-      start_period: 15s
-
-    # 网络
+      start_period: 20s
     networks:
-      - deploy-network
-
-    # 日志
-    logging:
-      driver: "json-file"
+      - app
+    logging: &default-logging
+      driver: json-file
       options:
-        max-size: "10m"
-        max-file: "3"
+        max-size: ${LOG_MAX_SIZE:-10m}
+        max-file: ${LOG_MAX_FILES:-3}
 
-  # ============================================================================
-  # PixivFlow — Pixiv 下载调度器（可选，默认不启动）
-  # ============================================================================
-  pixivflow:
-    image: pixivflow:latest
-    container_name: pixivflow
+  # 公网 HTTPS 反代。只有运行 `docker compose --profile webhook up -d` 才启动。
+  caddy:
+    image: caddy:2-alpine
+    profiles: [webhook]
     restart: unless-stopped
-    profiles:
-      - pixivflow
-      - all
-
-    build:
-      context: https://github.com/redtidev1918/PixivFlow.git
-      dockerfile: Dockerfile
-
     environment:
-      - NODE_ENV=production
-      - TZ=${TZ:-Asia/Shanghai}
-      - PIXIV_REFRESH_TOKEN=${PIXIV_REFRESH_TOKEN:-}
-      - PIXIV_DOWNLOAD_DIR=/app/downloads
-      - PIXIV_DATABASE_PATH=/app/data/pixiv-downloader.db
-      - PIXIV_LOG_LEVEL=${PIXIV_LOG_LEVEL:-info}
-      - PIXIV_SCHEDULER_ENABLED=true
-      - PIXIV_DB_CACHE_KB=${PIXIV_DB_CACHE_KB:-4096}
-      # 代理（可选）
-      - HTTP_PROXY=${PIXIVFLOW_PROXY:-}
-      - HTTPS_PROXY=${PIXIVFLOW_PROXY:-}
-
+      WEBHOOK_DOMAIN: ${WEBHOOK_DOMAIN:-localhost}
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
     volumes:
-      - ./data/pixivflow:/app/data
-      - ./data/downloads:/app/downloads
-      - ./pixivflow/config:/app/config:ro
-
-    networks:
-      - deploy-network
-
+      - ./caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
     depends_on:
-      telepost:
+      stack:
         condition: service_healthy
+    networks:
+      - app
+    logging: *default-logging
 
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "10m"
-        max-file: "3"
-
-  # ============================================================================
-  # Mihomo 代理（可选，国内服务器启用）
-  # ============================================================================
+  # 国内网络的可选代理。512 MiB 整机优先使用外部代理，避免与主服务争内存。
   proxy:
     build:
       context: ./proxy
-    image: clash-mihomo:latest
-    container_name: proxy
+    image: pixivflow-telepost-mihomo:local
+    profiles: [proxy]
     restart: unless-stopped
-    profiles:
-      - proxy
-      - all
-
     environment:
-      - SUB_URL=${SUB_URL:-}
-
+      SUB_URL: ${SUB_URL:-}
     ports:
-      - "127.0.0.1:7890:7890"
-      - "127.0.0.1:9090:9090"
-
+      - "127.0.0.1:${PROXY_PORT:-7890}:7890"
+      - "127.0.0.1:${PROXY_CONTROLLER_PORT:-9090}:9090"
     volumes:
-      - ./data/proxy:/root/.config/mihomo
-
+      - ./proxy-data:/root/.config/mihomo
+    mem_limit: ${PROXY_MEMORY_LIMIT:-128m}
     networks:
-      - deploy-network
+      - app
+    logging: *default-logging
 
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "10m"
-        max-file: "3"
-
-# ============================================================================
-# 网络
-# ============================================================================
 networks:
-  deploy-network:
-    name: pixivflow-telepost-deploy
-    driver: bridge
+  app:
+
+volumes:
+  caddy-data:
+  caddy-config:
