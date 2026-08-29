@@ -9,7 +9,7 @@ primary_region = "sin"
 
 [build.args]
   TELEPOST_IMAGE = "ghcr.io/redtidev1918/telepost:2.9.0"
-  PIXIVFLOW_VERSION = "2.10.0"
+  PIXIVFLOW_VERSION = "2.10.1"
 
 [env]
   PYTHONUNBUFFERED = "1"
