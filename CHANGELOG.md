@@ -1,5 +1,10 @@
 # Changelog
 
+## [1.3.4] - 2026-08-29
+
+- 联合镜像 TelePost 升级到 **2.10.0**（修复投稿路由 1 MiB body 限制：aiohttp `client_max_size` 默认 1 MiB 导致 >1 MiB 的插画投稿 413；新版路由与子 API 均支持 10 × 50 MiB 并流式转发，插画/视频等大文件可正常投稿）。
+- `TELEPOST_IMAGE` 统一升至 2.10.0；`PIXIVFLOW_VERSION` 保持 2.10.3。
+
 ## [1.3.3] - 2026-08-29
 
 - 联合镜像内置 PixivFlow 升级到 **2.10.3**：`topicDiscovery.includeR18` 支持 NSFW 主题（R-18 作品纳入采样与采集；插画搜索默认被 Pixiv `filter=for_ios` 过滤，开启后移除）。
