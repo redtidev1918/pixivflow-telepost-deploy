@@ -137,7 +137,7 @@ docker compose logs proxy
 
 ## 场景四：Fly.io 低成本托管
 
-**特点**：无需自有服务器，512 MiB 内存，TelePost + PixivFlow 合体运行。
+**特点**：无需自有服务器，512 MiB 起，低成本托管。
 
 详见 [`../fly/README.md`](../fly/README.md)。
 
