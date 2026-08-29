@@ -8,7 +8,7 @@ services:
       dockerfile: docker/combined.Dockerfile
       args:
         TELEPOST_IMAGE: ${TELEPOST_IMAGE:-ghcr.io/redtidev1918/telepost:2.9.0}
-        PIXIVFLOW_VERSION: ${PIXIVFLOW_VERSION:-2.10.1}
+        PIXIVFLOW_VERSION: ${PIXIVFLOW_VERSION:-2.10.2}
         HTTP_PROXY: ${BUILD_HTTP_PROXY:-}
         HTTPS_PROXY: ${BUILD_HTTPS_PROXY:-}
     restart: unless-stopped
