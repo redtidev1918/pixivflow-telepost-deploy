@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.3.8] - 2026-08-30
+
+- PixivFlow 升级到 **2.10.4**：Topic 计划会把主题写入 `{{tag}}`，并新增 `{{topic}}`、`{{workTags}}`；双 Bot 模板默认投稿来源、计划主题与作品自身标签。
+- TelePost 升级到 **2.10.4**：修复 `RetryAfter` 重试协程复用，多页预览稳定节流，标签有序去重，累计上传限制为 500MB。
+- `TELEPOST_IMAGE` 与 `PIXIVFLOW_VERSION` 统一升至 2.10.4；实际 Fly 配置不再落后于通用模板。
+
 ## [1.3.7] - 2026-08-29
 
 - 联合镜像 TelePost 升级到 **2.10.3**（审核队列预览发送增加节流与 `RetryAfter` 退避，多页图集入审核队列不再触发 Telegram flood 502）。

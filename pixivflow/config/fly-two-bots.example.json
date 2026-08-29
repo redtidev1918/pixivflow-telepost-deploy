@@ -84,7 +84,8 @@
           "title": "{{title}}",
           "tags": [
             "Pixiv",
-            "{{tag}}"
+            "{{tag}}",
+            "{{workTags}}"
           ],
           "note": "Pixiv ID: {{pixivId}}",
           "anonymous": true,
@@ -111,7 +112,8 @@
           "title": "{{title}}",
           "tags": [
             "Pixiv",
-            "{{tag}}"
+            "{{tag}}",
+            "{{workTags}}"
           ],
           "note": "Pixiv ID: {{pixivId}}",
           "anonymous": true,

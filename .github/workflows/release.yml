@@ -9,8 +9,20 @@ permissions:
   packages: write
 
 jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate examples and Compose
+        run: ./scripts/validate.sh --examples
+      - name: Verify release notes exist
+        run: |
+          TAG_VERSION="${GITHUB_REF_NAME#v}"
+          grep -Fq "## [$TAG_VERSION]" CHANGELOG.md
+
   image:
     runs-on: ubuntu-latest
+    needs: validate
     steps:
       - uses: actions/checkout@v4
       - uses: docker/setup-qemu-action@v3
