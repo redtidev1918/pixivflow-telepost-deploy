@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.2.0] - 2026-08-29
+
+- 联合镜像内置 PixivFlow 升级到 **2.9.0**（新增 `tags discover/apply` 相关 Tag 发现与人工确认热更新工作流；配置热重载链路不变）。
+- `PIXIVFLOW_VERSION` 统一升至 2.9.0（Fly build arg、Compose build arg、Dockerfile 默认值、`.env.example` 同步）。
+- 文档中 PixivFlow 版本说明由 2.7 更新为 2.9。
+
 ## [1.1.0] - 2026-08-29
 
 - 将原有单一代理仓库重构并重命名为 PixivFlow + TelePost 跨网络部署套件。
