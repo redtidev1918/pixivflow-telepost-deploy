@@ -1,5 +1,13 @@
 # Changelog
 
+## [Unreleased]
+
+- 示例配置 `pixivflow/config/fly-two-bots.example.json` 改为「昨日最热门 + 指定 tag +
+  含 R-18」的 ranking 模板（ボテ腹→bot1、丸呑み→bot2，各 1 插画 + 1 小说），并采用完整
+  的投稿模板：标题 `{{title}}`、简介 `Pixiv 自动投稿/作品ID`、标签 `Pixiv + {{topicTag}} +
+  {{workTags}}`、链接 `{{link}}`、剧透 `{{spoiler}}`（R-18 自动遮罩）。
+- 文档补充自动投稿标题/简介/标签/链接/剧透设计与审核群预览回复链（`REVIEW_PREVIEW_THREAD`）。
+
 ## [1.4.0] - 2026-08-30
 
 - 联合镜像内置 PixivFlow 升级到 **2.10.5**：新增投稿模板变量 `{{link}}`（Pixiv 永久链接）、`{{topicTag}}`（topic 标签兜底）、`{{spoiler}}`（R-18 自动开剧透），投稿标题/简介/标签/链接/剧透可全模板化。
