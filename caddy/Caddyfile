@@ -1,0 +1,4 @@
+{$WEBHOOK_DOMAIN} {
+    encode zstd gzip
+    reverse_proxy stack:8080
+}
