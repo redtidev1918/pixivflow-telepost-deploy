@@ -1,5 +1,10 @@
 # Changelog
 
+## [1.3.3] - 2026-08-29
+
+- 联合镜像内置 PixivFlow 升级到 **2.10.3**：`topicDiscovery.includeR18` 支持 NSFW 主题（R-18 作品纳入采样与采集；插画搜索默认被 Pixiv `filter=for_ios` 过滤，开启后移除）。
+- `PIXIVFLOW_VERSION` 统一升至 2.10.3。
+
 ## [1.3.2] - 2026-08-29
 
 - 联合镜像内置 PixivFlow 升级到 **2.10.2**：Topic 排名改为纯热度（metadata 只做门槛）；autocomplete 独立召回低置信 Tag；better-sqlite3 升 v12（修复 Node 22/24 退出崩溃）。
