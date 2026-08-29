@@ -7,6 +7,7 @@ data/
 
 # TelePost Fly 本地策略与凭据；只提交 *.example.json 模板
 fly/config/*.json
+!fly/config/*.example.json
 fly/scripts/*.env
 fly/data/
 
