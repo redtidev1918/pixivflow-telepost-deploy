@@ -15,7 +15,7 @@
 | 🏠 家庭服务器 / 无公网 NAT | 无公网 IP | `POLLING` | TelePost 轮询 Telegram，PixivFlow 本地 HTTP 投递 |
 | 🌐 海外 VPS | 有公网 HTTPS | `WEBHOOK` / `AUTO` | Telegram 推送，延迟最低，可自动选择 |
 | 🏢 国内服务器 | 无公网 + GFW | `POLLING` + 可选代理 | 通过 Mihomo 代理访问 Pixiv 和 Telegram API |
-| ☁️ Fly.io 等平台 | 公网 HTTPS | `WEBHOOK` + Fly | 低成本 512 MiB 托管，PixivFlow + TelePost 合体 |
+| ☁️ Fly.io 等平台 | 公网 HTTPS | `WEBHOOK` + Fly | 512 MiB 双 Bot + PixivFlow 联合部署（需关闭搜索、并发 1、错开计划，见 [PERFORMANCE.md](docs/PERFORMANCE.md)） |
 | 💻 本地开发/Mac | 任意 | `POLLING` | 本地开发测试，不依赖公网 |
 
 > 核心：TelePost 的 `RUN_MODE=AUTO` 会自动检测公网 Webhook 地址是否可达，
@@ -186,7 +186,7 @@ cd fly/
 fly deploy -c deploy.your-app-name.toml --now
 ```
 
-详见 [`fly/README.md`](fly/README.md)。
+详见 [`fly/README.md`](fly/README.md)。性能调优见 [docs/PERFORMANCE.md](docs/PERFORMANCE.md)。
 
 ---
 
