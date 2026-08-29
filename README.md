@@ -125,7 +125,7 @@ Mihomo 通常还会占用 50–100 MiB。整机只有 512 MiB 时优先使用外
 
 ```text
 docker-compose.yml                 主编排：联合容器 + 可选 Caddy/Mihomo
-docker/combined.Dockerfile         TelePost 2.9 + PixivFlow 2.7 轻量运行时
+docker/combined.Dockerfile         TelePost 2.9 + PixivFlow 2.9 轻量运行时
 data/                              数据库、下载缓存、outbox、实际配置（不入库）
 pixivflow/config/*.example.json    多计划安全模板
 config/telepost-policy.example.json 非敏感频道/审核策略模板
