@@ -1,0 +1,89 @@
+[BOT]
+# Telegram Bot Token (从 @BotFather 获取)
+TOKEN = your_bot_token_here
+
+# 频道 ID (格式: @channel_username 或 -100xxxxxxxxxx)
+CHANNEL_ID = @your_channel
+
+# 数据库文件路径
+DB_PATH = data/submissions.db
+
+# 会话超时时间（秒）
+TIMEOUT = 300
+
+# 允许的最大标签数量
+ALLOWED_TAGS = 30
+
+# 机器人所有者的 Telegram User ID
+OWNER_ID = your_user_id
+
+# 管理员 User ID 列表（逗号分隔，可选）
+# 注意：OWNER_ID 会自动添加到管理员列表
+# ADMIN_IDS = 123456789,987654321
+
+# 是否在投稿中显示投稿人信息 (true/false)
+SHOW_SUBMITTER = true
+
+# 是否向所有者发送新投稿通知 (true/false)
+NOTIFY_OWNER = true
+
+# 机器人模式: MEDIA (仅媒体), DOCUMENT (仅文档), MIXED (混合模式)
+BOT_MODE = MIXED
+
+# 允许的文档类型（扩展名或MIME，逗号分隔），留空或 * 表示允许所有
+ALLOWED_FILE_TYPES = *
+
+# 投稿频率限制：每用户每小时最多发起投稿次数（0 为关闭），默认 10
+SUBMIT_LIMIT_PER_HOUR = 10
+
+# 是否将 HTTP API 投稿先发送到私有审核群
+API_REVIEW_REQUIRED = false
+
+# 是否将 Telegram 聊天 /submit 投稿先发送到私有审核群
+CHAT_REVIEW_REQUIRED = false
+
+# 私有审核群 ID，任一审核开关为 true 时必填
+# REVIEW_CHAT_ID = -1001234567890
+
+# 运行模式: AUTO (自动) | POLLING (轮询) | WEBHOOK (Webhook)
+# - AUTO: 默认；存在有效公网 HTTPS WEBHOOK_URL 时使用 Webhook，否则 Polling
+# - POLLING: 机器人主动拉取消息，适合无公网地址的机器
+# - WEBHOOK: Telegram 推送消息到服务器，适合生产环境，更高效
+RUN_MODE = AUTO
+
+[WEBHOOK]
+# Webhook 配置（RUN_MODE=AUTO/WEBHOOK 时使用）
+
+# 外部访问地址（必填，例如: https://your-app.fly.dev）
+# 注意：必须是 HTTPS 且有效的域名
+URL = 
+
+# Webhook 监听端口（默认 8080）
+PORT = 8080
+
+# Webhook 路径（默认 /webhook）
+PATH = /webhook
+
+# Webhook Secret Token（可选，用于验证请求来源）
+# 留空则自动生成随机 token
+SECRET_TOKEN = 
+
+[SEARCH]
+# 搜索索引目录
+INDEX_DIR = data/search_index
+
+# 是否启用搜索
+ENABLED = true
+
+# 分词器：jieba | simple
+# - jieba: 中文分词效果更好，但占用 ~20MB 词典内存
+# - simple: 内存占用更低（推荐内存受限环境）
+ANALYZER = jieba
+
+# 搜索结果高亮：true|false（关闭可进一步减少开销）
+HIGHLIGHT = false
+
+[DB]
+# SQLite page cache 大小（KB），影响内存占用
+# 内存受限可设 1024（1MB），通常 1024~4096 即可
+CACHE_SIZE_KB = 1024
