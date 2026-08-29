@@ -1,0 +1,23 @@
+# 这是占位示例配置(不含任何真实节点信息),用于本地测试容器能否正常运行。
+# 实际使用时:入口脚本会用 .env 里的 SUB_URL 自动拉取真实订阅覆盖 data/config.yaml,
+# 或者你手动把完整配置放到 data/config.yaml。
+mixed-port: 7890
+allow-lan: true
+mode: rule
+log-level: warning
+external-controller: '127.0.0.1:9090'
+
+proxies:
+  - name: "dummy-local"
+    type: socks5
+    server: 127.0.0.1
+    port: 1080
+
+proxy-groups:
+  - name: "PROXY"
+    type: select
+    proxies:
+      - dummy-local
+
+rules:
+  - MATCH,PROXY
