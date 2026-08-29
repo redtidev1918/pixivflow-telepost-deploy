@@ -1,5 +1,10 @@
 # Changelog
 
+## [1.3.1] - 2026-08-29
+
+- 联合镜像内置 PixivFlow 升级到 **2.10.1**：修复相对 `databasePath` 且进程工作目录与数据卷不一致时（容器 CLI）`topic-cache/` 可能写到非数据卷目录的问题；现在 Topic 缓存始终落在 SQLite 同级目录（持久卷 `/app/data/pixivflow/topic-cache/`）。
+- `PIXIVFLOW_VERSION` 统一升至 2.10.1。
+
 ## [1.3.0] - 2026-08-29
 
 - 联合镜像内置 PixivFlow 升级到 **2.10.0**：新增语义主题下载 `mode: "topic"`（只给一个 Topic，自动推导相关 Tag、按天采集、本地热度 Top N；零 AI、低内存，插画/小说 Tag 空间独立并缓存到数据卷 `topic-cache/`，容器重建不丢）。
