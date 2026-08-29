@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.3.0] - 2026-08-29
+
+- 联合镜像内置 PixivFlow 升级到 **2.10.0**：新增语义主题下载 `mode: "topic"`（只给一个 Topic，自动推导相关 Tag、按天采集、本地热度 Top N；零 AI、低内存，插画/小说 Tag 空间独立并缓存到数据卷 `topic-cache/`，容器重建不丢）。
+- `PIXIVFLOW_VERSION` 统一升至 2.10.0（Fly build arg、Compose build arg、Dockerfile 默认值、`.env.example` 同步）；TelePost 镜像仍为 2.9.0。
+- Topic 缓存放数据卷，升级/重建容器后自动复用，刷新失败自动降级到旧缓存或仅用种子词，不中断调度。
+
 ## [1.2.0] - 2026-08-29
 
 - 联合镜像内置 PixivFlow 升级到 **2.9.0**（新增 `tags discover/apply` 相关 Tag 发现与人工确认热更新工作流；配置热重载链路不变）。
