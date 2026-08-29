@@ -1,5 +1,10 @@
 # Changelog
 
+## [1.3.5] - 2026-08-29
+
+- 联合镜像 TelePost 升级到 **2.10.1**（修复 2.10.0 引入的父路由崩溃：`web.AppKey` 在守护线程上下文抛 `UnboundLocalError` 导致 8080 路由不可用；改用字符串 key 后 `/health` 与投稿 API 恢复）。
+- `TELEPOST_IMAGE` 统一升至 2.10.1；`PIXIVFLOW_VERSION` 保持 2.10.3。
+
 ## [1.3.4] - 2026-08-29
 
 - 联合镜像 TelePost 升级到 **2.10.0**（修复投稿路由 1 MiB body 限制：aiohttp `client_max_size` 默认 1 MiB 导致 >1 MiB 的插画投稿 413；新版路由与子 API 均支持 10 × 50 MiB 并流式转发，插画/视频等大文件可正常投稿）。
