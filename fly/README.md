@@ -1,6 +1,6 @@
 # Fly.io 512 MiB 部署
 
-本配置复用仓库根目录的联合 Dockerfile，运行 TelePost 2.9、PixivFlow 2.7 和最多
+本配置复用仓库根目录的联合 Dockerfile，运行 TelePost 2.9、PixivFlow 2.9 和最多
 两个 Bot，不启动 WebUI。真实凭据全部放 Fly Secrets。
 
 ```bash
