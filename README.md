@@ -190,8 +190,8 @@ Mihomo 通常还会占用 50–100 MiB。整机只有 512 MiB 时优先使用外
 
 - 最多两个 Bot，关闭搜索与 WebUI。
 - `download.concurrency=1`，两个计划至少错开 15–20 分钟。
-- `storageMode=cache` 配合 `delivery.deleteAfterDelivery=true`；成功后删除缓存，失败时
-  保留并进入 outbox 重试。
+- 需要复用下载内容时用 `storageMode=cache` + `delivery.deleteAfterDelivery=false`，同时
+  设置 `cacheRetentionDays=7` 与 `cacheMaxSizeMB=384`；outbox 独立保留，不参与缓存清理。
 - 保留 Compose 的日志轮转、128 MiB Node heap 与小 SQLite cache。
 - 通过 `/health` 观察 `process_rss`、磁盘、cache 和 delivery outbox 指标。
 

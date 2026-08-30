@@ -2,6 +2,13 @@
 
 ## [Unreleased]
 
+## [1.8.1] - 2026-08-30
+
+- PixivFlow 升级到 **2.10.13**：`maintain` 新增 `storage.cacheMaxSizeMB` 容量硬上限，
+  按完整作品淘汰最旧缓存，避免多页插画被拆散清理。
+- Fly 双 Bot 模板采用缓存保留 7 天 + 384 MiB 上限；1 GiB 卷为 SQLite、审核记录与
+  delivery outbox 留出充足空间。文档同步为 96 MiB V8 堆与串行多计划模型。
+
 ## [1.8.0] - 2026-08-30
 
 - **存储治理**（TelePost 2.10.12 + PixivFlow 2.10.12）：
