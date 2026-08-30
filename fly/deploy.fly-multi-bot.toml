@@ -48,10 +48,12 @@ primary_region = "sin"
   min_machines_running = 1      # 至少一台常驻
 
   [[http_service.checks]]
-    grace_period = "60s"
-    interval = "30s"
+    # 512 MiB 机器在 PixivFlow 大批量下载/投递瞬间响应会变慢（仍在工作），
+    # 5s/30s 的组合太苛刻会把正常负载误判为 critical。放宽到 30s 超时 + 60s 间隔。
+    grace_period = "120s"
+    interval = "60s"
     method = "GET"
-    timeout = "5s"
+    timeout = "30s"
     path = "/health"
 
 [vm]
