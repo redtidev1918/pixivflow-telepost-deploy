@@ -2,6 +2,13 @@
 
 ## [Unreleased]
 
+## [1.7.0] - 2026-08-30
+
+- **开源发布**：仓库公开为通用部署套件（MIT 许可证）。
+- 示例配置通用化：`fly-two-bots.example.json` / `standalone.example.json` 的主题
+  替换为中性占位（ミク / アークナイツ），默认 `includeR18=false`（注释说明按需开启），
+  移除个人化代理与测试残留；README 增加特性总览与许可证章节。
+
 ## [1.6.6] - 2026-08-30
 
 - PixivFlow 升级到 **2.10.9**：多页作品逐页下载后强制 `global.gc()` 回收

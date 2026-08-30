@@ -12,9 +12,9 @@
     "retries": 3,
     "retryDelay": 1000,
     "proxy": {
-      "enabled": true,
+      "enabled": false,
       "host": "127.0.0.1",
-      "port": 7892,
+      "port": 7890,
       "protocol": "http"
     }
   },
@@ -43,14 +43,13 @@
       "type": "illustration",
       "mode": "ranking",
       "rankingMode": "day",
-      "rankingDate": "2026-08-28",
-      "filterTag": "西瓜肚",
+      "rankingDate": "YESTERDAY",
+      "filterTag": "ミク",
       "limit": 5
     },
     {
       "type": "novel",
-      "tag": "西瓜肚",
-      "languageFilter": "chinese",
+      "tag": "ミク",
       "sort": "popular_desc",
       "limit": 5
     }

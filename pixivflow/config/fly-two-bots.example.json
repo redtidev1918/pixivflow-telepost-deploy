@@ -26,13 +26,13 @@
   "schedules": [
     {
       "id": "bot1-daily",
-      "name": "Bot1 daily 10:00 ボテ腹 非AI插画 + 中文小说 (NSFW)",
+      "name": "Bot1 daily 10:00 主题示例A 插画 + 小说",
       "enabled": false,
       "cron": "0 10 * * *",
       "timezone": "Asia/Shanghai",
       "targetIds": [
-        "bot1-illust-botefuku",
-        "bot1-novel-botefuku"
+        "bot1-illust-topic-a",
+        "bot1-novel-topic-a"
       ],
       "timeout": 1800000,
       "maxConsecutiveFailures": 5,
@@ -40,13 +40,13 @@
     },
     {
       "id": "bot2-daily",
-      "name": "Bot2 daily 10:00 丸呑み 非AI插画 + 中文小说 (NSFW)",
+      "name": "Bot2 daily 10:00 主题示例B 插画 + 小说",
       "enabled": false,
       "cron": "0 10 * * *",
       "timezone": "Asia/Shanghai",
       "targetIds": [
-        "bot2-illust-marunomi",
-        "bot2-novel-marunomi"
+        "bot2-illust-topic-b",
+        "bot2-novel-topic-b"
       ],
       "timeout": 1800000,
       "maxConsecutiveFailures": 5,
@@ -134,12 +134,12 @@
   },
   "targets": [
     {
-      "id": "bot1-illust-botefuku",
+      "id": "bot1-illust-topic-a",
       "type": "illustration",
       "mode": "topic",
-      "topic": "ボテ腹",
+      "topic": "ミク",
       "date": "YESTERDAY",
-      "topicDiscovery": { "includeR18": true },
+      "topicDiscovery": { "includeR18": false },
       "excludeAI": true,
       "limit": 1,
       "storageMode": "cache",
@@ -148,12 +148,12 @@
       }
     },
     {
-      "id": "bot1-novel-botefuku",
+      "id": "bot1-novel-topic-a",
       "type": "novel",
       "mode": "topic",
-      "topic": "ボテ腹",
+      "topic": "ミク",
       "date": "YESTERDAY",
-      "topicDiscovery": { "includeR18": true },
+      "topicDiscovery": { "includeR18": false },
       "languageFilter": "chinese",
       "languageCandidateLimit": 20,
       "strictLanguageFilter": true,
@@ -164,12 +164,12 @@
       }
     },
     {
-      "id": "bot2-illust-marunomi",
+      "id": "bot2-illust-topic-b",
       "type": "illustration",
       "mode": "topic",
-      "topic": "丸呑み",
+      "topic": "アークナイツ",
       "date": "YESTERDAY",
-      "topicDiscovery": { "includeR18": true },
+      "topicDiscovery": { "includeR18": false },
       "excludeAI": true,
       "limit": 1,
       "storageMode": "cache",
@@ -178,12 +178,12 @@
       }
     },
     {
-      "id": "bot2-novel-marunomi",
+      "id": "bot2-novel-topic-b",
       "type": "novel",
       "mode": "topic",
-      "topic": "丸呑み",
+      "topic": "アークナイツ",
       "date": "YESTERDAY",
-      "topicDiscovery": { "includeR18": true },
+      "topicDiscovery": { "includeR18": false },
       "languageFilter": "chinese",
       "languageCandidateLimit": 20,
       "strictLanguageFilter": true,
