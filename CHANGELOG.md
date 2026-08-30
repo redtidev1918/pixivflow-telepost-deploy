@@ -2,11 +2,23 @@
 
 ## [Unreleased]
 
-- 示例配置 `pixivflow/config/fly-two-bots.example.json` 改为「昨日最热门 + 指定 tag +
-  含 R-18」的 ranking 模板（ボテ腹→bot1、丸呑み→bot2，各 1 插画 + 1 小说），并采用完整
-  的投稿模板：标题 `{{title}}`、简介 `Pixiv 自动投稿/作品ID`、标签 `Pixiv + {{topicTag}} +
-  {{workTags}}`、链接 `{{link}}`、剧透 `{{spoiler}}`（R-18 自动遮罩）。
-- 文档补充自动投稿标题/简介/标签/链接/剧透设计与审核群预览回复链（`REVIEW_PREVIEW_THREAD`）。
+## [1.6.0] - 2026-08-30
+
+- TelePost 升级到 **2.10.7**：审核群多页图片按每批最多 10 张组成相册，后续相册、小说
+  文档与审核按钮回复上一批；GIF 保持单发。上传限流重试会重新打开本地文件，异常返回会
+  回滚整单；Pixiv 标签按 Unicode 规则清洗，`R-18/R-18G` 稳定显示为可点击标签。
+- PixivFlow 升级到 **2.10.6**：正确解包小说正文，不再把 API 响应对象写成
+  `[object Object]`；空正文不会写库、落盘或进入审核群。
+- Compose/Fly 模板与 `.env.example` 新增 `REVIEW_PREVIEW_THREAD` 及既有
+  `REVIEW_PREVIEW_INTERVAL_SECONDS` / `REVIEW_PREVIEW_TIMEOUT_SECONDS` 的显式默认值。
+- 自动投稿简介模板优化为 `Pixiv 每日热榜自动投稿 / 主题：{{topicTag}} · 作品ID：{{pixivId}}
+  / 来源：Pixiv 昨日榜 · 经 TelePost 审核发布`（与链接字段不重复），示例配置与线上配置同步。
+- 示例配置改为「昨日最热门 + 主题相关 tag + 含 R-18」的 topic 模板（ボテ腹→bot1、
+  丸呑み→bot2，每天 20:00 各 1 插画 + 1 小说），完整投稿模板：
+  标题 `{{title}}`、标签 `Pixiv + {{topicTag}} + {{workTags}}`、链接 `{{link}}`、
+  剧透 `{{spoiler}}`（R-18 自动遮罩）、`idempotency_key` 按 bot/类型/作品ID 去重。
+- 文档补充自动投稿标题/简介/标签/链接/剧透设计、审核群相册回复链（`REVIEW_PREVIEW_THREAD`），
+  以及 PixivFlow「multipart 表单 HTTP 投稿」链路与第三方复用通用性说明。
 
 ## [1.4.0] - 2026-08-30
 

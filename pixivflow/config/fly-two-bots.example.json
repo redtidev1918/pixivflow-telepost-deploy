@@ -42,7 +42,7 @@
       "id": "bot2-daily",
       "name": "Bot2 daily 丸呑み 昨日热门 (NSFW)",
       "enabled": false,
-      "cron": "30 20 * * *",
+      "cron": "0 20 * * *",
       "timezone": "Asia/Shanghai",
       "targetIds": [
         "bot2-illust-marunomi",
@@ -83,7 +83,7 @@
             "{{topicTag}}",
             "{{workTags}}"
           ],
-          "note": "Pixiv 自动投稿\n作品ID：{{pixivId}}",
+          "note": "Pixiv 每日热榜自动投稿\n主题：{{topicTag}} · 作品ID：{{pixivId}}\n来源：Pixiv 昨日榜 · 经 TelePost 审核发布",
           "link": "{{link}}",
           "anonymous": true,
           "spoiler": "{{spoiler}}",
@@ -113,7 +113,7 @@
             "{{topicTag}}",
             "{{workTags}}"
           ],
-          "note": "Pixiv 自动投稿\n作品ID：{{pixivId}}",
+          "note": "Pixiv 每日热榜自动投稿\n主题：{{topicTag}} · 作品ID：{{pixivId}}\n来源：Pixiv 昨日榜 · 经 TelePost 审核发布",
           "link": "{{link}}",
           "anonymous": true,
           "spoiler": "{{spoiler}}",
@@ -136,11 +136,10 @@
     {
       "id": "bot1-illust-botefuku",
       "type": "illustration",
-      "mode": "ranking",
-      "rankingMode": "day",
-      "rankingDate": "YESTERDAY",
-      "filterTag": "ボテ腹",
-      "r18": true,
+      "mode": "topic",
+      "topic": "ボテ腹",
+      "date": "YESTERDAY",
+      "topicDiscovery": { "includeR18": true },
       "limit": 1,
       "storageMode": "cache",
       "delivery": {
@@ -150,11 +149,10 @@
     {
       "id": "bot1-novel-botefuku",
       "type": "novel",
-      "mode": "ranking",
-      "rankingMode": "day",
-      "rankingDate": "YESTERDAY",
-      "filterTag": "ボテ腹",
-      "r18": true,
+      "mode": "topic",
+      "topic": "ボテ腹",
+      "date": "YESTERDAY",
+      "topicDiscovery": { "includeR18": true },
       "limit": 1,
       "storageMode": "cache",
       "delivery": {
@@ -164,11 +162,10 @@
     {
       "id": "bot2-illust-marunomi",
       "type": "illustration",
-      "mode": "ranking",
-      "rankingMode": "day",
-      "rankingDate": "YESTERDAY",
-      "filterTag": "丸呑み",
-      "r18": true,
+      "mode": "topic",
+      "topic": "丸呑み",
+      "date": "YESTERDAY",
+      "topicDiscovery": { "includeR18": true },
       "limit": 1,
       "storageMode": "cache",
       "delivery": {
@@ -178,11 +175,10 @@
     {
       "id": "bot2-novel-marunomi",
       "type": "novel",
-      "mode": "ranking",
-      "rankingMode": "day",
-      "rankingDate": "YESTERDAY",
-      "filterTag": "丸呑み",
-      "r18": true,
+      "mode": "topic",
+      "topic": "丸呑み",
+      "date": "YESTERDAY",
+      "topicDiscovery": { "includeR18": true },
       "limit": 1,
       "storageMode": "cache",
       "delivery": {
