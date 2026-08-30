@@ -83,7 +83,7 @@
             "{{topicTag}}",
             "{{workTags}}"
           ],
-          "note": "Pixiv 每日热榜自动投稿\n主题：{{topicTag}} · 作品ID：{{pixivId}}\n来源：Pixiv 昨日榜 · 经 TelePost 审核发布",
+          "note": "Pixiv 每日热榜自动投稿\n📅 热门日期：{{rankingDate}}\n🕒 作品发布于：{{publishedDate}}\n主题：{{topicTag}} · 作品ID：{{pixivId}}",
           "link": "{{link}}",
           "anonymous": true,
           "spoiler": "{{spoiler}}",
@@ -113,7 +113,7 @@
             "{{topicTag}}",
             "{{workTags}}"
           ],
-          "note": "Pixiv 每日热榜自动投稿\n主题：{{topicTag}} · 作品ID：{{pixivId}}\n来源：Pixiv 昨日榜 · 经 TelePost 审核发布",
+          "note": "Pixiv 每日热榜自动投稿\n📅 热门日期：{{rankingDate}}\n🕒 作品发布于：{{publishedDate}}\n主题：{{topicTag}} · 作品ID：{{pixivId}}",
           "link": "{{link}}",
           "anonymous": true,
           "spoiler": "{{spoiler}}",
