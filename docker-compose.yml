@@ -7,7 +7,7 @@ services:
       context: .
       dockerfile: docker/combined.Dockerfile
       args:
-        TELEPOST_IMAGE: ${TELEPOST_IMAGE:-ghcr.io/redtidev1918/telepost:2.10.7}
+        TELEPOST_IMAGE: ${TELEPOST_IMAGE:-ghcr.io/redtidev1918/telepost:2.10.8}
         PIXIVFLOW_VERSION: ${PIXIVFLOW_VERSION:-2.10.8}
         HTTP_PROXY: ${BUILD_HTTP_PROXY:-}
         HTTPS_PROXY: ${BUILD_HTTPS_PROXY:-}
@@ -24,6 +24,8 @@ services:
       REVIEW_PREVIEW_THREAD: ${REVIEW_PREVIEW_THREAD:-1}
       REVIEW_PREVIEW_INTERVAL_SECONDS: ${REVIEW_PREVIEW_INTERVAL_SECONDS:-0.75}
       REVIEW_PREVIEW_TIMEOUT_SECONDS: ${REVIEW_PREVIEW_TIMEOUT_SECONDS:-120}
+      # 审核群相册每组媒体数（小内存机器建议 4~5；失败自动降级逐张）
+      REVIEW_ALBUM_SIZE: ${REVIEW_ALBUM_SIZE:-5}
       BOT1_TOKEN: ${BOT1_TOKEN:-}
       BOT1_CHANNEL_ID: ${BOT1_CHANNEL_ID:-}
       BOT1_OWNER_ID: ${BOT1_OWNER_ID:-}
