@@ -69,28 +69,51 @@ PixivFlow 的 delivery 模板把投稿转成 TelePost 的 caption 字段，模�
 与 `{{spoiler}}`（R-18 自动为 `true`）。建议设计（已在示例配置中）：
 
 - `title` → `{{title}}`，频道内渲染为「🔖 标题」
-- `note` → 自动投稿来源与作品 ID，渲染为「📝 简介」
-- `tags` → `["Pixiv", "{{topicTag}}", "{{workTags}}"]`，来源主题 + 作品自身标签
-- `link` → `{{link}}`，渲染为「🔗 链接」
-- `spoiler` → `{{spoiler}}`：R-18 作品自动加 Telegram 剧透遮罩，非 R-18 不遮
+- `note` → 自动投稿来源、主题与作品 ID
+  （`Pixiv 每日热榜自动投稿 / 主题：{{topicTag}} · 作品ID：{{pixivId}} / 来源…`），
+  渲染为「📝 简介」；链接由 `link` 字段单独渲染，不重复占用简介
+- `tags` → `["Pixiv", "{{topicTag}}", "{{workTags}}"]`，来源主题 + 作品自身标签；
+  数组字段默认按逗号拼接成 multipart 重复表单项，TelePost 按逗号/空格拆分为 `#标签`
+  （去重、保序、小写化、去 `#` 后统一加 `#`，上限 30 个）
+- `link` → `{{link}}`，渲染为「🔗 链接」；插画/小说永久链接由 PixivFlow 自动生成
+- `spoiler` → `{{spoiler}}`：R-18 作品自动加 Telegram 剧透遮罩（`has_spoiler`），
+  非 R-18 不遮；同时 caption 顶部显示「⚠️点击查看⚠️」
 - `anonymous` → `true`，频道内不显示投稿人
+- `idempotency_key` → `pixiv:botN:{{type}}:{{pixivId}}`：同一作品重复投递直接幂等返回，
+  不会在审核群产生重复稿件
 
-### 审核群预览回复链
+### 投稿链路与通用性
 
-多页图集进入审核群时，TelePost 会把每一页/每个文件连续发送，并让后续每条消息回复上一条，
-在群内形成一组回复链，一眼看出是一份投稿。需要平铺发送时设 `REVIEW_PREVIEW_THREAD=0`。
-逐张发送仍保留限速与 `RetryAfter` 退避，批准后继续复用 Telegram `file_id`，不会重复上传媒体。
+PixivFlow 不依赖 TelePost 私有协议：它把作品文件与模板字段渲染成一次标准的
+`multipart/form-data` HTTP 请求（`files` 文件字段 + `title/tags/note/link/spoiler/
+anonymous/idempotency_key` 表单字段），`Authorization: Bearer <submit-token>` 鉴权。
+TelePost 接收后写入审核队列并把媒体暂存到审核群、只保存 Telegram `file_id`。
+因此：
+
+- 任何能发 multipart HTTP 的程序/cron/CI 都能复用同一 API 投稿（TelePost 仓库自带
+  API 说明与 token 由 Bot 内 `/gen_token` 签发）；PixivFlow 只是其中一个上游。
+- 反过来 PixivFlow 的 `httpMultipart` delivery 也可指向任意兼容该表单约定的接收端，
+  模板变量（`{{title}}/{{link}}/{{workTags}}/{{spoiler}}` 等）与接收方解耦。
+- 小说投稿为 `.txt` 文档（document），插画为图片；审核群与频道都按媒体类型发送，
+  发布到频道时自动按每组 ≤10 拆成多个 Telegram media group。
+
+### 审核群相册与回复链
+
+多页图集进入审核群时，TelePost 会按每批最多 10 张组成 Telegram 相册；下一相册、小说
+`.txt` 文档和审核按钮回复上一批，在群内形成一份完整投稿。需要取消回复关系时设
+`REVIEW_PREVIEW_THREAD=0`。上传保留限速与 `RetryAfter` 退避，批准后继续复用 Telegram
+`file_id`，不会从 Fly 再次上传媒体。
 
 ### 单次手动测试（不等待 Cron）
 
 ```bash
-# 在运行机器上执行一次，立即验证「昨日最热门 + 指定 tag + 含 R-18」链路：
+# 在运行机器上执行一次，立即验证「昨日最热门 + 主题相关 tag + 含 R-18」链路：
 pixivflow download --config /app/data/pixivflow/config.json
 ```
 
 新增/修改 target 并保存后，PixivFlow 会热重载；配合
-`mode: "ranking" + filterTag + rankingDate: "YESTERDAY" + r18: true + limit: 1`
-即得到「昨天最热门的某 tag 1 部插画/小说（含 R-18）」并投递到对应 Bot 的审核群。
+`mode: "topic" + topic + date: "YESTERDAY" + topicDiscovery.includeR18: true + limit: 1`
+即得到「昨天最热门的主题相关 tag 1 部插画/小说（含 R-18）」并投递到对应 Bot 的审核群。
 
 ## 远程变更
 
