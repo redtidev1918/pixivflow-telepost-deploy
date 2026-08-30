@@ -47,11 +47,12 @@ PIXIVFLOW_ENABLED=false
 | 分词器 | `simple`（`jieba` 会额外占用 ~100 MB） |
 | SQLite 缓存 | `DB_CACHE_KB=1024` |
 | PixivFlow 下载并发 | **`download.concurrency=1`** |
-| PixivFlow V8 堆 | `NODE_OPTIONS=--max-old-space-size=128` |
+| PixivFlow V8 堆 | `NODE_OPTIONS=--max-old-space-size=96 --expose-gc` |
 | PixivFlow SQLite 缓存 | `PIXIV_DB_CACHE_KB=4096` |
 | V8 内存分配器 | `MALLOC_ARENA_MAX=2` |
-| Cron 计划 | **两个计划至少错开 15~20 分钟** |
-| 并发计划 | 不允许同时运行多个计划 |
+| Cron 计划 | 可同一时刻触发；调度器会串行排队 |
+| 并发计划 | 内置串行 admission，不会重叠执行 |
+| 下载缓存 | 保留 7 天，容量硬上限 384 MiB |
 | WebUI | **不启动** |
 | `jieba` 分词 | **不安装、不启用** |
 
@@ -83,11 +84,16 @@ PixivFlow 配置模板中需要调整：
   "download": {
     "concurrency": 1,
     "requestDelay": 1000
+  },
+  "storage": {
+    "cacheRetentionDays": 7,
+    "cacheMaxSizeMB": 384
   }
 }
 ```
 
-两个 Cron 计划至少错开 15-20 分钟，避免同时触发下载导致 OOM：
+多计划即使同一时刻触发也会通过全局串行队列逐个执行；如希望错开审核群消息，仍可
+配置不同 Cron：
 
 ```json
 {
@@ -114,7 +120,8 @@ PixivFlow 配置模板中需要调整：
 curl https://your-app.fly.dev/health
 ```
 
-返回的 `process_rss` 和 `system_available_mb` 字段反映实际内存压力。
+返回的 `process_rss`、`system_available_mb`、`pixivflow_cache`、`delivery_outbox` 与
+`volume` 字段分别反映内存和持久卷压力。
 如果出现 OOM，应先将 Machine 升级至 1 GiB，**不要**用减少重试或删除 outbox
 换取表面稳定。
 

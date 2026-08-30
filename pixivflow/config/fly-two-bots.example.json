@@ -17,7 +17,8 @@
     "downloadDirectory": "./cache",
     "illustrationDirectory": "./cache/illustrations",
     "novelDirectory": "./cache/novels",
-    "cacheRetentionDays": 14
+    "cacheRetentionDays": 7,
+    "cacheMaxSizeMB": 384
   },
   "scheduler": {
     "enabled": false,
