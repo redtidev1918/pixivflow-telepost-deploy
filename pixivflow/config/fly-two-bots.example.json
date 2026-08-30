@@ -26,9 +26,9 @@
   "schedules": [
     {
       "id": "bot1-daily",
-      "name": "Bot1 daily テーマ甲 昨日热门 (NSFW)",
+      "name": "Bot1 daily 10:00 テーマ甲 非AI插画 + 中文小说 (NSFW)",
       "enabled": false,
-      "cron": "0 20 * * *",
+      "cron": "0 10 * * *",
       "timezone": "Asia/Shanghai",
       "targetIds": [
         "bot1-illust-topic-a",
@@ -40,9 +40,9 @@
     },
     {
       "id": "bot2-daily",
-      "name": "Bot2 daily テーマ乙 昨日热门 (NSFW)",
+      "name": "Bot2 daily 10:00 テーマ乙 非AI插画 + 中文小说 (NSFW)",
       "enabled": false,
-      "cron": "0 20 * * *",
+      "cron": "0 10 * * *",
       "timezone": "Asia/Shanghai",
       "targetIds": [
         "bot2-illust-topic-b",
@@ -140,6 +140,7 @@
       "topic": "テーマ甲",
       "date": "YESTERDAY",
       "topicDiscovery": { "includeR18": true },
+      "excludeAI": true,
       "limit": 1,
       "storageMode": "cache",
       "delivery": {
@@ -153,6 +154,9 @@
       "topic": "テーマ甲",
       "date": "YESTERDAY",
       "topicDiscovery": { "includeR18": true },
+      "languageFilter": "chinese",
+      "languageCandidateLimit": 20,
+      "strictLanguageFilter": true,
       "limit": 1,
       "storageMode": "cache",
       "delivery": {
@@ -166,6 +170,7 @@
       "topic": "テーマ乙",
       "date": "YESTERDAY",
       "topicDiscovery": { "includeR18": true },
+      "excludeAI": true,
       "limit": 1,
       "storageMode": "cache",
       "delivery": {
@@ -179,6 +184,9 @@
       "topic": "テーマ乙",
       "date": "YESTERDAY",
       "topicDiscovery": { "includeR18": true },
+      "languageFilter": "chinese",
+      "languageCandidateLimit": 20,
+      "strictLanguageFilter": true,
       "limit": 1,
       "storageMode": "cache",
       "delivery": {
