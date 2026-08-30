@@ -42,7 +42,7 @@
       "id": "bot2-daily",
       "name": "Bot2 daily テーマ乙 昨日热门 (NSFW)",
       "enabled": false,
-      "cron": "30 20 * * *",
+      "cron": "0 20 * * *",
       "timezone": "Asia/Shanghai",
       "targetIds": [
         "bot2-illust-topic-b",
@@ -83,7 +83,7 @@
             "{{topicTag}}",
             "{{workTags}}"
           ],
-          "note": "Pixiv 自动投稿\n作品ID：{{pixivId}}",
+          "note": "Pixiv 每日热榜自动投稿\n主题：{{topicTag}} · 作品ID：{{pixivId}}\n来源：Pixiv 昨日榜 · 经 TelePost 审核发布",
           "link": "{{link}}",
           "anonymous": true,
           "spoiler": "{{spoiler}}",
@@ -113,7 +113,7 @@
             "{{topicTag}}",
             "{{workTags}}"
           ],
-          "note": "Pixiv 自动投稿\n作品ID：{{pixivId}}",
+          "note": "Pixiv 每日热榜自动投稿\n主题：{{topicTag}} · 作品ID：{{pixivId}}\n来源：Pixiv 昨日榜 · 经 TelePost 审核发布",
           "link": "{{link}}",
           "anonymous": true,
           "spoiler": "{{spoiler}}",
@@ -136,11 +136,10 @@
     {
       "id": "bot1-illust-topic-a",
       "type": "illustration",
-      "mode": "ranking",
-      "rankingMode": "day",
-      "rankingDate": "YESTERDAY",
-      "filterTag": "テーマ甲",
-      "r18": true,
+      "mode": "topic",
+      "topic": "テーマ甲",
+      "date": "YESTERDAY",
+      "topicDiscovery": { "includeR18": true },
       "limit": 1,
       "storageMode": "cache",
       "delivery": {
@@ -150,11 +149,10 @@
     {
       "id": "bot1-novel-topic-a",
       "type": "novel",
-      "mode": "ranking",
-      "rankingMode": "day",
-      "rankingDate": "YESTERDAY",
-      "filterTag": "テーマ甲",
-      "r18": true,
+      "mode": "topic",
+      "topic": "テーマ甲",
+      "date": "YESTERDAY",
+      "topicDiscovery": { "includeR18": true },
       "limit": 1,
       "storageMode": "cache",
       "delivery": {
@@ -164,11 +162,10 @@
     {
       "id": "bot2-illust-topic-b",
       "type": "illustration",
-      "mode": "ranking",
-      "rankingMode": "day",
-      "rankingDate": "YESTERDAY",
-      "filterTag": "テーマ乙",
-      "r18": true,
+      "mode": "topic",
+      "topic": "テーマ乙",
+      "date": "YESTERDAY",
+      "topicDiscovery": { "includeR18": true },
       "limit": 1,
       "storageMode": "cache",
       "delivery": {
@@ -178,11 +175,10 @@
     {
       "id": "bot2-novel-topic-b",
       "type": "novel",
-      "mode": "ranking",
-      "rankingMode": "day",
-      "rankingDate": "YESTERDAY",
-      "filterTag": "テーマ乙",
-      "r18": true,
+      "mode": "topic",
+      "topic": "テーマ乙",
+      "date": "YESTERDAY",
+      "topicDiscovery": { "includeR18": true },
       "limit": 1,
       "storageMode": "cache",
       "delivery": {

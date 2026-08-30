@@ -7,8 +7,8 @@ services:
       context: .
       dockerfile: docker/combined.Dockerfile
       args:
-        TELEPOST_IMAGE: ${TELEPOST_IMAGE:-ghcr.io/redtidev1918/telepost:2.10.6}
-        PIXIVFLOW_VERSION: ${PIXIVFLOW_VERSION:-2.10.5}
+        TELEPOST_IMAGE: ${TELEPOST_IMAGE:-ghcr.io/redtidev1918/telepost:2.10.7}
+        PIXIVFLOW_VERSION: ${PIXIVFLOW_VERSION:-2.10.6}
         HTTP_PROXY: ${BUILD_HTTP_PROXY:-}
         HTTPS_PROXY: ${BUILD_HTTPS_PROXY:-}
     restart: unless-stopped
@@ -20,6 +20,10 @@ services:
       WEBHOOK_PORT: 8080
       HEALTH_PORT: 8080
       API_ENABLED: "true"
+      # 审核群多页预览：每批最多 10 张组成相册；1=后续批次回复上一批
+      REVIEW_PREVIEW_THREAD: ${REVIEW_PREVIEW_THREAD:-1}
+      REVIEW_PREVIEW_INTERVAL_SECONDS: ${REVIEW_PREVIEW_INTERVAL_SECONDS:-0.75}
+      REVIEW_PREVIEW_TIMEOUT_SECONDS: ${REVIEW_PREVIEW_TIMEOUT_SECONDS:-120}
       BOT1_TOKEN: ${BOT1_TOKEN:-}
       BOT1_CHANNEL_ID: ${BOT1_CHANNEL_ID:-}
       BOT1_OWNER_ID: ${BOT1_OWNER_ID:-}
