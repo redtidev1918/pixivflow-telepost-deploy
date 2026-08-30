@@ -2,6 +2,14 @@
 
 ## [Unreleased]
 
+## [1.6.2] - 2026-08-30
+
+- PixivFlow 升级到 **2.10.8**：小说正文优先使用 gallery-dl 验证过的
+  `/webview/v2/novel` 数据，旧 App API 与 Web AJAX 作为回退；任何来源只有在正文
+  非空时才视为成功，杜绝只有标题/元数据头的 `.txt` 进入审核群。
+- `PIXIVFLOW_VERSION` 在 Dockerfile、Compose、Fly 与环境模板中统一固定为 2.10.8；
+  TelePost 保持 2.10.7，其合法 hashtag、多图相册与审核回复链修复继续生效。
+
 ## [1.6.1] - 2026-08-30
 
 - PixivFlow 升级到 **2.10.7**：新增 `excludeAI`，在 Topic 热度排名前排除
