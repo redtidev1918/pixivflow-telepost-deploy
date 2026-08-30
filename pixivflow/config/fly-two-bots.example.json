@@ -88,7 +88,7 @@
           "note": "Pixiv 每日热榜自动投稿\n📅 热门日期：{{rankingDate}}\n🕒 作品发布于：{{publishedDate}}\n主题：{{topicTag}} · 作品ID：{{pixivId}}",
           "link": "{{link}}",
           "anonymous": true,
-          "spoiler": "{{spoiler}}",
+          "spoiler": false,
           "idempotency_key": "pixiv:bot1:{{type}}:{{pixivId}}"
         },
         "success": {
@@ -118,7 +118,7 @@
           "note": "Pixiv 每日热榜自动投稿\n📅 热门日期：{{rankingDate}}\n🕒 作品发布于：{{publishedDate}}\n主题：{{topicTag}} · 作品ID：{{pixivId}}",
           "link": "{{link}}",
           "anonymous": true,
-          "spoiler": "{{spoiler}}",
+          "spoiler": false,
           "idempotency_key": "pixiv:bot2:{{type}}:{{pixivId}}"
         },
         "success": {

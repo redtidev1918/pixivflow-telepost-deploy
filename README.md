@@ -12,8 +12,9 @@ supervisor 放在同一容器，适合 512 MiB 小机器，不启动 WebUI。
 - **中文小说筛选**：`franc-min` 语言检测 + `strictLanguageFilter`，只投中文小说。
 - **审核群 + 回复链**：API 投稿先进审核群，多页图集按 ≤10 张一组打包成 Telegram
   相册、相册间自动回复成链；审核通过后复用 `file_id` 发布到频道，不重复上传。
-- **完整 caption 模板**：标题/简介/标签/原链接/剧透（R-18 自动遮罩）全部可模板化，
-  标签自动净化成 Telegram 可点击的 hashtag（`r-18 → #r18`）。
+- **完整 caption 模板**：标题/简介/标签/原链接/剧透策略全部可模板化；NSFW 收录与
+  Telegram 遮罩相互独立，默认不因 R-18 标签自动遮罩。标签会净化成可点击的 hashtag
+  （`r-18 → #r18`）。
 - **多网络模式**：Polling / Webhook / 可选 Mihomo 代理，同一套 `api/botN/v1/*` 接口。
 - **低内存友好**：512 MiB 即可运行——小相册 + 失败自动降级逐张、逐页强制 GC、
   可调健康检查参数。
@@ -81,7 +82,7 @@ Bot 2 使用对应的 `BOT2_*`。PixivFlow 模板中的两个 delivery target �
 PixivFlow 的 delivery 模板把投稿转成 TelePost 的 caption 字段，模板变量有
 `{{title}}`、`{{pixivId}}`、`{{type}}`、`{{tag}}`、`{{topic}}`、
 `{{workTags}}`、`{{link}}`（自动生成 Pixiv 作品/小说永久链接）、`{{topicTag}}`
-与 `{{spoiler}}`（R-18 自动为 `true`）。建议设计（已在示例配置中）：
+与 `{{spoiler}}`（Pixiv `x_restrict > 0` 时为 `true`）。建议设计（已在示例配置中）：
 
 - `title` → `{{title}}`，频道内渲染为「🔖 标题」
 - `note` → 自动投稿来源、主题与作品 ID
@@ -91,11 +92,23 @@ PixivFlow 的 delivery 模板把投稿转成 TelePost 的 caption 字段，模�
   数组字段默认按逗号拼接成 multipart 重复表单项，TelePost 按逗号/空格拆分为 `#标签`
   （去重、保序、小写化、去 `#` 后统一加 `#`，上限 30 个）
 - `link` → `{{link}}`，渲染为「🔗 链接」；插画/小说永久链接由 PixivFlow 自动生成
-- `spoiler` → `{{spoiler}}`：R-18 作品自动加 Telegram 剧透遮罩（`has_spoiler`），
-  非 R-18 不遮；同时 caption 顶部显示「⚠️点击查看⚠️」
+- `spoiler` → `false`：默认不自动加 Telegram 剧透遮罩。`includeR18: true` 只决定是否
+  收录 NSFW，不再隐式决定展示方式
 - `anonymous` → `true`，频道内不显示投稿人
 - `idempotency_key` → `pixiv:botN:{{type}}:{{pixivId}}`：同一作品重复投递直接幂等返回，
   不会在审核群产生重复稿件
+
+`spoiler` 是每个 delivery target 的显式策略，可按频道分别选择：
+
+| 配置值 | 行为 |
+|---|---|
+| `false` | 默认；任何作品都不自动遮罩 |
+| `"{{spoiler}}"` | 兼容旧行为；Pixiv `x_restrict > 0` 的作品自动遮罩 |
+| `true` | 该 target 的所有媒体都遮罩 |
+
+例如 Bot 1 可以保持 `false`，Bot 2 使用 `"{{spoiler}}"`。这里不会根据标题、tag
+或成人分级作未经部署者确认的进一步推断；需要更细规则时应拆成不同 delivery target，
+或由上游投稿时显式传入 `spoiler=true`。
 
 ### 投稿链路与通用性
 
