@@ -83,9 +83,10 @@
           "tags": [
             "Pixiv",
             "{{topicTag}}",
+            "{{xRestrictTag}}",
             "{{workTags}}"
           ],
-          "note": "Pixiv 每日热榜自动投稿\n📅 热门日期：{{rankingDate}}\n🕒 作品发布于：{{publishedDate}}\n主题：{{topicTag}} · 作品ID：{{pixivId}}",
+          "note": "Pixiv 每日热榜自动投稿\n📅 热门日期：{{rankingDate}}\n🕒 作品发布于：{{publishedDate}}\n🛡️ Pixiv 分级：{{xRestrictLabel}}（x_restrict={{xRestrict}}）\n主题：{{topicTag}} · 作品ID：{{pixivId}}",
           "link": "{{link}}",
           "anonymous": true,
           "spoiler": false,
@@ -113,9 +114,10 @@
           "tags": [
             "Pixiv",
             "{{topicTag}}",
+            "{{xRestrictTag}}",
             "{{workTags}}"
           ],
-          "note": "Pixiv 每日热榜自动投稿\n📅 热门日期：{{rankingDate}}\n🕒 作品发布于：{{publishedDate}}\n主题：{{topicTag}} · 作品ID：{{pixivId}}",
+          "note": "Pixiv 每日热榜自动投稿\n📅 热门日期：{{rankingDate}}\n🕒 作品发布于：{{publishedDate}}\n🛡️ Pixiv 分级：{{xRestrictLabel}}（x_restrict={{xRestrict}}）\n主题：{{topicTag}} · 作品ID：{{pixivId}}",
           "link": "{{link}}",
           "anonymous": true,
           "spoiler": false,
