@@ -16,7 +16,8 @@
     "databasePath": "./pixivflow.db",
     "downloadDirectory": "./cache",
     "illustrationDirectory": "./cache/illustrations",
-    "novelDirectory": "./cache/novels"
+    "novelDirectory": "./cache/novels",
+    "cacheRetentionDays": 14
   },
   "scheduler": {
     "enabled": false,
@@ -148,7 +149,8 @@
       "delivery": {
         "target": "telepost-bot1"
       },
-      "aiMetadataCheck": true
+      "aiMetadataCheck": true,
+      "maxPageCount": 30
     },
     {
       "id": "bot1-novel-topic-a",
@@ -183,7 +185,8 @@
       "delivery": {
         "target": "telepost-bot2"
       },
-      "aiMetadataCheck": true
+      "aiMetadataCheck": true,
+      "maxPageCount": 30
     },
     {
       "id": "bot2-novel-topic-b",
