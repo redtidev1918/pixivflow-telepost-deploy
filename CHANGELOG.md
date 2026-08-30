@@ -2,6 +2,13 @@
 
 ## [Unreleased]
 
+## [1.6.6] - 2026-08-30
+
+- PixivFlow 升级到 **2.10.9**：多页作品逐页下载后强制 `global.gc()` 回收
+  ArrayBuffer 外部内存（配合 `NODE_OPTIONS=--expose-gc`），下载进程 RSS 不再
+  随页数累积，512 MiB 机器下载 20+ 页作品时不再打满内存导致健康检查失败。
+- `NODE_OPTIONS` 统一为 `--max-old-space-size=96 --expose-gc`（Compose/Fly/env）。
+
 ## [1.6.5] - 2026-08-30
 
 - TelePost 升级到 **2.10.11**（累计 2.10.10/2.10.11）：

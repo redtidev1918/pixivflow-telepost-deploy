@@ -8,7 +8,7 @@ services:
       dockerfile: docker/combined.Dockerfile
       args:
         TELEPOST_IMAGE: ${TELEPOST_IMAGE:-ghcr.io/redtidev1918/telepost:2.10.11}
-        PIXIVFLOW_VERSION: ${PIXIVFLOW_VERSION:-2.10.8}
+        PIXIVFLOW_VERSION: ${PIXIVFLOW_VERSION:-2.10.9}
         HTTP_PROXY: ${BUILD_HTTP_PROXY:-}
         HTTPS_PROXY: ${BUILD_HTTPS_PROXY:-}
     restart: unless-stopped
@@ -47,7 +47,7 @@ services:
       PIXIV_REFRESH_TOKEN: ${PIXIV_REFRESH_TOKEN:-}
       TELEPOST_BOT1_SUBMIT_TOKEN: ${TELEPOST_BOT1_SUBMIT_TOKEN:-}
       TELEPOST_BOT2_SUBMIT_TOKEN: ${TELEPOST_BOT2_SUBMIT_TOKEN:-}
-      NODE_OPTIONS: ${NODE_OPTIONS:---max-old-space-size=128}
+      NODE_OPTIONS: ${NODE_OPTIONS:---max-old-space-size=96 --expose-gc}
       MALLOC_ARENA_MAX: ${MALLOC_ARENA_MAX:-2}
       SEARCH_ENABLED: ${SEARCH_ENABLED:-false}
       SEARCH_ANALYZER: ${SEARCH_ANALYZER:-simple}
