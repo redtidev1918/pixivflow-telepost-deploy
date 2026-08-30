@@ -2,6 +2,14 @@
 
 ## [Unreleased]
 
+## [1.6.3] - 2026-08-30
+
+- TelePost 升级到 **2.10.8**：审核群预览改为「小相册 + 自动降级」防 OOM——
+  新增 `REVIEW_ALBUM_SIZE`（默认 5，合法 1–10）控制每条 media group 的媒体数；
+  相册上传失败（超时/断连/限流）自动降级逐张发送，整份投稿不再失败，
+  512 MiB 机型上传阶段 RSS 峰值被压在单张量级。`TELEPOST_IMAGE` 统一升至 2.10.8。
+- Compose/Fly/`.env.example` 均新增 `REVIEW_ALBUM_SIZE=5` 默认值（无需手动配置）。
+
 ## [1.6.2] - 2026-08-30
 
 - PixivFlow 升级到 **2.10.8**：小说正文优先使用 gallery-dl 验证过的
