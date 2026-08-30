@@ -2,6 +2,13 @@
 
 ## [Unreleased]
 
+## [1.8.3] - 2026-08-30
+
+- Fly 双 Bot 示例的投稿 `spoiler` 默认改为 `false`：收录 R-18/R-18G 不再等于必须
+  使用 Telegram 遮罩，避免把所有 NSFW 一刀切隐藏。
+- 文档明确每个 delivery target 的三种显式策略：`false`（默认不遮罩）、
+  `"{{spoiler}}"`（兼容旧版，所有 Pixiv 受限作品自动遮罩）、`true`（全部遮罩）。
+
 ## [1.8.2] - 2026-08-30
 
 - TelePost 升级到 **2.10.13**：多 Bot 模式下只由主 Bot 注册全局
