@@ -1,8 +1,27 @@
 # PixivFlow + TelePost Deploy
 
-一个面向实际运行的私有部署套件：同一份配置可用于海外 VPS、国内服务器、无公网
-NAT 主机、Mac/Linux 本机和 Fly.io。默认镜像把一个 PixivFlow 调度器与 TelePost
-多 Bot supervisor 放在同一容器，适合 512 MiB 小机器，不启动 WebUI。
+一个面向实际运行的 Pixiv 自动投稿部署套件：PixivFlow 负责按主题/榜单抓取作品，
+TelePost 负责投稿审核与频道发布。同一份配置可用于海外 VPS、国内服务器、无公网
+NAT 主机、Mac/Linux 本机和 Fly.io。默认镜像把 PixivFlow 调度器与 TelePost 多 Bot
+supervisor 放在同一容器，适合 512 MiB 小机器，不启动 WebUI。
+
+## 特性
+
+- **主题自动投稿**：按 Pixiv 主题（tag 空间推导）或日榜抓取「昨日最热门」作品，
+  插画/小说各取 Top N，自动排除 AI 生成作品（读 Pixiv 官方 `illust_ai_type` 标记）。
+- **中文小说筛选**：`franc-min` 语言检测 + `strictLanguageFilter`，只投中文小说。
+- **审核群 + 回复链**：API 投稿先进审核群，多页图集按 ≤10 张一组打包成 Telegram
+  相册、相册间自动回复成链；审核通过后复用 `file_id` 发布到频道，不重复上传。
+- **完整 caption 模板**：标题/简介/标签/原链接/剧透（R-18 自动遮罩）全部可模板化，
+  标签自动净化成 Telegram 可点击的 hashtag（`r-18 → #r18`）。
+- **多网络模式**：Polling / Webhook / 可选 Mihomo 代理，同一套 `api/botN/v1/*` 接口。
+- **低内存友好**：512 MiB 即可运行——小相册 + 失败自动降级逐张、逐页强制 GC、
+  可调健康检查参数。
+- **远程热更新**：PixivFlow 配置原子热重载；TelePost 策略短重启生效，数据保留。
+
+## 许可证
+
+[MIT](LICENSE)
 
 ## 网络模式
 
@@ -21,15 +40,16 @@ PixivFlow 的投递配置无需随网络模式改变。Webhook 注册失败时 A
 需要 Docker 24+、Compose v2、Python 3（只用于本地校验）。
 
 ```bash
-gh repo clone redtidev1918/pixivflow-telepost-deploy
+git clone https://github.com/redtidev1918/pixivflow-telepost-deploy
 cd pixivflow-telepost-deploy
 ./scripts/bootstrap.sh
 ```
 
 编辑 `.env`，至少填写 `BOT1_TOKEN`、`BOT1_CHANNEL_ID`、`BOT1_OWNER_ID`。启用
 PixivFlow 时再填写 `PIXIV_REFRESH_TOKEN` 和 Bot 内 `/gen_token` 生成的
-`TELEPOST_BOT1_SUBMIT_TOKEN`。编辑 `data/pixivflow/config.json`，替换 tag、Cron，
-并把需要的计划改成 `"enabled": true`。
+`TELEPOST_BOT1_SUBMIT_TOKEN`。编辑 `data/pixivflow/config.json`（参考
+`pixivflow/config/fly-two-bots.example.json`），把示例主题 `ミク`/`アークナイツ`
+替换成你需要的 tag、调整 Cron，并把要执行的计划改成 `"enabled": true`。
 
 ```bash
 ./scripts/validate.sh
@@ -38,14 +58,9 @@ docker compose ps
 curl http://127.0.0.1:8080/health
 ```
 
-若 GHCR 镜像仍为私有，部署机先登录：
-
-```bash
-echo "$GHCR_READ_TOKEN" | docker login ghcr.io -u redtidev1918 --password-stdin
-```
-
-拉取不可用时可以在仓库内构建：`docker compose build stack`。国内构建机可在
-`.env` 设置 `BUILD_HTTP_PROXY` / `BUILD_HTTPS_PROXY`。
+预构建镜像从 GHCR 拉取（公开）；拉取不可用时可以在仓库内构建：
+`docker compose build stack`。国内构建机可在 `.env` 设置
+`BUILD_HTTP_PROXY` / `BUILD_HTTPS_PROXY`。
 
 ## 两个 Bot 与审核策略
 
