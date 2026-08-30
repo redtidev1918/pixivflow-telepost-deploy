@@ -2,6 +2,15 @@
 
 ## [Unreleased]
 
+## [1.8.4] - 2026-08-31
+
+- TelePost 升级到 **2.10.14**：待审核稿支持自动过期，过期时删除审核群媒体、文档与
+  控制消息，并保留轻量 `expired` 审计记录供 30 天终态清理。
+- 512 MiB 双 Bot 默认 `PENDING_REVIEW_RETENTION_DAYS=1`、每轮最多处理 20 条；选择
+  1 天是为了落在 Telegram Bot API 的 48 小时消息删除窗口内。
+- `/health` 新增 `storage.review_queue`，只暴露每个 Bot 的状态计数与最老 pending 年龄，
+  不读取或返回投稿内容。
+
 ## [1.8.3] - 2026-08-30
 
 - Fly 双 Bot 示例的投稿 `spoiler` 默认改为 `false`：收录 R-18/R-18G 不再等于必须

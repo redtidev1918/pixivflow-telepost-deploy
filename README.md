@@ -132,6 +132,17 @@ TelePost 接收后写入审核队列并把媒体暂存到审核群、只保存 T
 `REVIEW_PREVIEW_THREAD=0`。上传保留限速与 `RetryAfter` 退避，批准后继续复用 Telegram
 `file_id`，不会从 Fly 再次上传媒体。
 
+待审核稿进入群后，原始上传文件会立即从运行机器删除；SQLite 只保存 Telegram
+`file_id`、caption 和状态，因此积压基本不占内存，也不会把原图堆在 Fly 持久卷。默认
+`PENDING_REVIEW_RETENTION_DAYS=1`：超过一天仍未审核的稿件会标记为 `expired`，并删除
+对应的审核群相册、文档和按钮消息；每轮最多处理 20 条。轻量审计记录再按
+`REVIEW_RETENTION_DAYS=30` 清理。
+
+Telegram Bot API 只保证删除发送后 48 小时内的消息，因此需要自动清群时不要把待审核
+保留期设为 2 天或更长。设 `0` 可永久保留 pending；此时需自行管理审核群历史消息。
+`/health` 的 `storage.review_queue` 会返回各 Bot 的 pending/failed/expired 数量和最老
+pending 年龄，不包含标题、标签或投稿人等内容。
+
 ### 单次手动测试（不等待 Cron）
 
 ```bash
