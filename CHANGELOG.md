@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+## [1.8.2] - 2026-08-30
+
+- TelePost 升级到 **2.10.13**：多 Bot 模式下只由主 Bot 注册全局
+  PixivFlow 日常维护，避免两个进程同时清理缓存、执行 SQLite VACUUM，降低磁盘争用与锁冲突。
+
 ## [1.8.1] - 2026-08-30
 
 - PixivFlow 升级到 **2.10.13**：`maintain` 新增 `storage.cacheMaxSizeMB` 容量硬上限，
