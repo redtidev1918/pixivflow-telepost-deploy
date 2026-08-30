@@ -129,8 +129,12 @@ pixivflow download --config /app/data/pixivflow/config.json
 新增/修改 target 并保存后，PixivFlow 会热重载；配合
 `mode: "topic" + topic + date: "YESTERDAY" + topicDiscovery.includeR18: true + limit: 1`
 即得到「昨天最热门的主题相关 tag 1 部插画/小说（含 R-18）」并投递到对应 Bot 的审核群。
-插画加 `excludeAI: true` 会在热度排名前排除 Pixiv 标记的 AI 作品；小说加
-`languageFilter: "chinese" + languageCandidateLimit: 20 + strictLanguageFilter: true`
+插画加 `excludeAI: true` 会排除 AI 作品，判定有两层：Pixiv 官方 `illust_ai_type === 2`
+标记，以及作品标签中的 AI 标记（`生成AI` / `AI生成` / `Generative AI` / `AI-generated`
+等，含翻译名——官方字段缺失或尚未标注的作品也能拦住，零成本）。可选再加
+`aiMetadataCheck: true`：下载完成后扫描首页文件头部元数据（Stable Diffusion 的
+`parameters=` PNG tEXt、NovelAI EXIF 等），命中则跳过投递（仍记为已下载，不重复拉取）。
+小说加 `languageFilter: "chinese" + languageCandidateLimit: 20 + strictLanguageFilter: true`
 会按热度串行回填，直到找到 1 部可确认的中文小说。
 
 ## 远程变更
