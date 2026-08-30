@@ -2,6 +2,17 @@
 
 ## [Unreleased]
 
+## [1.6.1] - 2026-08-30
+
+- PixivFlow 升级到 **2.10.7**：新增 `excludeAI`，在 Topic 热度排名前排除
+  Pixiv 明确标记的 AI 插画；中文小说按热度串行检测并回填，`strictLanguageFilter`
+  可拒绝正文过短等无法确认语言的候选。
+- Fly/Compose 双 Bot 示例改为北京时间每天 10:00：ボテ腹→bot1、丸呑み→bot2；
+  每路各投稿昨日最热非 AI 插画 1 部和严格中文小说 1 部，继续包含 R-18/R-18G，
+  API 投稿仍进入 TelePost 审核队列。
+- `PIXIVFLOW_VERSION` 在 Dockerfile、Compose、Fly 与环境模板中统一固定为 2.10.7；
+  TelePost 保持 2.10.7。
+
 ## [1.6.0] - 2026-08-30
 
 - TelePost 升级到 **2.10.7**：审核群多页图片按每批最多 10 张组成相册，后续相册、小说

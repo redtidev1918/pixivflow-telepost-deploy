@@ -114,6 +114,9 @@ pixivflow download --config /app/data/pixivflow/config.json
 新增/修改 target 并保存后，PixivFlow 会热重载；配合
 `mode: "topic" + topic + date: "YESTERDAY" + topicDiscovery.includeR18: true + limit: 1`
 即得到「昨天最热门的主题相关 tag 1 部插画/小说（含 R-18）」并投递到对应 Bot 的审核群。
+插画加 `excludeAI: true` 会在热度排名前排除 Pixiv 标记的 AI 作品；小说加
+`languageFilter: "chinese" + languageCandidateLimit: 20 + strictLanguageFilter: true`
+会按热度串行回填，直到找到 1 部可确认的中文小说。
 
 ## 远程变更
 
