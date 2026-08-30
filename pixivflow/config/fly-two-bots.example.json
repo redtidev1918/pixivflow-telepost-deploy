@@ -139,13 +139,16 @@
       "mode": "topic",
       "topic": "ミク",
       "date": "YESTERDAY",
-      "topicDiscovery": { "includeR18": false },
+      "topicDiscovery": {
+        "includeR18": false
+      },
       "excludeAI": true,
       "limit": 1,
       "storageMode": "cache",
       "delivery": {
         "target": "telepost-bot1"
-      }
+      },
+      "aiMetadataCheck": true
     },
     {
       "id": "bot1-novel-topic-a",
@@ -153,7 +156,9 @@
       "mode": "topic",
       "topic": "ミク",
       "date": "YESTERDAY",
-      "topicDiscovery": { "includeR18": false },
+      "topicDiscovery": {
+        "includeR18": false
+      },
       "languageFilter": "chinese",
       "languageCandidateLimit": 20,
       "strictLanguageFilter": true,
@@ -169,13 +174,16 @@
       "mode": "topic",
       "topic": "アークナイツ",
       "date": "YESTERDAY",
-      "topicDiscovery": { "includeR18": false },
+      "topicDiscovery": {
+        "includeR18": false
+      },
       "excludeAI": true,
       "limit": 1,
       "storageMode": "cache",
       "delivery": {
         "target": "telepost-bot2"
-      }
+      },
+      "aiMetadataCheck": true
     },
     {
       "id": "bot2-novel-topic-b",
@@ -183,7 +191,9 @@
       "mode": "topic",
       "topic": "アークナイツ",
       "date": "YESTERDAY",
-      "topicDiscovery": { "includeR18": false },
+      "topicDiscovery": {
+        "includeR18": false
+      },
       "languageFilter": "chinese",
       "languageCandidateLimit": 20,
       "strictLanguageFilter": true,

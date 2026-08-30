@@ -2,6 +2,15 @@
 
 ## [Unreleased]
 
+## [1.7.1] - 2026-08-30
+
+- PixivFlow 升级到 **2.10.10**：AI 判定增强——
+  - `excludeAI: true` 现在同时按官方 `illust_ai_type === 2` 与作品 AI 标签
+    （生成AI/AI生成/Generative AI/AI-generated，含翻译名）过滤，官方字段缺失的作品也能拦住；
+  - 新增可选 `aiMetadataCheck: true`（插画 target）：下载后扫描首页文件头部 2 MiB，
+    命中 AI 生成工具元数据（SD `parameters=` / NovelAI EXIF）则跳过投递，仍记为已下载。
+- 示例配置与线上配置的插画 target 均开启 `aiMetadataCheck: true`；README 补充 AI 判定说明。
+
 ## [1.7.0] - 2026-08-30
 
 - **开源发布**：仓库公开为通用部署套件（MIT 许可证）。
