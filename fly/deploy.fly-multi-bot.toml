@@ -8,7 +8,7 @@ primary_region = "sin"
   dockerfile = "docker/combined.Dockerfile"
 
 [build.args]
-  TELEPOST_IMAGE = "ghcr.io/redtidev1918/telepost:2.10.13"
+  TELEPOST_IMAGE = "ghcr.io/redtidev1918/telepost:2.10.14"
   PIXIVFLOW_VERSION = "2.10.13"
 
 [env]
@@ -34,6 +34,10 @@ primary_region = "sin"
   REVIEW_PREVIEW_TIMEOUT_SECONDS = "120"
   # 审核群相册每组媒体数（512MiB 小内存机器建议 4~5）
   REVIEW_ALBUM_SIZE = "5"
+  # Bot API 只保证删除 48 小时内消息；1 天可可靠回收无人审核的群预览。
+  PENDING_REVIEW_RETENTION_DAYS = "1"
+  PENDING_REVIEW_CLEANUP_BATCH_SIZE = "20"
+  REVIEW_RETENTION_DAYS = "30"
 
 # 既有数据卷原样挂载（历史数据保留在卷上，新版写到 data/bot1、data/bot2 子目录）
 [mounts]
