@@ -130,7 +130,7 @@
         "retryDelayMs": 3000
       }
     },
-    "deleteAfterDelivery": true
+    "deleteAfterDelivery": false
   },
   "targets": [
     {
