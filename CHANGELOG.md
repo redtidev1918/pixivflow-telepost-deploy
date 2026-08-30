@@ -2,6 +2,14 @@
 
 ## [Unreleased]
 
+## [1.8.5] - 2026-08-31
+
+- PixivFlow 升级到 **2.10.15**，投递保留原始 `x_restrict`，并暴露
+  `{{xRestrict}}`、`{{xRestrictLabel}}`、`{{xRestrictTag}}` 三个模板变量。
+- TelePost 投稿标签增加 `AllAges` / `R18` / `R18G` 精确分级，简介同时
+  保留原始数值；`spoiler=false` 继续作为独立频道策略，不会因 NSFW
+  等级自动加遮罩。
+
 ## [1.8.4] - 2026-08-31
 
 - TelePost 升级到 **2.10.14**：待审核稿支持自动过期，过期时删除审核群媒体、文档与

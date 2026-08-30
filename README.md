@@ -81,17 +81,21 @@ Bot 2 使用对应的 `BOT2_*`。PixivFlow 模板中的两个 delivery target �
 
 PixivFlow 的 delivery 模板把投稿转成 TelePost 的 caption 字段，模板变量有
 `{{title}}`、`{{pixivId}}`、`{{type}}`、`{{tag}}`、`{{topic}}`、
-`{{workTags}}`、`{{link}}`（自动生成 Pixiv 作品/小说永久链接）、`{{topicTag}}`
-与 `{{spoiler}}`（Pixiv `x_restrict > 0` 时为 `true`）。建议设计（已在示例配置中）：
+`{{workTags}}`、`{{link}}`（自动生成 Pixiv 作品/小说永久链接）、`{{topicTag}}`、
+`{{xRestrict}}`、`{{xRestrictLabel}}`、`{{xRestrictTag}}` 与
+`{{spoiler}}`（Pixiv `x_restrict > 0` 时为 `true`）。建议设计（已在示例配置中）：
 
 - `title` → `{{title}}`，频道内渲染为「🔖 标题」
 - `note` → 自动投稿来源、主题与作品 ID
   （`Pixiv 每日热榜自动投稿 / 主题：{{topicTag}} · 作品ID：{{pixivId}} / 来源…`），
   渲染为「📝 简介」；链接由 `link` 字段单独渲染，不重复占用简介
-- `tags` → `["Pixiv", "{{topicTag}}", "{{workTags}}"]`，来源主题 + 作品自身标签；
+- `tags` → `["Pixiv", "{{topicTag}}", "{{xRestrictTag}}", "{{workTags}}"]`，
+  来源主题 + `AllAges/R18/R18G` 精确分级 + 作品自身标签；
   数组字段默认按逗号拼接成 multipart 重复表单项，TelePost 按逗号/空格拆分为 `#标签`
   （去重、保序、小写化、去 `#` 后统一加 `#`，上限 30 个）
 - `link` → `{{link}}`，渲染为「🔗 链接」；插画/小说永久链接由 PixivFlow 自动生成
+- `note` 额外显示 `{{xRestrictLabel}}（x_restrict={{xRestrict}}）`，明确区分
+  全年龄、R-18 和 R-18G
 - `spoiler` → `false`：默认不自动加 Telegram 剧透遮罩。`includeR18: true` 只决定是否
   收录 NSFW，不再隐式决定展示方式
 - `anonymous` → `true`，频道内不显示投稿人
