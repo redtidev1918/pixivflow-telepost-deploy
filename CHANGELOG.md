@@ -2,6 +2,17 @@
 
 ## [Unreleased]
 
+## [1.8.0] - 2026-08-30
+
+- **存储治理**（TelePost 2.10.12 + PixivFlow 2.10.12）：
+  - 修复 `api_uploads` 会话目录泄漏：后台清扫器每小时删除超龄孤儿目录
+    （`UPLOAD_SESSION_MAX_AGE_SECONDS`，默认 1h）；
+  - 已决审核记录超期自动清理（`REVIEW_RETENTION_DAYS`，默认 30 天）；
+  - 每天 04:00 自动执行 `pixivflow maintain`：缓存保留清理
+    （`storage.cacheRetentionDays` 默认 14 天）+ 日志/备份清理 + SQLite VACUUM；
+  - 示例与线上配置的插画 target 增加 `maxPageCount: 30` 页数上限，跳过超大作品。
+- `TELEPOST_IMAGE` 升至 2.10.12，`PIXIVFLOW_VERSION` 升至 2.10.12。
+
 ## [1.7.3] - 2026-08-30
 
 - `deleteAfterDelivery` 改为 **false**（示例与线上）：投递后保留缓存文件，
