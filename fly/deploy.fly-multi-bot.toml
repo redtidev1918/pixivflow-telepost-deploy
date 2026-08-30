@@ -9,7 +9,7 @@ primary_region = "sin"
 
 [build.args]
   TELEPOST_IMAGE = "ghcr.io/redtidev1918/telepost:2.10.11"
-  PIXIVFLOW_VERSION = "2.10.8"
+  PIXIVFLOW_VERSION = "2.10.9"
 
 [env]
   PYTHONUNBUFFERED = "1"
@@ -26,7 +26,7 @@ primary_region = "sin"
   PIXIVFLOW_ENABLED = "true"
   PIXIVFLOW_CONFIG = "/app/data/pixivflow/config.json"
   PIXIV_DB_CACHE_KB = "4096"
-  NODE_OPTIONS = "--max-old-space-size=128"
+  NODE_OPTIONS = "--max-old-space-size=96 --expose-gc"
   MALLOC_ARENA_MAX = "2"
   # 审核群多页预览：每批最多 10 张组成相册；1=后续批次回复上一批
   REVIEW_PREVIEW_THREAD = "1"
