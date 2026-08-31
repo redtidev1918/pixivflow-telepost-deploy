@@ -2,6 +2,14 @@
 
 ## [Unreleased]
 
+## [1.8.7] - 2026-08-31
+
+- TelePost 升级到 **2.10.16**：修正 JobQueue 维护回调被错误 `await` 导致的
+  `NoneType` 异常，并把日志清理和 PixivFlow 子进程等待移至工作线程，避免阻塞
+  Telegram 更新处理。
+- 03:00 日志清理与 04:00 PixivFlow 维护显式使用部署 `TZ`；双 Bot 模式仍只由
+  主 Bot 注册全局维护任务，避免重复清理同一目录。
+
 - 补齐公开仓库协作入口：贡献指南、安全政策、支持说明、行为准则、架构文档、结构化
   Issue 表单、PR 模板与 Dependabot 配置。
 - 新增 `.dockerignore` 与公开仓库卫生检查，阻止 `.env`、运行时数据、真实 Fly 配置和
