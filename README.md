@@ -172,7 +172,7 @@ pixivflow download --config /app/data/pixivflow/config.json
 等，含翻译名——官方字段缺失或尚未标注的作品也能拦住，零成本）。可选再加
 `aiMetadataCheck: true`：下载完成后扫描首页文件头部元数据（Stable Diffusion 的
 `parameters=` PNG tEXt、NovelAI EXIF 等），命中则跳过投递（仍记为已下载，不重复拉取）。
-小说加 `languageFilter: "chinese" + languageCandidateLimit: 20 + strictLanguageFilter: true`
+小说加 `languageFilter: "chinese" + languageCandidateLimit: 20 + strictLanguageFilter: true`。若昨天没有中文候选，可设置 `noMatchPolicy: { "lookbackDays": 3, "notify": true }`：最多逐日回看 3 天，仍为空时通知对应审核群，不会静默改投日文小说。
 会按热度串行回填，直到找到 1 部可确认的中文小说。
 
 ## 远程变更
