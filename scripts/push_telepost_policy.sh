@@ -14,6 +14,12 @@ policy_file=$3
 python3 -m json.tool "$policy_file" >/dev/null
 
 scp "$policy_file" "$remote:$remote_dir/.telepost-policy.upload.json"
-ssh "$remote" "cd '$remote_dir' && ./scripts/apply_telepost_policy.sh .telepost-policy.upload.json && rm -f .telepost-policy.upload.json"
+ssh "$remote" sh -s -- "$remote_dir" <<'REMOTE'
+set -eu
+cd "$1"
+cleanup() { rm -f .telepost-policy.upload.json; }
+trap cleanup EXIT HUP INT TERM
+./scripts/apply_telepost_policy.sh .telepost-policy.upload.json
+REMOTE
 
 echo "Remote TelePost policy applied."
