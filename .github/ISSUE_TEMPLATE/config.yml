@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: 使用与排障说明
+    url: https://github.com/redtidev1918/pixivflow-telepost-deploy/blob/main/SUPPORT.md
+    about: 提交 Issue 前先查看部署文档、验证命令和脱敏要求
+  - name: 私下报告安全问题
+    url: https://github.com/redtidev1918/pixivflow-telepost-deploy/security/advisories/new
+    about: Token 泄漏、鉴权绕过、命令注入等问题不要公开披露

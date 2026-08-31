@@ -1,0 +1,34 @@
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      timezone: Asia/Shanghai
+    labels: [dependencies, github-actions]
+    groups:
+      github-actions:
+        patterns: ["*"]
+
+  - package-ecosystem: docker
+    directory: /docker
+    schedule:
+      interval: weekly
+      day: monday
+      timezone: Asia/Shanghai
+    labels: [dependencies, docker]
+    groups:
+      runtime-images:
+        patterns: ["*"]
+
+  - package-ecosystem: docker
+    directory: /proxy
+    schedule:
+      interval: weekly
+      day: monday
+      timezone: Asia/Shanghai
+    labels: [dependencies, docker]
+    groups:
+      proxy-images:
+        patterns: ["*"]

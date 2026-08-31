@@ -2,6 +2,13 @@
 
 ## [Unreleased]
 
+- 补齐公开仓库协作入口：贡献指南、安全政策、支持说明、行为准则、架构文档、结构化
+  Issue 表单、PR 模板与 Dependabot 配置。
+- 新增 `.dockerignore` 与公开仓库卫生检查，阻止 `.env`、运行时数据、真实 Fly 配置和
+  常见 Token 格式进入 Git 跟踪或 Docker 构建上下文；示例校验不再临时创建 `.env`。
+- CI 使用最小权限、并发去重、ShellCheck 和固定 commit 的第三方 Actions；Release 镜像
+  生成 SBOM 与 provenance，GitHub Release 直接采用对应 CHANGELOG 章节。
+
 ## [1.8.6] - 2026-08-31
 
 - TelePost 升级到 **2.10.15**：频道消息被删除时，关联审核记录状态同步为

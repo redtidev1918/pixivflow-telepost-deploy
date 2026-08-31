@@ -1,0 +1,56 @@
+name: Bug report
+description: 报告可复现的部署、配置或联合运行问题
+title: "[Bug]: "
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        感谢反馈。提交前请删除所有 Token、订阅 URL、真实频道/群 ID、域名、IP 与用户名。
+        安全漏洞请按 SECURITY.md 私下报告。
+  - type: dropdown
+    id: environment
+    attributes:
+      label: 部署环境
+      options:
+        - Docker Compose
+        - Fly.io
+        - 国内服务器 / 代理
+        - 本机开发
+        - 其他
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: 版本
+      description: 仓库 tag/commit、联合镜像 tag，以及相关 PixivFlow/TelePost 版本
+      placeholder: v1.8.6 / image 1.8.6
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: 期望行为
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: 实际行为与复现步骤
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: 已脱敏日志或配置片段
+      render: shell
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: 提交前确认
+      options:
+        - label: 我已运行 `./scripts/validate.sh --examples`
+          required: true
+        - label: 我确认内容不含任何 Token、订阅 URL 或个人部署标识
+          required: true
