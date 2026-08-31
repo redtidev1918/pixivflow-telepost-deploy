@@ -9,25 +9,42 @@ errors=0
 fail() { echo "[FAIL] $*"; errors=$((errors + 1)); }
 ok() { echo "[OK] $*"; }
 
-for file in $(find config pixivflow/config fly/config -type f -name '*.json' | sort); do
+while IFS= read -r file; do
   if python3 -m json.tool "$file" >/dev/null; then ok "$file JSON"; else fail "$file JSON"; fi
-done
+done < <(find config pixivflow/config fly/config -type f -name '*.json' -print | sort)
 if [[ -f data/pixivflow/config.json ]]; then
   if python3 -m json.tool data/pixivflow/config.json >/dev/null; then ok "runtime PixivFlow JSON"; else fail "runtime PixivFlow JSON"; fi
+fi
+
+if python3 -c 'import tomllib' >/dev/null 2>&1; then
+  while IFS= read -r file; do
+    if python3 - "$file" <<'PY'
+import sys
+import tomllib
+
+with open(sys.argv[1], "rb") as handle:
+    tomllib.load(handle)
+PY
+    then ok "$file TOML"; else fail "$file TOML"; fi
+  done < <(find fly -type f -name '*.toml' -print | sort)
+else
+  echo "[SKIP] TOML validation requires Python 3.11+"
 fi
 
 for file in scripts/*.sh proxy/docker-entrypoint.sh fly/scripts/*.sh; do
   if bash -n "$file"; then ok "$file shell syntax"; else fail "$file shell syntax"; fi
 done
 
+if python3 scripts/check_public_repo.py; then ok "public repository hygiene"; else fail "public repository hygiene"; fi
+
+if command -v shellcheck >/dev/null; then
+  if shellcheck scripts/*.sh proxy/docker-entrypoint.sh fly/scripts/*.sh; then ok "ShellCheck"; else fail "ShellCheck"; fi
+else
+  echo "[SKIP] ShellCheck is unavailable"
+fi
+
 if command -v docker >/dev/null && docker compose version >/dev/null 2>&1; then
-  env_created=false
-  if [[ ! -f .env ]]; then
-    cp .env.example .env
-    env_created=true
-  fi
-  if docker compose config --quiet; then ok "Docker Compose model"; else fail "Docker Compose model"; fi
-  if [[ $env_created == true ]]; then rm -f .env; fi
+  if docker compose --env-file .env.example config --quiet; then ok "Docker Compose model"; else fail "Docker Compose model"; fi
 else
   echo "[SKIP] Docker Compose is unavailable"
 fi

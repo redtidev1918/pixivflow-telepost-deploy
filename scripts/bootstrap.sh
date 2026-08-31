@@ -12,7 +12,7 @@ if [[ ! -f .env ]]; then
 fi
 if [[ ! -f data/pixivflow/config.json ]]; then
   cp pixivflow/config/fly-two-bots.example.json data/pixivflow/config.json
-  echo "Created data/pixivflow/config.json; enable plans and replace TAG_A...TAG_D."
+  echo "Created data/pixivflow/config.json; replace the example topics, adjust Cron, then enable the required plans."
 fi
 
 python3 -m json.tool data/pixivflow/config.json >/dev/null

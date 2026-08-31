@@ -1,5 +1,9 @@
 # PixivFlow + TelePost Deploy
 
+[![Validate](https://github.com/redtidev1918/pixivflow-telepost-deploy/actions/workflows/validate.yml/badge.svg)](https://github.com/redtidev1918/pixivflow-telepost-deploy/actions/workflows/validate.yml)
+[![Release](https://github.com/redtidev1918/pixivflow-telepost-deploy/actions/workflows/release.yml/badge.svg)](https://github.com/redtidev1918/pixivflow-telepost-deploy/actions/workflows/release.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+
 一个面向实际运行的 Pixiv 自动投稿部署套件：PixivFlow 负责按主题/榜单抓取作品，
 TelePost 负责投稿审核与频道发布。同一份配置可用于海外 VPS、国内服务器、无公网
 NAT 主机、Mac/Linux 本机和 Fly.io。默认镜像把 PixivFlow 调度器与 TelePost 多 Bot
@@ -23,6 +27,10 @@ supervisor 放在同一容器，适合 512 MiB 小机器，不启动 WebUI。
 ## 许可证
 
 [MIT](LICENSE)
+
+本项目与 Pixiv、Telegram、Fly.io 无隶属或官方合作关系。部署者应只处理有权下载、保存和
+发布的内容，并自行遵守平台条款、版权要求与所在地法律。项目不会替部署者决定频道内容
+政策，也不提供规避平台限制或监管的保证。
 
 ## 网络模式
 
@@ -62,6 +70,8 @@ curl http://127.0.0.1:8080/health
 预构建镜像从 GHCR 拉取（公开）；拉取不可用时可以在仓库内构建：
 `docker compose build stack`。国内构建机可在 `.env` 设置
 `BUILD_HTTP_PROXY` / `BUILD_HTTPS_PROXY`。
+生产环境建议把 `.env` 的 `STACK_IMAGE` 固定到明确 Release 标签；`latest` 适合首次体验，
+但会在重新拉取时升级。升级前先阅读 CHANGELOG 并备份持久卷。
 
 ## 两个 Bot 与审核策略
 
@@ -144,7 +154,7 @@ TelePost 接收后写入审核队列并把媒体暂存到审核群、只保存 T
 
 Telegram Bot API 只保证删除发送后 48 小时内的消息，因此需要自动清群时不要把待审核
 保留期设为 2 天或更长。设 `0` 可永久保留 pending；此时需自行管理审核群历史消息。
-`/health` 的 `storage.review_queue` 会返回各 Bot 的 pending/failed/expired 数量和最老
+`/health` 的 `storage.review_queue` 会返回各 Bot 的 pending/failed/expired/deleted 数量和最老
 pending 年龄，不包含标题、标签或投稿人等内容。
 
 ### 单次手动测试（不等待 Cron）
@@ -217,10 +227,11 @@ Mihomo 通常还会占用 50–100 MiB。整机只有 512 MiB 时优先使用外
 ## 512 MiB 建议
 
 - 最多两个 Bot，关闭搜索与 WebUI。
-- `download.concurrency=1`，两个计划至少错开 15–20 分钟。
+- `download.concurrency=1`；多个计划同一 Cron 时会排队串行执行，带宽较紧张时可再错开
+  15–20 分钟降低连续峰值。
 - 需要复用下载内容时用 `storageMode=cache` + `delivery.deleteAfterDelivery=false`，同时
   设置 `cacheRetentionDays=7` 与 `cacheMaxSizeMB=384`；outbox 独立保留，不参与缓存清理。
-- 保留 Compose 的日志轮转、128 MiB Node heap 与小 SQLite cache。
+- 保留 Compose 的日志轮转、96 MiB Node heap 与小 SQLite cache。
 - 通过 `/health` 观察 `process_rss`、磁盘、cache 和 delivery outbox 指标。
 
 完整说明见 [性能与容量](docs/PERFORMANCE.md)。
@@ -234,6 +245,7 @@ data/                              数据库、下载缓存、outbox、实际配
 pixivflow/config/*.example.json    多计划安全模板
 config/telepost-policy.example.json 非敏感频道/审核策略模板
 scripts/                           初始化、校验、本机/SSH 原子更新
+docs/ARCHITECTURE.md              组件、持久化、失败语义与信任边界
 fly/                               Fly.io 512 MiB 配置与更新脚本
 proxy/                             可选 Mihomo 镜像
 ```
@@ -245,6 +257,18 @@ proxy/                             可选 Mihomo 镜像
   Secret，不得放 JSON 模板、Git 历史或聊天截图。
 - 根 API 默认只绑定 `127.0.0.1`；Webhook 通过 Caddy 反代。
 - 修改频道前先处理旧审核群中的 pending 投稿，并确认 Bot 已是新频道管理员。
+
+公开仓库会在 CI 中检查常见 Token 格式与不应跟踪的运行时路径，Docker 构建上下文也通过
+`.dockerignore` 排除本地 Secret 和数据。但自动检查不能替代 Token 轮换：一旦凭据曾进入
+Issue、日志、截图或 Git 历史，应立即吊销。
+
+## 参与项目
+
+- 架构与组件边界：[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
+- 贡献代码：[CONTRIBUTING.md](CONTRIBUTING.md)
+- 使用与排障：[SUPPORT.md](SUPPORT.md)
+- 私下报告漏洞：[SECURITY.md](SECURITY.md)
+- 社区行为准则：[CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md)
 
 上游项目：[PixivFlow](https://github.com/redtidev1918/PixivFlow) ·
 [TelePost](https://github.com/redtidev1918/TelePost)

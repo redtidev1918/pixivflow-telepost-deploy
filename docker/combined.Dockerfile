@@ -20,4 +20,7 @@ RUN ln -s /opt/pixivflow/node_modules/.bin/pixivflow /usr/local/bin/pixivflow \
     && pixivflow --version
 
 LABEL org.opencontainers.image.title="PixivFlow + TelePost" \
-      org.opencontainers.image.description="Low-memory multi-bot PixivFlow and TelePost deployment runtime"
+      org.opencontainers.image.description="Low-memory multi-bot PixivFlow and TelePost deployment runtime" \
+      org.opencontainers.image.source="https://github.com/redtidev1918/pixivflow-telepost-deploy" \
+      org.opencontainers.image.documentation="https://github.com/redtidev1918/pixivflow-telepost-deploy#readme" \
+      org.opencontainers.image.licenses="MIT"
