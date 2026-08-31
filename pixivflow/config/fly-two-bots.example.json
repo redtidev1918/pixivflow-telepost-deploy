@@ -74,6 +74,7 @@
       "telepost-bot1": {
         "type": "httpMultipart",
         "url": "http://127.0.0.1:8080/api/bot1/v1/submissions",
+        "notificationUrl": "http://127.0.0.1:8080/api/bot1/v1/notifications",
         "headers": {
           "Authorization": "Bearer ${TELEPOST_BOT1_SUBMIT_TOKEN}"
         },
@@ -105,6 +106,7 @@
       "telepost-bot2": {
         "type": "httpMultipart",
         "url": "http://127.0.0.1:8080/api/bot2/v1/submissions",
+        "notificationUrl": "http://127.0.0.1:8080/api/bot2/v1/notifications",
         "headers": {
           "Authorization": "Bearer ${TELEPOST_BOT2_SUBMIT_TOKEN}"
         },
@@ -167,6 +169,10 @@
       "languageFilter": "chinese",
       "languageCandidateLimit": 20,
       "strictLanguageFilter": true,
+      "noMatchPolicy": {
+        "lookbackDays": 3,
+        "notify": true
+      },
       "limit": 1,
       "storageMode": "cache",
       "delivery": {
@@ -203,6 +209,10 @@
       "languageFilter": "chinese",
       "languageCandidateLimit": 20,
       "strictLanguageFilter": true,
+      "noMatchPolicy": {
+        "lookbackDays": 3,
+        "notify": true
+      },
       "limit": 1,
       "storageMode": "cache",
       "delivery": {
