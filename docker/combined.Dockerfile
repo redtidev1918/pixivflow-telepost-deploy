@@ -9,7 +9,7 @@ ARG HTTP_PROXY
 ARG HTTPS_PROXY
 RUN apt-get update \
     && apt-get install -y --no-install-recommends python3 make g++ \
-    && npm install --prefix /opt/pixivflow "" \
+    && npm install --prefix /opt/pixivflow "pixivflow@${PIXIVFLOW_VERSION}" \
     && npm cache clean --force
 
 FROM ${TELEPOST_IMAGE}
