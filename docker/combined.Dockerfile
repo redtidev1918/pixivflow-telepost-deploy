@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1.7
 
-ARG TELEPOST_IMAGE=ghcr.io/redtidev1918/telepost:2.10.16
+ARG TELEPOST_IMAGE=ghcr.io/redtidev1918/telepost:2.10.17
 ARG NODE_IMAGE=node:20-bookworm-slim
 
 FROM ${NODE_IMAGE} AS pixivflow-builder
