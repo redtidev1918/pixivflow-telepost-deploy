@@ -1,15 +1,15 @@
 # syntax=docker/dockerfile:1.7
 
-ARG TELEPOST_IMAGE=ghcr.io/redtidev1918/telepost:2.10.18
+ARG TELEPOST_IMAGE=ghcr.io/redtidev1918/telepost:2.10.19
 ARG NODE_IMAGE=node:20-bookworm-slim
 
 FROM ${NODE_IMAGE} AS pixivflow-builder
-ARG PIXIVFLOW_VERSION=2.10.17
+ARG PIXIVFLOW_VERSION=2.10.18
 ARG HTTP_PROXY
 ARG HTTPS_PROXY
 RUN apt-get update \
     && apt-get install -y --no-install-recommends python3 make g++ \
-    && npm install --prefix /opt/pixivflow "pixivflow@${PIXIVFLOW_VERSION}" \
+    && npm install --prefix /opt/pixivflow "" \
     && npm cache clean --force
 
 FROM ${TELEPOST_IMAGE}
