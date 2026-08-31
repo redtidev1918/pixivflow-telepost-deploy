@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+## [1.8.8] - 2026-08-31
+
+- TelePost 升级到 **2.10.17**（安全补丁）：Webhook Secret Token 校验改用恒定时间
+  比较 `hmac.compare_digest`，消除可逐字节推断 token 的时序侧信道；错误/缺失/
+  前缀相似的 token 仍一律 401。行为对外不变，仅强化 `/webhook/botN` 回调鉴权。
+
 ## [1.8.7] - 2026-08-31
 
 - TelePost 升级到 **2.10.16**：修正 JobQueue 维护回调被错误 `await` 导致的
