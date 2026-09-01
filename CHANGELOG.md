@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+## [1.8.18] - 2026-09-01
+
+- TelePost 升级到 **2.10.24**：新增**仅 OWNER 可用的 Telegram 运行时面板**
+  （`/runtime_panel` 命令行 + 运行时策略），可从审核/管理群查看与调整运行时
+  配置，无需 SSH 进容器。PixivFlow 保持 2.10.24。
+
 ## [1.8.17] - 2026-09-01
 
 - TelePost 升级到 **2.10.23**：`/health` 通过 cmdline 识别 Node.js 24，
