@@ -4,7 +4,7 @@ ARG TELEPOST_IMAGE=ghcr.io/redtidev1918/telepost:2.10.22
 ARG NODE_IMAGE=node:24-bookworm-slim
 
 FROM ${NODE_IMAGE} AS pixivflow-builder
-ARG PIXIVFLOW_VERSION=2.10.22
+ARG PIXIVFLOW_VERSION=2.10.23
 ARG HTTP_PROXY
 ARG HTTPS_PROXY
 RUN apt-get update \
