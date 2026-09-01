@@ -123,6 +123,8 @@ curl https://your-app.fly.dev/health
 返回的 `process_rss`、`system_available_mb`、`pixivflow_cache`、`delivery_outbox`、
 `review_queue` 与 `volume` 字段分别反映内存、待审核积压和持久卷压力。512 MiB 档默认
 让 pending 保留 1 天、每轮最多过期 20 条；原始投稿文件进入审核群后即从本机删除。
+`delivery_outbox` 计数同时包含媒体投递和不携媒体的无候选通知；诊断时应查看
+清单内的 `kind`，不要一见 outbox 数增加就删除缓存。
 如果出现 OOM，应先将 Machine 升级至 1 GiB，**不要**用减少重试或删除 outbox
 换取表面稳定。
 

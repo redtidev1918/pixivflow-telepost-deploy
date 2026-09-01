@@ -23,6 +23,8 @@ supervisor 放在同一容器，适合 512 MiB 小机器，不启动 WebUI。
 - **低内存友好**：512 MiB 即可运行——小相册 + 失败自动降级逐张、逐页强制 GC、
   可调健康检查参数。
 - **远程热更新**：PixivFlow 配置原子热重载；TelePost 策略短重启生效，数据保留。
+- **不静默、不重复**：最终无候选会进审核群；PixivFlow 持久 outbox
+  防止短暂故障漏通知，TelePost SQLite 幂等记录防止重启后重复通知。
 
 ## 许可证
 
@@ -173,6 +175,8 @@ pixivflow download --config /app/data/pixivflow/config.json
 `aiMetadataCheck: true`：下载完成后扫描首页文件头部元数据（Stable Diffusion 的
 `parameters=` PNG tEXt、NovelAI EXIF 等），命中则跳过投递（仍记为已下载，不重复拉取）。
 小说加 `languageFilter: "chinese" + languageCandidateLimit: 20 + strictLanguageFilter: true`。若昨天没有中文候选，可设置 `noMatchPolicy: { "lookbackDays": 3, "notify": true }`：最多逐日回看 3 天，仍为空时通知对应审核群，不会静默改投日文小说。
+该通知与媒体投递共用 PixivFlow outbox 指数退避，TelePost 再以 SQLite
+幂等键跨重启去重；所以网络闪断时不会静默丢失，恢复后也不会刷屏。
 会按热度串行回填，直到找到 1 部可确认的中文小说。
 
 ## 远程变更

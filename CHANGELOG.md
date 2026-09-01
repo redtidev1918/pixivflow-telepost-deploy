@@ -2,6 +2,15 @@
 
 ## [Unreleased]
 
+## [1.8.12] - 2026-09-01
+
+- PixivFlow 升级到 **2.10.19**：无候选通知纳入可跨重启恢复的
+  delivery outbox，并升级当前 Node LTS 范围内可兼容的安全依赖。
+- TelePost 升级到 **2.10.20**：审核群状态通知改用 SQLite 幂等键，
+  Bot 重启后仍可去重；失败占位可释放重试，历史记录按保留期清理。
+- 公开部署文档统一说明“PixivFlow 防漏 + TelePost 防重”的故障语义，
+  Compose、Fly 和联合 Dockerfile 默认版本全部对齐。
+
 ## [1.8.11] - 2026-08-31
 
 - TelePost 升级到 **2.10.19**：

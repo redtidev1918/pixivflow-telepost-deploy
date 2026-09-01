@@ -29,8 +29,9 @@ flowchart LR
 
 `/app/data` 是唯一必须持久化的目录，包含 Bot SQLite、PixivFlow SQLite、下载缓存、元数据
 与 outbox。PixivFlow 只有在 TelePost 返回成功后才完成投递；网络或 API 失败会保留 outbox
-及其引用文件重试。TelePost 把审核预览上传到 Telegram 后删除本地 API 临时文件，只保存
-`file_id` 与审核状态，因此待审核积压不会长期保留原图。
+及其引用文件重试。最终无候选通知也是 outbox 项（不引用媒体）；TelePost
+用各 Bot SQLite 中的幂等键跨重启去重。TelePost 把审核预览上传到 Telegram 后删除本地
+API 临时文件，只保存 `file_id` 与审核状态，因此待审核积压不会长期保留原图。
 
 任何清理工具都不得先删除仍被 outbox 引用的文件。升级或迁移前应先备份整个持久卷；
 SQLite WAL 活跃时应使用卷快照，或连同 `-wal`/`-shm` 一起备份。
