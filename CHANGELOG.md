@@ -2,6 +2,13 @@
 
 ## [Unreleased]
 
+## [1.8.17] - 2026-09-01
+
+- TelePost 升级到 **2.10.23**：`/health` 通过 cmdline 识别 Node.js 24，
+  不再因进程名显示为 `MainThread` 而漏报 PixivFlow RSS；512 MiB 内存余量可完整观测。
+- 保持 PixivFlow **2.10.24** 的超长小说文件名修复与下载硬失败审核群通知；
+  Compose、Fly、环境模板和实际 Fly 配置同步到同一版本组合。
+
 ## [1.8.16] - 2026-09-01
 
 - PixivFlow 升级到 **2.10.24**：下载**硬失败**现在也会通过交付目标
