@@ -2,6 +2,17 @@
 
 ## [Unreleased]
 
+## [1.8.24] - 2026-09-02
+
+- TelePost 升级到 **2.10.29**：修复实机压测暴露的审核"控制消息"裸
+  `send_message` 问题（紧跟媒体相册后发送、PTB 默认 5s read 超时、无 flood
+  退避——Telegram 慢回复时整条投稿回滚成 502 `Timed out`），控制消息现与
+  预览相册一样走 RetryAfter 感知 + 指数退避重试并给足超时；审核预览限流
+  退避改为按 `retry_after × 2^attempt` 指数增长（上限 60s），长 flood 窗口可自愈。
+  PixivFlow 保持 2.10.26。
+- 同步 `telesubmit.fly.toml`、`.env.example`、`docker-compose.yml` 与
+  `docker/combined.Dockerfile` 默认镜像到 TelePost 2.10.29。
+
 ## [1.8.23] - 2026-09-02
 
 - 修正 `docker/combined.Dockerfile` 默认 `TELEPOST_IMAGE` ARG 为 2.10.28：
