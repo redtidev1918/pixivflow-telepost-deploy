@@ -2,6 +2,19 @@
 
 ## [Unreleased]
 
+## [1.8.22] - 2026-09-02
+
+- TelePost 升级到 **2.10.28**：修复 API 直发（关闭 API 审核时）本地媒体/文档
+  `InputFile` 漏带 `attach=True` 导致 Telegram 报 media not found、插画相册与
+  小说 `.txt` 全部发不出去的严重 bug；并把"聊天投稿 / API 本地直发 / API file_id
+  直发 / 审核群暂存"四处各自为政的相册分组、caption 与回复链逻辑统一为同一套
+  主贴 + 回复链层级（photo/video 每 10 个相册 → GIF/音频逐条 → 文档组，
+  caption 只挂第一条，相册失败自动降级逐条）；新增启动防呆——`REVIEW_CHAT_ID`
+  与 `CHANNEL_ID` 相同会直接报错（此前审核预览/控制消息/PixivFlow 通知会以
+  "奇怪回复/散帖"混进频道），`/botconfig` 面板同样拒绝。PixivFlow 保持 2.10.26。
+- 同步更新 `telesubmit.fly.toml`（Fly 生产）、`.env.example` 与
+  `docker-compose.yml` 的镜像版本基线到 TelePost 2.10.28 + PixivFlow 2.10.26。
+
 ## [1.8.21] - 2026-09-02
 
 - PixivFlow 升级到 **2.10.26**：调度守护进程自我修复——启动补跑错过的 cron、
