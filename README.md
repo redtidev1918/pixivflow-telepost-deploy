@@ -42,7 +42,7 @@ supervisor 放在同一容器，适合 512 MiB 小机器，不启动 WebUI。
 | 无公网，Telegram/Pixiv 可直连 | `docker compose up -d` | AUTO 自动选择 Polling |
 | 有域名且 80/443 可入站 | `docker compose --profile webhook up -d` | AUTO 选择 Webhook |
 | 国内网络，需要代理 | `docker compose --profile proxy up -d` | Polling + Mihomo |
-| Fly.io | `fly deploy -c fly/deploy.fly-multi-bot.toml` | Webhook |
+| Fly.io | `deploy.py`（推荐，见下）或 `fly deploy -c fly/deploy.fly-multi-bot.toml` | Webhook |
 
 Polling 与 Webhook 都提供相同的 `http://127.0.0.1:8080/api/botN/v1/*`，因此
 PixivFlow 的投递配置无需随网络模式改变。Webhook 注册失败时 AUTO 会回退 Polling。
