@@ -2,6 +2,15 @@
 
 ## [Unreleased]
 
+## [1.8.27] - 2026-09-03
+
+- TelePost 升级到 **2.10.32**：修复投稿状态机因 `persistent=True` 且无
+  persistence 而从未真正注册的隐藏 bug（半套流程/发媒体无响应的最终根因）；
+  状态机构建抽到 `handlers/conversation.py`，新增端到端集成测试与投稿流程
+  架构文档。PixivFlow 保持 2.10.26。
+- 同步 `telesubmit.fly.toml`、`.env.example`、`docker-compose.yml` 与
+  `docker/combined.Dockerfile` 默认镜像到 TelePost 2.10.32。
+
 ## [1.8.26] - 2026-09-03
 
 - TelePost 升级到 **2.10.31**：投稿流程大重构——状态机收敛为 UPLOAD→PREVIEW→EDIT
