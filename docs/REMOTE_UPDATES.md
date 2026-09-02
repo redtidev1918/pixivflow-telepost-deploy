@@ -17,8 +17,12 @@ python3 -m json.tool ./my-config.json >/dev/null
 
 ## TelePost：策略更新后短重启
 
-频道与审核群是在 Bot 子进程启动时读取的，不能无重启热改。策略 JSON 不包含 Bot
-Token，可以安全地单独传输：
+OWNER 可在 Telegram 发送 `/botconfig` 打开当前 Bot 的运行配置面板，修改频道、审核群、
+API/聊天审核和频道署名策略。策略原子保存在 `data/botN/runtime-policy.json`，应用后只
+重载当前 Bot；另一个 Bot 和 PixivFlow 不受影响。切频道或审核群前必须先处理 pending，
+面板也会强制检查。
+
+需要从 Mac 一次更新多个 Bot 时，策略 JSON 不包含 Bot Token，可以安全地单独传输：
 
 ```bash
 cp config/telepost-policy.example.json ./telepost-policy.json

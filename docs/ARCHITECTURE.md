@@ -39,7 +39,8 @@ SQLite WAL 活跃时应使用卷快照，或连同 `-wal`/`-shm` 一起备份。
 ## 配置更新
 
 - PixivFlow：新 JSON 先在同一文件系统写临时文件，再原子替换；scheduler 完整校验后热重载。
-- TelePost：频道和审核策略来自环境变量，需要短暂重建 Bot 进程；持久卷不变。
+- TelePost：部署默认值来自环境变量；OWNER 的 `/botconfig` 覆盖原子保存在各 Bot 持久
+  目录，修改后只重载对应 Bot。批量策略脚本仍可短暂重建整个 stack；持久卷不变。
 - Secret：只通过 `.env` 或平台 Secret 注入，模板中只保留变量引用。
 
 ## 网络与信任边界

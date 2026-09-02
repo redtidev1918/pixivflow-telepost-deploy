@@ -22,7 +22,8 @@ supervisor 放在同一容器，适合 512 MiB 小机器，不启动 WebUI。
 - **多网络模式**：Polling / Webhook / 可选 Mihomo 代理，同一套 `api/botN/v1/*` 接口。
 - **低内存友好**：512 MiB 即可运行——小相册 + 失败自动降级逐张、逐页强制 GC、
   可调健康检查参数。
-- **远程热更新**：PixivFlow 配置原子热重载；TelePost 策略短重启生效，数据保留。
+- **远程热更新**：PixivFlow 配置原子热重载；TelePost 可由 OWNER 使用 `/botconfig`
+  持久化策略并只重载当前 Bot，批量策略仍可通过脚本短重启应用。
 - **不静默、不重复**：最终无候选会进审核群；PixivFlow 持久 outbox
   防止短暂故障漏通知，TelePost SQLite 幂等记录防止重启后重复通知。
 
@@ -191,8 +192,11 @@ PixivFlow 会监听配置文件；有效的新 JSON 通过完整校验后原子�
 ./scripts/push_pixivflow_config.sh user@server /opt/pixivflow-telepost ./my-config.json
 ```
 
-TelePost 的频道/审核策略由启动环境读取，改变后必须短暂重启 Bot 进程，但数据库、
-缓存和 outbox 都保留：
+TelePost OWNER 可直接在 Telegram 使用 `/botconfig` 修改当前 Bot 的频道、审核群、
+API/聊天审核与频道署名策略；存在 pending 投稿时会拒绝切换频道或审核群。应用后只
+重载当前 Bot，另一个 Bot、PixivFlow、数据库、缓存和 outbox 不受影响。
+
+需要从 Mac 批量更新多个 Bot 时，仍可使用非敏感策略文件：
 
 ```bash
 cp config/telepost-policy.example.json ./telepost-policy.json

@@ -30,5 +30,6 @@ curl -H "Authorization: Bearer $TELEPOST_BOT1_SUBMIT_TOKEN" \
 ./fly/scripts/update_telepost_policy.sh your-app-name ./telepost-policy.json
 ```
 
-PixivFlow 配置原子热加载，不重启。TelePost 频道/审核策略通过 staged secrets 一次
-部署，会重启 Machine，但不会重建/删除持久卷。
+PixivFlow 配置原子热加载，不重启。日常修改单个 TelePost Bot 可由 OWNER 在 Telegram
+使用 `/botconfig`，只重载对应 Bot；上面的批量策略脚本通过 staged secrets 一次部署，
+会重启 Machine，但不会重建/删除持久卷。
