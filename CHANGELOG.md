@@ -2,6 +2,14 @@
 
 ## [Unreleased]
 
+## [1.8.20] - 2026-09-02
+
+- **修复审核群「重抓/换一张」超时**：TelePost **2.10.26** 改调 PixivFlow 新增的
+  一次性命令 `pixivflow run-once`（跑完全部启用计划即退出）；此前调
+  `scheduler run` 是守护进程别名、永不退出，导致 1500 秒超时报错。
+- PixivFlow 升级到 **2.10.25**：新增 `run-once` 命令（复用守护进程同一套
+  下载/去重/投递逻辑，行为与定时任务一致）；`scheduler` 移除 `run` 别名。
+
 ## [1.8.19] - 2026-09-02
 
 - TelePost 升级到 **2.10.25**：API 的 `title`/`note` 在 multipart 与 JSON 共用入口
