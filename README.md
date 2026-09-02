@@ -102,6 +102,7 @@ PixivFlow 的 delivery 模板把投稿转成 TelePost 的 caption 字段，模�
 - `note` → 自动投稿来源、主题与作品 ID
   （`Pixiv 每日热榜自动投稿 / 主题：{{topicTag}} · 作品ID：{{pixivId}} / 来源…`），
   渲染为「📝 简介」；链接由 `link` 字段单独渲染，不重复占用简介
+  （JSON 模板换行写作 `\n`，不要写成会显示为字面量的 `\\n`）
 - `tags` → `["Pixiv", "{{topicTag}}", "{{xRestrictTag}}", "{{workTags}}"]`，
   来源主题 + `AllAges/R18/R18G` 精确分级 + 作品自身标签；
   数组字段默认按逗号拼接成 multipart 重复表单项，TelePost 按逗号/空格拆分为 `#标签`

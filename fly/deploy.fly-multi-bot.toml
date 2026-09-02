@@ -8,7 +8,7 @@ primary_region = "sin"
   dockerfile = "docker/combined.Dockerfile"
 
 [build.args]
-  TELEPOST_IMAGE = "ghcr.io/redtidev1918/telepost:2.10.24"
+  TELEPOST_IMAGE = "ghcr.io/redtidev1918/telepost:2.10.25"
   PIXIVFLOW_VERSION = "2.10.24"
 
 [env]

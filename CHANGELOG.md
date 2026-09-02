@@ -2,6 +2,13 @@
 
 ## [Unreleased]
 
+## [1.8.19] - 2026-09-02
+
+- TelePost 升级到 **2.10.25**：API 的 `title`/`note` 在 multipart 与 JSON 共用入口
+  统一解析字面量换行，并清理零调用代码与多余的 `configparser` 依赖。
+- 修复双 Bot 投稿简介模板中一处双重转义的 `\\n`，后续投稿会按真实换行显示；
+  PixivFlow 保持 **2.10.24**。
+
 ## [1.8.18] - 2026-09-01
 
 - TelePost 升级到 **2.10.24**：新增**仅 OWNER 可用的 Telegram 运行时面板**
