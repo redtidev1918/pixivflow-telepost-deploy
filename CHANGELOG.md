@@ -2,6 +2,14 @@
 
 ## [Unreleased]
 
+## [1.8.26] - 2026-09-03
+
+- TelePost 升级到 **2.10.31**：投稿流程大重构——状态机收敛为 UPLOAD→PREVIEW→EDIT
+  三态，媒体/文档合并为单一上传阶段，归类逻辑单一化，删除大量死状态与旧
+  "逐项问答"流程（净删 ~1130 行）。PixivFlow 保持 2.10.26。
+- 同步 `telesubmit.fly.toml`、`.env.example`、`docker-compose.yml` 与
+  `docker/combined.Dockerfile` 默认镜像到 TelePost 2.10.31。
+
 ## [1.8.25] - 2026-09-03
 
 - TelePost 升级到 **2.10.30**：修复聊天投稿「📝 开始投稿」按钮不进状态机导致的
