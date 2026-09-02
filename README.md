@@ -47,6 +47,31 @@ supervisor 放在同一容器，适合 512 MiB 小机器，不启动 WebUI。
 Polling 与 Webhook 都提供相同的 `http://127.0.0.1:8080/api/botN/v1/*`，因此
 PixivFlow 的投递配置无需随网络模式改变。Webhook 注册失败时 AUTO 会回退 Polling。
 
+## 一键部署工具（deploy.py）
+
+无需手改配置文件。跨平台（macOS / Linux / Windows，仅需 Python 3.8+，标准库零依赖）：
+
+```bash
+python3 deploy.py doctor          # 环境自检（依赖/配置/登录/网络）
+python3 deploy.py tp 2.10.33      # 升级 TelePost 到 2.10.33 并部署
+python3 deploy.py tp latest       # 升级到最新并部署
+python3 deploy.py pf 2.10.27      # 升级 PixivFlow 并部署
+python3 deploy.py status          # 状态 / 健康
+python3 deploy.py logs 200        # 最近 200 行日志
+python3 deploy.py version         # 显示工具与当前配置版本
+```
+
+平台自动检测（默认 `--platform auto`）：存在 `telesubmit.fly.toml` 且 flyctl 已登录 →
+Fly.io；否则 Docker Compose。也可 `--platform fly|compose` 显式指定。
+
+- **Fly**：改 `telesubmit.fly.toml` 的 `[build.args]` 镜像版本 → `fly deploy --remote-only`，
+  等健康检查通过后回报。
+- **Compose**：改 `.env` 的 `STACK_IMAGE` / `PIXIVFLOW_VERSION` → `docker compose pull/up`；
+  加 `--build` 走本地构建（用 `TELEPOST_IMAGE` 参数）。
+- 常用选项：`--dry-run`（只预览、不改配置）、`--verbose`（回显命令完整输出）、
+  `--retries N`（部署失败重试）、`--no-color`。
+- 每次运行写完整日志到 `/tmp/deploy-logs/`（Windows 在 `%TEMP%`），失败时终端会提示日志路径。
+
 ## 快速开始
 
 需要 Docker 24+、Compose v2、Python 3（只用于本地校验）。
