@@ -2,6 +2,14 @@
 
 ## [Unreleased]
 
+## [1.8.25] - 2026-09-03
+
+- TelePost 升级到 **2.10.30**：修复聊天投稿「📝 开始投稿」按钮不进状态机导致的
+  发媒体无响应（按钮路径只建 DB 会话、不建立状态机内存状态）；会话外媒体
+  改回明确提示；并给「会话已过期」路径加埋点。PixivFlow 保持 2.10.26。
+- 同步 `telesubmit.fly.toml`、`.env.example`、`docker-compose.yml` 与
+  `docker/combined.Dockerfile` 默认镜像到 TelePost 2.10.30。
+
 ## [1.8.24] - 2026-09-02
 
 - TelePost 升级到 **2.10.29**：修复实机压测暴露的审核"控制消息"裸
