@@ -2,6 +2,14 @@
 
 ## [Unreleased]
 
+## [1.8.28] - 2026-09-03
+
+- PixivFlow 升级到 **2.10.27**：修复 franc-min 对"中日混合"文本误判为日文
+  导致 `languageFilter: chinese` 的小说目标一篇中文都不投递的问题；新增 Unicode
+  假名占比二次校验。TelePost 保持 2.10.33。
+- 同步 `telesubmit.fly.toml`、`.env.example`、`docker-compose.yml` 与
+  `docker/combined.Dockerfile` 的 PixivFlow 版本基线到 2.10.27。
+
 ## [1.8.27] - 2026-09-03
 
 - TelePost 升级到 **2.10.32**：修复投稿状态机因 `persistent=True` 且无
