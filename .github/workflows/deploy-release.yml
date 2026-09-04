@@ -41,21 +41,16 @@ jobs:
           go build -trimpath -ldflags "-s -w" -o "$out" deploy.go
           echo "BINARY=$out" >> "$GITHUB_ENV"
       - name: Archive
+        shell: bash
         env:
           OS: ${{ matrix.goos }}
           ARCH: ${{ matrix.goarch }}
         run: |
-          if [ "$OS" = "windows" ]; then
-            zip -j "deploy-$OS-$ARCH.zip" "$BINARY"
-          else
-            tar -czf "deploy-$OS-$ARCH.tar.gz" "$BINARY"
-          fi
+          tar -czf "deploy-$OS-$ARCH.tar.gz" "$BINARY"
       - uses: actions/upload-artifact@v4
         with:
           name: deploy-${{ matrix.goos }}-${{ matrix.goarch }}
-          path: |
-            deploy-${{ matrix.goos }}-${{ matrix.goarch }}.tar.gz
-            deploy-${{ matrix.goos }}-${{ matrix.goarch }}.zip
+          path: deploy-${{ matrix.goos }}-${{ matrix.goarch }}.tar.gz
           if-no-files-found: error
 
   release:
