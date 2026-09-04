@@ -1,7 +1,9 @@
 # Changelog
 
-## [Unreleased]
+## [1.8.34] - 2026-09-04
 
+- **Deployment Kit release 不再只有源码**：`release.yml` 新增 bundle job，把 deploy
+  单二进制（6 平台）交叉编译并附到套件 release；release notes 追加「包含什么」说明。
 - **生产拆分落地**：Fly 从「合一台 512 always-on」拆成「PixivFlow 256MB always-on +
   TelePost 512MB auto-stop」，投递走 **Flycast**（`http://<app>.flycast`，无端口）。
   实测修正两处坑：Flycast 不能带 `:8080`（proxy 在 80 端口转发）；TelePost 拆机
@@ -9,6 +11,7 @@
 - 外部闹钟改为**不依赖 GitHub**：移除 `.github/workflows/wakeup.yml`，改由
   easycron（免费 HTTP cron，`*/5 9-10,17-18`）或 Fly `--schedule daily` 唤醒；
   `docs/AUTOSTOP.md` 给出三种闹钟方案（easycron / Fly 原生 / 拆机常驻）与取舍。
+- 文档措辞收敛：去掉「傻瓜式」，统一用「一键 / 开箱即用」。
 - 文档：WebUI 管理面板配方改为**二选一**——方式 A（官方合体容器，API+前端一体）
   与方式 B（独立前端容器：已发布的 `pixivflow-webui` 镜像 + 只跑 API 的后端，
   前后端分开升级），共享 `./data` 说明与要点不变。
