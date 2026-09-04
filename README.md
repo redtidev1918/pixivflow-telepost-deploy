@@ -69,6 +69,9 @@ deploy doctor && deploy deploy   # 2) 自检 → 3) 一键部署（docker compos
 （生成 `telesubmit.fly.toml` 并提示 secrets 与 `--platform fly` 部署）；
 直接回车则保持 Polling。非交互（管道/CI）运行时全部静默、只生成占位配置。
 
+没有 Docker 的 Linux VPS 用 systemd 后端（免 Docker、同机组合跑 TelePost +
+PixivFlow，见下文 systemd 说明）；完整场景对照见 [docs/SCENARIOS.md](docs/SCENARIOS.md)。
+
 ### 获取
 
 方式一：从 [Releases](https://github.com/redtidev1918/pixivflow-telepost-deploy/releases)
@@ -87,6 +90,7 @@ go build -o deploy .
 可执行文件所在目录自动定位仓库配置（`telesubmit.fly.toml` / `docker-compose.yml`）。
 
 ```bash
+./deploy init <dir>             # 全新部署：生成部署目录并引导填写 Bot 信息
 ./deploy doctor                 # 环境自检（依赖/配置/登录/网络）
 ./deploy tp latest              # 升级 TelePost 到最新并部署（也可指定如 2.10.33）
 ./deploy pf 2.10.27             # 升级 PixivFlow 到指定版本并部署

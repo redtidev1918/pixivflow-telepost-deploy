@@ -1,5 +1,12 @@
 # Changelog
 
+## [Unreleased]
+
+- 文档优化：`docs/SCENARIOS.md` 场景速查重写——按 Compose / 无 Docker Linux
+  VPS（systemd 后端）/ Fly.io 分路径给出命令与 `.env` 关键项；README「傻瓜式
+  一键部署」补充无 Docker 时的 systemd 指引与 `deploy init` 用法行；deploy
+  内建帮助（`usage()`）补充 `--platform systemd` 的说明。
+
 ## [1.8.30] - 2026-09-04
 
 - **deploy 工具升级（v3.2.0 → v3.4.0，README 与二进制 Release 同步）**：
