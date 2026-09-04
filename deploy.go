@@ -22,6 +22,7 @@ import (
 const (
 	appVersion        = "3.4.1"
 	telepostRepo      = "ghcr.io/redtidev1918/telepost"
+	pixivflowRepo     = "ghcr.io/redtidev1918/pixivflow"
 	kitRepo           = "ghcr.io/redtidev1918/pixivflow-telepost-deploy"
 	defaultFlyCfg     = "telesubmit.fly.toml"
 	defaultEnv        = ".env"
@@ -339,12 +340,12 @@ func tpVersion(platform, cfg string) string {
 		}
 		return "git"
 	}
-	v := envGet(cfg, "STACK_IMAGE")
+	v := envGet(cfg, "TELEPOST_IMAGE")
 	if v == "" {
-		v = composeDefaultArg("STACK_IMAGE")
+		v = composeDefaultArg("TELEPOST_IMAGE")
 	}
 	if v == "" {
-		v = kitRepo + ":latest"
+		v = telepostRepo + ":latest"
 	}
 	if i := strings.LastIndex(v, ":"); i >= 0 {
 		return v[i+1:]
@@ -362,10 +363,10 @@ func pfVersion(platform, cfg string) string {
 	if platform == "systemd" {
 		return pixivflowVersion() // 全局 npm 包的 pixivflow 版本
 	}
-	if v := envGet(cfg, "PIXIVFLOW_VERSION"); v != "" {
+	if v := envGet(cfg, "PIXIVFLOW_IMAGE"); v != "" {
 		return v
 	}
-	if v := composeDefaultArg("PIXIVFLOW_VERSION"); v != "" {
+	if v := composeDefaultArg("PIXIVFLOW_IMAGE"); v != "" {
 		return v
 	}
 	return "?"
@@ -532,7 +533,7 @@ func cmdLogs(platform, cfg string, n int) {
 		c := exec.Command(fb, "logs", "-a", tomlGet(cfg, "app"), "--no-tail")
 		out, _ = c.Output()
 	} else {
-		c := exec.Command("docker", "compose", "logs", "--tail", fmt.Sprint(n), "stack")
+		c := exec.Command("docker", "compose", "logs", "--tail", fmt.Sprint(n))
 		out, _ = c.Output()
 	}
 	lines := strings.Split(strings.TrimRight(string(out), "\n"), "\n")
@@ -573,11 +574,11 @@ func cmdUpgrade(platform, cfg, kind, target string, dryRun bool) {
 		}
 	} else {
 		if kind == "tp" {
-			envSet(cfg, "STACK_IMAGE", kitRepo+":"+target)
-			infof("部署套件(含 TelePost): %s → %s", cur, target)
+			envSet(cfg, "TELEPOST_IMAGE", telepostRepo+":"+target)
+			infof("TelePost: %s → %s", cur, target)
 		} else {
-			envSet(cfg, "PIXIVFLOW_VERSION", target)
-			infof("PixivFlow: %s → %s（仅 --build 本地构建生效）", cur, target)
+			envSet(cfg, "PIXIVFLOW_IMAGE", pixivflowRepo+":"+target)
+			infof("PixivFlow: %s → %s", cur, target)
 		}
 	}
 }
@@ -859,7 +860,7 @@ func cmdDeploy(platform, cfg string, dryRun, build bool, retries int) {
 		if run([]string{"docker", "info"}, false) != 0 {
 			die("docker daemon 未运行")
 		}
-		infof("平台=compose  TelePost/套件=%s  PixivFlow=%s", tpVersion(platform, cfg), pfVersion(platform, cfg))
+		infof("平台=compose  TelePost=%s  PixivFlow=%s", tpVersion(platform, cfg), pfVersion(platform, cfg))
 	}
 
 	stepf("2/3", "执行部署")
@@ -867,9 +868,9 @@ func cmdDeploy(platform, cfg string, dryRun, build bool, retries int) {
 		if platform == "fly" {
 			fmt.Printf("[dry-run] %s deploy -c %s --remote-only --strategy rolling\n", flyBin(), cfg)
 		} else if build {
-			fmt.Println("[dry-run] docker compose build stack && docker compose up -d stack")
+			fmt.Println("[dry-run] docker compose up -d --build")
 		} else {
-			fmt.Println("[dry-run] docker compose pull stack && docker compose up -d stack")
+			fmt.Println("[dry-run] docker compose pull && docker compose up -d")
 		}
 		return
 	}
@@ -880,14 +881,11 @@ func cmdDeploy(platform, cfg string, dryRun, build bool, retries int) {
 		if platform == "fly" {
 			rc = run([]string{flyBin(), "deploy", "-c", cfg, "--remote-only", "--strategy", "rolling"}, true)
 		} else if build {
-			rc = run([]string{"docker", "compose", "build", "stack"}, true)
-			if rc == 0 {
-				rc = run([]string{"docker", "compose", "up", "-d", "stack"}, true)
-			}
+			rc = run([]string{"docker", "compose", "up", "-d", "--build"}, true)
 		} else {
-			rc = run([]string{"docker", "compose", "pull", "stack"}, true)
+			rc = run([]string{"docker", "compose", "pull"}, true)
 			if rc == 0 {
-				rc = run([]string{"docker", "compose", "up", "-d", "stack"}, true)
+				rc = run([]string{"docker", "compose", "up", "-d"}, true)
 			}
 		}
 		if rc == 0 {

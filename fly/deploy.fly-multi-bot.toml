@@ -25,6 +25,8 @@ primary_region = "sin"
   # 同一容器内启动 PixivFlow 单进程多计划调度器；不启动 WebUI
   PIXIVFLOW_ENABLED = "true"
   PIXIVFLOW_CONFIG = "/app/data/pixivflow/config.json"
+  # PixivFlow 投递目标的基地址（合一台=同容器 127.0.0.1）
+  TELEPOST_API_BASE_URL = "http://127.0.0.1:8080"
   PIXIV_DB_CACHE_KB = "4096"
   NODE_OPTIONS = "--max-old-space-size=96 --expose-gc"
   MALLOC_ARENA_MAX = "2"
