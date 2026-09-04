@@ -144,3 +144,7 @@ jobs:
         run: |
           gh release create "$GITHUB_REF_NAME" --verify-tag --notes-file release-notes.md --title "Deployment Kit $GITHUB_REF_NAME"
           gh release upload "$GITHUB_REF_NAME" dist/*.tar.gz
+      - name: Prune old releases (keep latest per track)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: python3 scripts/prune_releases.py
