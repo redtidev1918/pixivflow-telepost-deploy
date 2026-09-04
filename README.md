@@ -93,8 +93,8 @@ go build -o deploy .
 ```bash
 ./deploy init <dir>             # 全新部署：生成部署目录并引导填写 Bot 信息
 ./deploy doctor                 # 环境自检（依赖/配置/登录/网络）
-./deploy tp latest              # 升级 TelePost 到最新并部署（也可指定如 2.10.33）
-./deploy pf 2.10.27             # 升级 PixivFlow 到指定版本并部署
+./deploy tp latest              # 升级 TelePost 到最新并部署（也可指定如 2.10.38）
+./deploy pf 2.10.28             # 升级 PixivFlow 到指定版本并部署
 ./deploy status                 # 状态 / 健康
 ./deploy logs 200               # 最近 200 行日志
 ./deploy version                # 显示工具与当前配置版本
@@ -423,7 +423,7 @@ Basic Auth）。
   共享卷设计）；日常查看、改计划没问题，但不要在 webui 里与 scheduler 同时触发
   大规模下载/维护，避免 SQLite 锁竞争。
 - **版本对齐**：webui 后端镜像的 PixivFlow 版本不要低于 kit 内嵌的版本（当前
-  2.10.27），以免旧版本读不懂新 config 字段；config 用 `PIXIV_DOWNLOADER_CONFIG`
+  2.10.28），以免旧版本读不懂新 config 字段；config 用 `PIXIV_DOWNLOADER_CONFIG`
   显式指向 kit 那份即可（相对路径会以该 config 为基准解析，各进程一致）。
 - **前端升级**：方式 B 的前端独立成镜像，换 tag 重启即可，无需重新构建后端。
 
