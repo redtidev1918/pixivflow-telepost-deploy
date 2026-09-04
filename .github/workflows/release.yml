@@ -126,11 +126,9 @@ jobs:
             echo
             echo "## 这个 release 包含什么"
             echo
-            echo "- **Docker 镜像**：\`ghcr.io/redtidev1918/pixivflow-telepost-deploy:$GITHUB_REF_NAME\`（combined，amd64/arm64）"
-            echo "- **deploy 单二进制**：下方 6 个 \`deploy-<os>-<arch>.tar.gz\`（linux/darwin/windows × amd64/arm64）"
-            echo "- **源码**：\`git clone\` 后 \`docker compose up -d\` 或 \`./deploy\`"
-            echo
-            echo "> 注：本套件的「deploy 工具」另有独立版本号；二进制的工具版本以 \`./deploy version\` 为准。"
+            echo "- **Docker 镜像**：\`ghcr.io/redtidev1918/pixivflow-telepost-deploy:$GITHUB_REF_NAME\`"
+            echo "- **deploy 单文件**：下方 6 个压缩包（Windows / macOS / Linux 各 2 种架构）"
+            echo "- **源码**：\`git clone\` 后 \`docker compose up -d\` 一键启动"
           } >> release-notes.md
       - name: Download binaries
         uses: actions/download-artifact@v4
