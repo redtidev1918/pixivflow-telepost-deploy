@@ -1,7 +1,11 @@
 # Changelog
 
-## [Unreleased]
+## [1.8.32] - 2026-09-04
 
+- **三后端（Compose / Fly / systemd）全部支持「合一台 / 拆两台」**：compose 拆成
+  `telepost` + `pixivflow` 两个独立容器（各拉 ghcr 镜像）；Fly 新增
+  `fly/deploy.telepost.toml` 与 `fly/deploy.pixivflow.toml` 独立实例模板；
+  机器间经 `TELEPOST_API_BASE_URL` HTTP 通信，合一台默认 `http://telepost:8080`。
 - **内存档位按整机预算收敛**（Compose 解耦为两容器后修正默认值）：512 MiB 档
   默认分配 telepost `320m` + pixivflow `192m`（原默认 512+256=768m 会超出整机）；
   telepost 容器补 `MALLOC_ARENA_MAX=2`（python glibc arena）。新增 256 档
@@ -22,6 +26,7 @@
 - 文档：新增「可选：PixivFlow WebUI 管理面板（≥1 GiB）」配方——另起官方 webui
   容器与 kit 共享 `./data`（kit 零改动），含构建命令、共卷启动、Basic Auth 与
   并发/内存注意项；`docs/SCENARIOS.md` 同步指引。
+- 镜像基线：TelePost **2.10.34**、PixivFlow **2.10.27**。
 
 ## [1.8.31] - 2026-09-04
 
