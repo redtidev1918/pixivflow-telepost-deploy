@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+- **内存档位按整机预算收敛**（Compose 解耦为两容器后修正默认值）：512 MiB 档
+  默认分配 telepost `320m` + pixivflow `192m`（原默认 512+256=768m 会超出整机）；
+  telepost 容器补 `MALLOC_ARENA_MAX=2`（python glibc arena）。新增 256 档
+  （`docker compose up -d telepost` 只跑单 Bot）与 ≥1 GiB 档（调大两个限制 +
+  WebUI）说明；`.env.example`、README「内存档位建议」、docs/PERFORMANCE.md 同步。
+
 - **解耦部署（compose 后端）**：`docker-compose.yml` 从「组合镜像 + supervisor」
   拆成 `telepost` 与 `pixivflow` 两个独立 service，各自拉取 ghcr 镜像
   （`TELEPOST_IMAGE` / `PIXIVFLOW_IMAGE`），通过 HTTP 通信、共享 `./data` 卷。

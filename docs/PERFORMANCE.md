@@ -39,6 +39,11 @@ PIXIVFLOW_ENABLED=false
 
 **这是需严格约束资源的运行档**，必须遵守以下限制：
 
+> Compose 解耦后 telepost 与 pixivflow 是两个独立容器：整机 512 预算默认分配
+> telepost `320m` + pixivflow `192m`（`.env` 的 `TELEPOST_MEMORY_LIMIT` /
+> `PIXIVFLOW_MEMORY_LIMIT`，合计 ≤512m）。256 档（单 Bot 不跑 PixivFlow）只启
+> telepost：`docker compose up -d telepost` 并把其限制调为 256m。
+
 | 资源项 | 建议值 |
 |--------|--------|
 | 内存 | 512 MiB 可用 |
