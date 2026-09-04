@@ -979,7 +979,7 @@ func cmdSplit(platform, cfg string) {
 	pfToml := splitRewrite(string(pfData), "app", pfApp)
 	pfToml = splitRewrite(pfToml, "primary_region", region)
 	pfToml = splitRewrite(pfToml, "image", pixivflowRepo+":"+pf)
-	pfToml = splitRewrite(pfToml, "TELEPOST_API_BASE_URL", "http://"+app+".flycast:8080")
+	pfToml = splitRewrite(pfToml, "TELEPOST_API_BASE_URL", "http://"+app+".flycast")
 	pfToml = strings.ReplaceAll(pfToml, "your-pixivflow-app", pfApp)
 	pfToml = strings.ReplaceAll(pfToml, "your-telepost-app", app)
 
@@ -1012,7 +1012,7 @@ func cmdSplit(platform, cfg string) {
 	fmt.Printf("  # 5) 部署：telepost 复用现有 app 名（改配成纯 bot 512MiB auto-stop），pixivflow 新 app 256MiB 常驻\n")
 	fmt.Printf("  %s deploy -c %s --remote-only --strategy rolling\n", fb, tpDst)
 	fmt.Printf("  %s deploy -c %s --remote-only\n", fb, pfDst)
-	fmt.Printf("  # 投递走 Flycast 私网 http://%s.flycast:8080（经 Fly Proxy，能唤醒 stopped 的 TelePost）\n", app)
+	fmt.Printf("  # 投递走 Flycast 私网 http://%s.flycast（经 Fly Proxy，能唤醒 stopped 的 TelePost）\n", app)
 }
 
 func usage() {

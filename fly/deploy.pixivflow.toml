@@ -27,7 +27,7 @@ primary_region = "iad"
   TZ = "Asia/Shanghai"
   PIXIV_DOWNLOADER_CONFIG = "/app/data/pixivflow/config.json"
   # 拆两台：Flycast 私网投递（经 Fly Proxy，能 auto-start stopped 的 TelePost，不计 egress）。
-  TELEPOST_API_BASE_URL = "http://your-telepost-app.flycast:8080"
+  TELEPOST_API_BASE_URL = "http://your-telepost-app.flycast"
   NODE_OPTIONS = "--max-old-space-size=96 --expose-gc"
   MALLOC_ARENA_MAX = "2"
   PIXIV_DB_CACHE_KB = "4096"

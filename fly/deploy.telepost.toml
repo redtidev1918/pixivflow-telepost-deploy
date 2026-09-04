@@ -40,7 +40,7 @@ primary_region = "iad"
 
 [http_service]
   internal_port = 8080
-  force_https = true
+  force_https = false   # 关闭：让 Flycast 私网 HTTP（port 80→8080）直通，不 301 跳 HTTPS
   # TelePost 是 event-driven（webhook/用户投稿/PixivFlow 投递都是入站），可 auto-stop：
   # 无流量时停机省 RAM，来入站请求（经 Fly Proxy）自动拉起。
   auto_stop_machines = "stop"
