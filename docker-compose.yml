@@ -47,6 +47,7 @@ services:
       SEARCH_ENABLED: ${SEARCH_ENABLED:-false}
       SEARCH_ANALYZER: ${SEARCH_ANALYZER:-simple}
       DB_CACHE_KB: ${DB_CACHE_KB:-1024}
+      MALLOC_ARENA_MAX: ${MALLOC_ARENA_MAX:-2}
       HTTP_PROXY: ${HTTP_PROXY_URL:-}
       HTTPS_PROXY: ${HTTP_PROXY_URL:-}
       ALL_PROXY: ${EGRESS_ALL_PROXY:-}
@@ -56,7 +57,7 @@ services:
       - ./data:/app/data
     ports:
       - "${BIND_ADDRESS:-127.0.0.1}:${HTTP_PORT:-8080}:8080"
-    mem_limit: ${MEMORY_LIMIT:-512m}
+    mem_limit: ${TELEPOST_MEMORY_LIMIT:-320m}
     cpus: ${CPU_LIMIT:-1.0}
     pids_limit: 256
     healthcheck:
@@ -99,7 +100,7 @@ services:
     depends_on:
       telepost:
         condition: service_healthy
-    mem_limit: ${PIXIVFLOW_MEMORY_LIMIT:-256m}
+    mem_limit: ${PIXIVFLOW_MEMORY_LIMIT:-192m}
     cpus: ${CPU_LIMIT:-1.0}
     pids_limit: 256
     healthcheck:

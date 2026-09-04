@@ -324,23 +324,36 @@ Mihomo 通常还会占用 50–100 MiB。整机只有 512 MiB 时优先使用外
 1 GiB；不要靠删除失败缓存/outbox 换取表面上的低占用。详见
 [国内网络](docs/MIHOMO.md)。
 
-## 512 MiB 建议
+## 内存档位建议
 
-- 最多两个 Bot，关闭搜索与 WebUI。
+Compose 解耦后 telepost 与 pixivflow 是**两个独立容器**，各自的
+`mem_limit` 默认按整机 512 MiB 预算分配：**telepost 320m + pixivflow 192m**
+（`.env` 的 `TELEPOST_MEMORY_LIMIT` / `PIXIVFLOW_MEMORY_LIMIT` 可调）。
+
+| 档位 | 组合 | 做法 |
+|---|---|---|
+| **256 MiB** | 单 Bot、不跑 PixivFlow | 只启 telepost：`docker compose up -d telepost`，并设 `TELEPOST_MEMORY_LIMIT=256m` |
+| **512 MiB**（默认） | 双 Bot + PixivFlow 组合 | 默认分配即可：telepost 320m + pixivflow 192m |
+| **≥1 GiB** | 上述 + 更宽裕/WebUI | 调大 `TELEPOST_MEMORY_LIMIT=512m`、`PIXIVFLOW_MEMORY_LIMIT=384m`；WebUI 见下一节 |
+
+512 档约束（`docs/PERFORMANCE.md`）：
+
+- 最多两个 Bot，关闭搜索与 WebUI（`SEARCH_ENABLED=false`、`simple` 分词器）。
 - `download.concurrency=1`；多个计划同一 Cron 时会排队串行执行，带宽较紧张时可再错开
   15–20 分钟降低连续峰值。
 - 需要复用下载内容时用 `storageMode=cache` + `delivery.deleteAfterDelivery=false`，同时
   设置 `cacheRetentionDays=7` 与 `cacheMaxSizeMB=384`；outbox 独立保留，不参与缓存清理。
-- 保留 Compose 的日志轮转、96 MiB Node heap 与小 SQLite cache。
+- 保留 Compose 的日志轮转、96 MiB Node heap（`NODE_OPTIONS`）与小 SQLite cache。
 - 通过 `/health` 观察 `process_rss`、磁盘、cache 和 delivery outbox 指标。
 
 完整说明见 [性能与容量](docs/PERFORMANCE.md)。
 
 ## 可选：PixivFlow WebUI 管理面板（需要 ≥1 GiB）
 
-组合镜像为了 512 MiB 档**默认不启动** WebUI，但 WebUI 在 PixivFlow 中是可选
-组件（官方提供单独容器）。≥1 GiB 的机器可以另起一个 webui 容器，与 kit 的
-stack **共享同一份 `./data`**（同一 config → 自动共享同一个 SQLite 与下载目录），
+默认 512 MiB 档不带 WebUI（见上表：≥1 GiB 时先把 `TELEPOST_MEMORY_LIMIT` /
+`PIXIVFLOW_MEMORY_LIMIT` 调大）。WebUI 在 PixivFlow 中是可选组件（官方提供
+单独容器）：≥1 GiB 的机器可以另起一个 webui 容器，与 kit 的 telepost/pixivflow
+容器**共享同一份 `./data`**（同一 config → 自动共享同一个 SQLite 与下载目录），
 kit 镜像本身零改动：
 
 ```bash
