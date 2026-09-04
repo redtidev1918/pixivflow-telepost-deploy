@@ -353,17 +353,19 @@ Compose 解耦后 telepost 与 pixivflow 是**两个独立容器**，各自的
 ## 可选：PixivFlow WebUI 管理面板（需要 ≥1 GiB）
 
 默认 512 MiB 档不带 WebUI（见上表：≥1 GiB 时先把 `TELEPOST_MEMORY_LIMIT` /
-`PIXIVFLOW_MEMORY_LIMIT` 调大）。WebUI 在 PixivFlow 中是可选组件（官方提供
-单独容器）：≥1 GiB 的机器可以另起一个 webui 容器，与 kit 的 telepost/pixivflow
-容器**共享同一份 `./data`**（同一 config → 自动共享同一个 SQLite 与下载目录），
-kit 镜像本身零改动：
+`PIXIVFLOW_MEMORY_LIMIT` 调大）。WebUI 在 PixivFlow 中是可选组件。需要管理面板时，
+用一个能访问 kit `./data` 的 PixivFlow webui 后端，前端两种方式**二选一**（都
+与 kit 的 telepost/pixivflow 容器共享 `./data`，同一 config → 同一个 SQLite 与
+下载目录；kit 镜像零改动）：
+
+### 方式 A：官方合体容器（一个容器 = API + 前端）
 
 ```bash
 # 1) 准备一份含前端的 PixivFlow 镜像（官方源码仓库自带 webui-frontend 构建）
 git clone https://github.com/redtidev1918/PixivFlow /tmp/PixivFlow
 cd /tmp/PixivFlow && docker build -t pixivflow:webui .
 
-# 2) 与 kit 共卷启动 webui（把下面的 /path/to/kit 换成部署目录）
+# 2) 与 kit 共卷启动（把下面的 /path/to/kit 换成部署目录）
 docker run -d --name pixivflow-webui --restart unless-stopped \
   -p 127.0.0.1:3000:3000 \
   -e PIXIV_DOWNLOADER_CONFIG=/app/data/pixivflow/config.json \
@@ -375,22 +377,54 @@ docker run -d --name pixivflow-webui --restart unless-stopped \
   pixivflow:webui node dist/webui/index.js
 ```
 
-访问 `http://127.0.0.1:3000`。公网暴露前务必同时设置 `WEBUI_USERNAME` 与
-`WEBUI_PASSWORD`（两者都非空才启用 Basic Auth）。
+访问 `http://127.0.0.1:3000`。
+
+### 方式 B：独立前端容器（推荐：前端镜像已发布，前后端分开升级）
+
+后端容器只跑 PixivFlow webui API（不设 `STATIC_PATH`；官方合体镜像同样适用）：
+
+```bash
+docker run -d --name pixivflow-webui-api --restart unless-stopped \
+  -p 127.0.0.1:3000:3000 \
+  -e PIXIV_DOWNLOADER_CONFIG=/app/data/pixivflow/config.json \
+  -e PORT=3000 -e HOST=0.0.0.0 \
+  -e WEBUI_USERNAME=${WEBUI_USERNAME:-} \
+  -e WEBUI_PASSWORD=${WEBUI_PASSWORD:-} \
+  -v /path/to/kit/data:/app/data \
+  pixivflow:webui node dist/webui/index.js
+```
+
+前端容器直接用已发布的
+[`pixivflow-webui`](https://github.com/redtidev1918/pixivflow-webui) 镜像
+（nginx 托管 + `/api`、`/socket.io` 反代；ghcr.io/redtidev1918/pixivflow-webui，
+amd64 + arm64）：
+
+```bash
+docker run -d --name pixivflow-webui-front --restart unless-stopped \
+  --add-host host.docker.internal:host-gateway \
+  -p 127.0.0.1:3001:80 \
+  -e UPSTREAM_API=http://host.docker.internal:3000 \
+  ghcr.io/redtidev1918/pixivflow-webui:latest
+```
+
+访问 `http://127.0.0.1:3001`。跨机部署时把 `UPSTREAM_API` 指向后端实际地址；
+后端 Basic Auth 的 `Authorization` 会经反代原样透传。也可 clone
+pixivflow-webui 后 `cp .env.example .env && docker compose up -d`（详见其 README）。
+
+公网暴露前务必同时设置 `WEBUI_USERNAME` 与 `WEBUI_PASSWORD`（两者都非空才启用
+Basic Auth）。
 
 要点与限制：
 
 - **内存**：webui 是又一个 Node 进程（约 150–300 MiB），只适合 ≥1 GiB 整机；
-  512 MiB 档不要开。可给该容器加 `--memory 512m` 兜底。
-- **并发**：webui 与 supervisor 里的 PixivFlow scheduler 共用同一个 SQLite /
-  下载目录（官方即按共享卷设计）；日常查看、改计划没问题，但不要在 webui 里
-  与 scheduler 同时触发大规模下载/维护，避免 SQLite 锁竞争。
-- **版本对齐**：webui 镜像的 PixivFlow 版本不要低于 kit 内嵌的版本（当前
+  512 MiB 档不要开。可给容器加 `--memory 512m` 兜底。
+- **并发**：webui 与 pixivflow scheduler 共用同一个 SQLite / 下载目录（官方即按
+  共享卷设计）；日常查看、改计划没问题，但不要在 webui 里与 scheduler 同时触发
+  大规模下载/维护，避免 SQLite 锁竞争。
+- **版本对齐**：webui 后端镜像的 PixivFlow 版本不要低于 kit 内嵌的版本（当前
   2.10.27），以免旧版本读不懂新 config 字段；config 用 `PIXIV_DOWNLOADER_CONFIG`
-  显式指向 kit 那份即可（相对路径会以该 config 为基准解析，两进程一致）。
-- 不想手工 clone/构建时，也可以把 PixivFlow 官方仓库的 `docker-compose.yml`
-  里 `pixivflow-webui` 服务单独 `docker compose up -d pixivflow-webui`，并把它的
-  volumes/env 按上面的写法指向 kit 的 `./data` 与 config（kit 侧只跑 stack）。
+  显式指向 kit 那份即可（相对路径会以该 config 为基准解析，各进程一致）。
+- **前端升级**：方式 B 的前端独立成镜像，换 tag 重启即可，无需重新构建后端。
 
 ## 目录
 
