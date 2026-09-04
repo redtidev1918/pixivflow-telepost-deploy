@@ -198,8 +198,7 @@ func detectPlatform(platform, config string) string {
 			return "compose"
 		}
 	}
-	die("无法自动检测部署平台，用 --platform fly|compose 指定")
-	return ""
+	return "" // 未检测到；调用方决定是报错还是兜底（如 version）
 }
 
 func configFor(platform, config string) string {
@@ -733,6 +732,13 @@ func main() {
 
 	logf("invoke: platform=%s cmd=%s arg=%s", o.platform, o.cmd, o.arg)
 	platform := detectPlatform(o.platform, o.config)
+	if platform == "" {
+		if o.cmd == "version" {
+			platform = "fly" // version 仅展示版本，任意目录可用
+		} else {
+			die("无法自动检测部署平台，用 --platform fly|compose 指定")
+		}
+	}
 	cfg := configFor(platform, o.config)
 
 	switch o.cmd {
