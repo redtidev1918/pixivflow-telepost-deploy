@@ -979,7 +979,7 @@ func cmdSplit(platform, cfg string) {
 	pfToml := splitRewrite(string(pfData), "app", pfApp)
 	pfToml = splitRewrite(pfToml, "primary_region", region)
 	pfToml = splitRewrite(pfToml, "image", pixivflowRepo+":"+pf)
-	pfToml = splitRewrite(pfToml, "TELEPOST_API_BASE_URL", "http://"+app+".internal:8080")
+	pfToml = splitRewrite(pfToml, "TELEPOST_API_BASE_URL", "http://"+app+".flycast:8080")
 	pfToml = strings.ReplaceAll(pfToml, "your-pixivflow-app", pfApp)
 	pfToml = strings.ReplaceAll(pfToml, "your-telepost-app", app)
 
@@ -1001,16 +1001,18 @@ func cmdSplit(platform, cfg string) {
 	if fb == "" {
 		fb = "fly"
 	}
-	fmt.Printf("  # 1) 创建 PixivFlow 独立 app 与卷\n")
+	fmt.Printf("  # 1) 创建 PixivFlow 独立 app 与卷（常驻半边）\n")
 	fmt.Printf("  %s apps create %s\n", fb, pfApp)
 	fmt.Printf("  %s volumes create pixivflow_data --size 1 -r %s\n", fb, region)
-	fmt.Printf("  # 2) 注入 PixivFlow 所需 secret（refresh token + 投稿 token）\n")
+	fmt.Printf("  # 2) 给 TelePost 那台分配 Flycast 私网地址（只需一次；投递经 Fly Proxy 可 auto-start）\n")
+	fmt.Printf("  %s ips allocate-v6 --private -a %s\n", fb, app)
+	fmt.Printf("  # 3) 注入 PixivFlow 所需 secret（refresh token + 投稿 token）\n")
 	fmt.Printf("  %s secrets set -a %s PIXIV_REFRESH_TOKEN=... TELEPOST_BOT1_SUBMIT_TOKEN=... TELEPOST_BOT2_SUBMIT_TOKEN=...\n", fb, pfApp)
-	fmt.Printf("  # 3) 把 config.json 放进 pixivflow 卷（deploy init 生成的 data/pixivflow/config.json）\n")
-	fmt.Printf("  # 4) 部署：telepost 复用现有 app 名（改配成纯 bot 256MiB），pixivflow 新 app\n")
+	fmt.Printf("  # 4) 把 config.json 放进 pixivflow 卷（deploy init 生成的 data/pixivflow/config.json）\n")
+	fmt.Printf("  # 5) 部署：telepost 复用现有 app 名（改配成纯 bot 512MiB auto-stop），pixivflow 新 app 256MiB 常驻\n")
 	fmt.Printf("  %s deploy -c %s --remote-only --strategy rolling\n", fb, tpDst)
 	fmt.Printf("  %s deploy -c %s --remote-only\n", fb, pfDst)
-	fmt.Printf("  # 投递走 6PN 私网 http://%s.internal:8080（不计 egress、不暴露公网）\n", app)
+	fmt.Printf("  # 投递走 Flycast 私网 http://%s.flycast:8080（经 Fly Proxy，能唤醒 stopped 的 TelePost）\n", app)
 }
 
 func usage() {
