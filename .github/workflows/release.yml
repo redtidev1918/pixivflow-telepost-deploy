@@ -67,9 +67,52 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
+  # 把 deploy 单二进制也打进套件 release，让「Deployment Kit」release 不是空的。
+  bundle:
+    runs-on: ubuntu-latest
+    needs: validate
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: linux
+            arch: amd64
+          - os: linux
+            arch: arm64
+          - os: darwin
+            arch: amd64
+          - os: darwin
+            arch: arm64
+          - os: windows
+            arch: amd64
+          - os: windows
+            arch: arm64
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+      - name: Build
+        env:
+          CGO_ENABLED: "0"
+          GOOS: ${{ matrix.os }}
+          GOARCH: ${{ matrix.arch }}
+        run: |
+          out="deploy-${{ matrix.os }}-${{ matrix.arch }}"
+          if [ "${{ matrix.os }}" = "windows" ]; then out="$out.exe"; fi
+          go build -trimpath -ldflags "-s -w" -o "$out" .
+          tar -czf "deploy-${{ matrix.os }}-${{ matrix.arch }}.tar.gz" "$out"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: deploy-${{ matrix.os }}-${{ matrix.arch }}
+          path: deploy-${{ matrix.os }}-${{ matrix.arch }}.tar.gz
+          if-no-files-found: error
+
   release:
     runs-on: ubuntu-latest
-    needs: image
+    needs: [image, bundle]
     permissions:
       contents: write
     steps:
@@ -77,8 +120,27 @@ jobs:
         with:
           persist-credentials: false
       - name: Prepare release notes
-        run: python3 scripts/extract_changelog.py "$GITHUB_REF_NAME" > release-notes.md
+        run: |
+          python3 scripts/extract_changelog.py "$GITHUB_REF_NAME" > release-notes.md
+          {
+            echo
+            echo "## 这个 release 包含什么"
+            echo
+            echo "- **Docker 镜像**：\`ghcr.io/redtidev1918/pixivflow-telepost-deploy:$GITHUB_REF_NAME\`（combined，amd64/arm64）"
+            echo "- **deploy 单二进制**：下方 6 个 \`deploy-<os>-<arch>.tar.gz\`（linux/darwin/windows × amd64/arm64）"
+            echo "- **源码**：\`git clone\` 后 \`docker compose up -d\` 或 \`./deploy\`"
+            echo
+            echo "> 注：本套件的「deploy 工具」另有独立版本号；二进制的工具版本以 \`./deploy version\` 为准。"
+          } >> release-notes.md
+      - name: Download binaries
+        uses: actions/download-artifact@v4
+        with:
+          pattern: deploy-*
+          path: dist
+          merge-multiple: true
       - name: Create GitHub Release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: gh release create "$GITHUB_REF_NAME" --verify-tag --notes-file release-notes.md --title "Deployment Kit $GITHUB_REF_NAME"
+        run: |
+          gh release create "$GITHUB_REF_NAME" --verify-tag --notes-file release-notes.md --title "Deployment Kit $GITHUB_REF_NAME"
+          gh release upload "$GITHUB_REF_NAME" dist/*.tar.gz
