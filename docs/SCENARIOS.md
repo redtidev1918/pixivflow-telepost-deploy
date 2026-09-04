@@ -48,6 +48,13 @@ cp fly/deploy.fly-multi-bot.toml ./telesubmit.fly.toml   # 改 app 名与版本�
 Fly.io；目录里有 `docker-compose.yml` → Compose；Linux 有 systemctl → systemd。
 有公网不代表必须用 Webhook；无法稳定提供 HTTPS 入站时，Polling 更简单可靠。
 
+### Fly 自动休眠 / 256 MiB 拆分
+
+流量是「大部分时间没人 + 每天几个间断高峰」时，可开 `auto_stop_machines=true`
+（Webhook 模式 + `min_machines_running=0`）让机器无流量停机省账单；也可进一步拆成
+「双 Bot 一台 256 + PixivFlow 自己一台（Fly 私网投递）」。机制与改动面见
+[AUTOSTOP.md](AUTOSTOP.md)。
+
 ## 想要 WebUI 管理面板？
 
 kit 组合镜像默认不带 WebUI（512 MiB 档取舍）。≥1 GiB 机器可另起官方 webui

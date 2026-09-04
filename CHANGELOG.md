@@ -1,5 +1,17 @@
 # Changelog
 
+## [Unreleased]
+
+- **版本基线**：TelePost **2.10.38**（重抓/换一张只重跑单个 target：投稿透传
+  `target_id`）+ PixivFlow **2.10.28**（`run-once --target <id>`、delivery 变量
+  `{{targetId}}`）。生产实盘 config 已同步 `target_id: {{targetId}}`。
+- **文档：Fly 自动休眠（auto-stop）省钱**：新增 `docs/AUTOSTOP.md`，讲精确
+  stop（释放 RAM 停止计费）vs suspend（保留内存照计费）、proxy 排队唤醒请求
+  （不丢只慢 5–15s）、两条自愈兜底（PixivFlow outbox / 首条消息付冷启动）、
+  睡眠比例→账单换算（70–80% 睡眠 → ~$3.9→~$1–1.5/月）、以及「双 Bot 拆一台 256
+  + PixivFlow 拆自己机器（Fly 私网投递）」拓扑与改动面；`fly/README.md`、
+  `docs/SCENARIOS.md`、`docs/PERFORMANCE.md` 同步指引。
+
 ## [1.8.32] - 2026-09-04
 
 - **三后端（Compose / Fly / systemd）全部支持「合一台 / 拆两台」**：compose 拆成
