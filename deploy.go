@@ -653,6 +653,10 @@ func systemdEnsureEnv(cfg string, dryRun bool) {
 			envSet(cfg, "PIXIVFLOW_ENABLED", "true")
 			envSet(cfg, "PIXIVFLOW_COMMAND", "pixivflow scheduler")
 			envSet(cfg, "PIXIVFLOW_CONFIG", filepath.Join(systemdInstallDir, "data", "pixivflow", "config.json"))
+			// 同机部署：PixivFlow 通过 127.0.0.1 投递给 TelePost
+			if envGet(cfg, "TELEPOST_API_BASE_URL") == "" {
+				envSet(cfg, "TELEPOST_API_BASE_URL", "http://127.0.0.1:8080")
+			}
 		} else {
 			envSet(cfg, "PIXIVFLOW_ENABLED", "false")
 		}
