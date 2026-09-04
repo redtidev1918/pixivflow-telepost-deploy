@@ -42,9 +42,9 @@
     },
     {
       "id": "bot2-daily",
-      "name": "Bot2 每日 10:00 & 18:00 主题示例B 插画 + 小说",
+      "name": "Bot2 每日 10:10 & 18:10 主题示例B 插画 + 小说",
       "enabled": false,
-      "cron": "0 10,18 * * *",
+      "cron": "10 10,18 * * *",
       "timezone": "Asia/Shanghai",
       "targetIds": [
         "bot2-illust-topic-b",
