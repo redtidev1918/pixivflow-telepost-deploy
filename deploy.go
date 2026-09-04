@@ -19,7 +19,7 @@ import (
 )
 
 const (
-	appVersion    = "3.0.0"
+	appVersion    = "3.1.0"
 	telepostRepo  = "ghcr.io/redtidev1918/telepost"
 	kitRepo       = "ghcr.io/redtidev1918/pixivflow-telepost-deploy"
 	defaultFlyCfg = "telesubmit.fly.toml"
@@ -27,6 +27,9 @@ const (
 	healthTimeout = 240 * time.Second
 	healthStep    = 6 * time.Second
 )
+
+// verbose 开启时，run() 的捕获模式也会把命令输出回显到终端。
+var verbose bool
 
 // ---- 颜色 ----
 type color struct{ on bool }
@@ -95,13 +98,23 @@ func run(cmd []string, echo bool) int {
 	if echo {
 		c.Stdout = os.Stdout
 		c.Stderr = os.Stderr
-		_ = c.Run()
-		logf("(exit %d)", c.ProcessState.ExitCode())
-		return c.ProcessState.ExitCode()
+		code := 1
+		if err := c.Run(); err != nil {
+			if ee, ok := err.(*exec.ExitError); ok {
+				code = ee.ExitCode()
+			}
+		} else {
+			code = 0
+		}
+		logf("(exit %d)", code)
+		return code
 	}
 	out, err := c.CombinedOutput()
 	if logFile != nil {
 		logFile.Write(out)
+	}
+	if verbose {
+		os.Stdout.Write(out)
 	}
 	if err != nil {
 		if ee, ok := err.(*exec.ExitError); ok {
@@ -121,6 +134,50 @@ func flyBin() string {
 		}
 	}
 	return ""
+}
+
+// ---- 工作目录 ----
+// deploy 是发布到 PATH 里的单二进制：若当前目录不是仓库（没有 compose/toml
+// 等标记文件），先沿 cwd 向上找，再回退到可执行文件所在目录，让用户在任何
+// 位置运行都能定位配置。
+func enterRepoDir() {
+	candidates := []string{"docker-compose.yml", "compose.yaml", defaultFlyCfg, defaultEnv}
+	isRepo := func(dir string) bool {
+		for _, f := range candidates {
+			if _, err := os.Stat(filepath.Join(dir, f)); err == nil {
+				return true
+			}
+		}
+		return false
+	}
+	if isRepo(".") {
+		return
+	}
+	// 沿当前目录向上（最多 8 层，覆盖在仓库子目录里运行的情况）
+	wd, err := os.Getwd()
+	if err == nil {
+		for depth, dir := 0, wd; depth < 8; depth++ {
+			parent := filepath.Dir(dir)
+			if parent == dir {
+				break
+			}
+			dir = parent
+			if isRepo(dir) {
+				_ = os.Chdir(dir)
+				return
+			}
+		}
+	}
+	// 可执行文件所在目录（例如把二进制放在仓库根目录、从任意 cwd 调用）
+	exe, err := os.Executable()
+	if err == nil {
+		dir := filepath.Dir(exe)
+		if isRepo(dir) {
+			_ = os.Chdir(dir)
+			return
+		}
+	}
+	// 保持当前目录；detectPlatform 会给出“无法自动检测平台”的提示
 }
 
 // ---- 平台检测 ----
@@ -323,7 +380,8 @@ func cmdDoctor(platform, cfg string) {
 	stepf("2/3", "依赖与环境")
 	problems := 0
 	if platform == "fly" {
-		if fb := flyBin(); fb != "" {
+		fb := flyBin()
+		if fb != "" {
 			okf("%s 可用", fb)
 		} else {
 			failf("缺 flyctl/fly")
@@ -341,7 +399,7 @@ func cmdDoctor(platform, cfg string) {
 			failf("无法解析 app")
 			problems++
 		}
-		if fb := flyBin(); fb != "" {
+		if fb != "" {
 			if run([]string{fb, "auth", "whoami"}, false) == 0 {
 				okf("fly 已登录")
 			} else {
@@ -393,8 +451,12 @@ func cmdVersion(platform, cfg string) {
 
 func cmdStatus(platform, cfg string) {
 	if platform == "fly" {
+		fb := flyBin()
+		if fb == "" {
+			die("未找到 flyctl/fly")
+		}
 		infof("app = %s", tomlGet(cfg, "app"))
-		run([]string{flyBin(), "status", "-a", tomlGet(cfg, "app")}, true)
+		run([]string{fb, "status", "-a", tomlGet(cfg, "app")}, true)
 	} else {
 		run([]string{"docker", "compose", "ps"}, true)
 	}
@@ -414,7 +476,11 @@ func cmdLogs(platform, cfg string, n int) {
 	}
 	var out []byte
 	if platform == "fly" {
-		c := exec.Command(flyBin(), "logs", "-a", tomlGet(cfg, "app"), "--no-tail")
+		fb := flyBin()
+		if fb == "" {
+			die("未找到 flyctl/fly")
+		}
+		c := exec.Command(fb, "logs", "-a", tomlGet(cfg, "app"), "--no-tail")
 		out, _ = c.Output()
 	} else {
 		c := exec.Command("docker", "compose", "logs", "--tail", fmt.Sprint(n), "stack")
@@ -558,6 +624,8 @@ func cmdDeploy(platform, cfg string, dryRun, build bool, retries int) {
 func usage() {
 	fmt.Print(`deploy — TelePost/PixivFlow 多平台一键部署（Go 单二进制）
 
+可在任意目录运行：自动定位仓库配置（当前目录 → 上级目录 → 可执行文件所在目录）。
+
 用法：
   deploy [--platform fly|compose|auto] [全局选项] <子命令> [参数]
 
@@ -652,12 +720,16 @@ func main() {
 	}()
 
 	o := parseArgs(os.Args[1:])
+	verbose = o.verbose
 	if o.noColor || !isTTY() {
 		clr.on = false
 	}
 	if o.cmd == "" {
 		usage()
 	}
+
+	// 允许在任意目录运行：cwd 不是仓库时回退到可执行文件所在目录。
+	enterRepoDir()
 
 	logf("invoke: platform=%s cmd=%s arg=%s", o.platform, o.cmd, o.arg)
 	platform := detectPlatform(o.platform, o.config)

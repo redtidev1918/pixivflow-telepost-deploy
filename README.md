@@ -66,11 +66,13 @@ go build -o deploy deploy.go
 
 ### 用法
 
+二进制可在**任意目录**运行：当前目录不是仓库时，会沿目录树向上并回退到
+可执行文件所在目录自动定位仓库配置（`telesubmit.fly.toml` / `docker-compose.yml`）。
+
 ```bash
 ./deploy doctor                 # 环境自检（依赖/配置/登录/网络）
-./deploy tp 2.10.34             # 升级 TelePost 到 2.10.34 并部署
-./deploy tp latest              # 升级到最新并部署
-./deploy pf 2.10.27             # 升级 PixivFlow 并部署
+./deploy tp latest              # 升级 TelePost 到最新并部署（也可指定如 2.10.33）
+./deploy pf 2.10.27             # 升级 PixivFlow 到指定版本并部署
 ./deploy status                 # 状态 / 健康
 ./deploy logs 200               # 最近 200 行日志
 ./deploy version                # 显示工具与当前配置版本
@@ -79,8 +81,9 @@ go build -o deploy deploy.go
 平台自动检测（默认 `--platform auto`）：存在 `telesubmit.fly.toml` 且 flyctl 已登录 →
 Fly.io；否则 Docker Compose。也可 `--platform fly|compose` 显式指定。
 
-- **Fly**：改 `telesubmit.fly.toml` 的 `[build.args]` 镜像版本 → `fly deploy --remote-only`，
-  等健康检查通过后回报。
+- **Fly**：首次使用把模板复制为仓库根目录的 `telesubmit.fly.toml` 并按需修改
+  （`cp fly/deploy.fly-multi-bot.toml ./telesubmit.fly.toml`）；之后改它的
+  `[build.args]` 镜像版本 → `fly deploy --remote-only`，等健康检查通过后回报。
 - **Compose**：改 `.env` 的 `STACK_IMAGE` / `PIXIVFLOW_VERSION` → `docker compose pull/up`；
   加 `--build` 走本地构建（用 `TELEPOST_IMAGE` 参数）。
 - 常用选项：`--dry-run`（只预览、不改配置）、`--verbose`（回显命令完整输出）、
@@ -96,13 +99,19 @@ Fly.io；否则 Docker Compose。也可 `--platform fly|compose` 显式指定。
 
 ## 快速开始
 
-需要 Docker 24+、Compose v2、Python 3（只用于本地校验）。
+需要 Docker 24+、Compose v2。`bootstrap.sh`/`validate.sh` 还需要 bash 与
+python3（只用于本地生成与校验，运行时镜像内自带）。
+
+Linux/macOS（含 Git-Bash 的 Windows）一键初始化：
 
 ```bash
 git clone https://github.com/redtidev1918/pixivflow-telepost-deploy
 cd pixivflow-telepost-deploy
 ./scripts/bootstrap.sh
 ```
+
+Windows 用户可手动完成同样的事：复制 `.env.example` 为 `.env`、把
+`pixivflow/config/fly-two-bots.example.json` 复制为 `data/pixivflow/config.json`。
 
 编辑 `.env`，至少填写 `BOT1_TOKEN`、`BOT1_CHANNEL_ID`、`BOT1_OWNER_ID`。启用
 PixivFlow 时再填写 `PIXIV_REFRESH_TOKEN` 和 Bot 内 `/gen_token` 生成的
@@ -295,16 +304,20 @@ Mihomo 通常还会占用 50–100 MiB。整机只有 512 MiB 时优先使用外
 ## 目录
 
 ```text
-docker-compose.yml                 主编排：联合容器 + 可选 Caddy/Mihomo
-docker/combined.Dockerfile         Node 24 LTS + TelePost 2.10 + PixivFlow 2.10 轻量运行时
-data/                              数据库、下载缓存、outbox、实际配置（不入库）
-pixivflow/config/*.example.json    多计划安全模板
+deploy.go / go.mod                一键部署工具（Go 单二进制，v3.x）
+docker-compose.yml                主编排：联合容器 + 可选 Caddy/Mihomo
+docker/combined.Dockerfile        Node 24 LTS + TelePost 2.10 + PixivFlow 2.10 轻量运行时
+data/                             数据库、下载缓存、outbox、实际配置（不入库）
+pixivflow/config/*.example.json   多计划安全模板
 config/telepost-policy.example.json 非敏感频道/审核策略模板
-scripts/                           初始化、校验、本机/SSH 原子更新
-docs/ARCHITECTURE.md              组件、持久化、失败语义与信任边界
-fly/                               Fly.io 512 MiB 配置与更新脚本
-proxy/                             可选 Mihomo 镜像
+scripts/                          初始化、校验、本机/SSH 原子更新
+docs/                             架构、场景、性能、Webhook/代理等说明
+fly/                              Fly.io 512 MiB 配置与更新脚本
+proxy/                            可选 Mihomo 镜像
+.github/workflows/deploy-release.yml 打 deploy-v* 标签时产出各平台二进制并附到 Release
 ```
+
+各平台 `deploy` 二进制见 [Releases](https://github.com/redtidev1918/pixivflow-telepost-deploy/releases)。
 
 ## 安全边界
 
