@@ -27,7 +27,7 @@ import sys
 import time
 import urllib.request
 
-VERSION = "2.1.0"
+VERSION = "2.2.0"
 TELEPOST_REPO = "ghcr.io/redtidev1918/telepost"
 KIT_REPO = "ghcr.io/redtidev1918/pixivflow-telepost-deploy"
 DEFAULT_FLY_CONFIG = "telesubmit.fly.toml"
@@ -258,11 +258,14 @@ def pf_version(platform, cfg):
 def cmd_doctor(args):
     platform = detect_platform(args)
     cfg = config_for(platform, args)
-    step("1/3", "平台")
+
+    step("1/4", "运行环境（Python / 仓库卫生）")
+    problems = _check_python_env()
+
+    step("2/4", "部署平台")
     ok(f"使用平台：{platform}")
 
-    step("2/3", "依赖与环境")
-    problems = 0
+    step("3/4", "依赖与登录")
     if platform == "fly":
         fb = fly_bin()
         if fb:
@@ -304,12 +307,82 @@ def cmd_doctor(args):
         else:
             warn(f"{cfg} 不存在（将用 compose 默认值）")
 
-    step("3/3", "当前版本")
+    step("4/4", "当前版本")
     ok(f"TelePost/套件 : {tp_version(platform, cfg)}")
     ok(f"PixivFlow    : {pf_version(platform, cfg)}")
     if problems:
         die(f"自检存在 {problems} 个未满足项")
     ok("自检通过")
+
+
+# --------------------------------------------------------------------------
+# Linux/跨平台运行环境检查（与部署后端无关）
+# --------------------------------------------------------------------------
+
+def _check_python_env():
+    """检查 Python 版本、venv 组件与仓库文本文件行尾；返回问题计数。
+
+    deploy.py 本身只用标准库、无需 venv/第三方依赖；venv 与行尾检查是给
+    “本机/VPS 直跑 TelePost”与“老 clone 换行符归一化”场景的引导，问题以
+    警告呈现，不阻塞 deploy.py 自身的 fly/compose 部署。
+    """
+    problems = 0
+    ver = sys.version.split()[0]
+    if sys.version_info >= (3, 8):
+        ok(f"Python {ver}（≥3.8）")
+    else:
+        fail(f"Python {ver} 过旧，需要 3.8+")
+        problems += 1
+
+    p = run([sys.executable, "-m", "venv", "--help"], capture=True)
+    if p.returncode == 0:
+        ok("venv 组件可用（仅本机直跑 TelePost 时需要；deploy.py 不需要）")
+    else:
+        warn("python3 缺 venv 组件（Debian/Ubuntu 精简 python3 常见）。deploy.py "
+             "本身无需 venv；若要在宿主机直跑 TelePost（不走 Docker/Fly）：\n"
+             "        sudo apt install -y python3-venv   # 或完整版 python3-full\n"
+             "        python3 -m venv .venv && source .venv/bin/activate\n"
+             "        pip install -r requirements.txt   # TelePost 目录下的依赖")
+
+    crlf = _count_crlf_files()
+    if crlf:
+        warn(f"检测到 {crlf} 个已跟踪文本文件带 CRLF 行尾（通常来自 Windows "
+             "编辑器），Linux 上可能导致 .sh 启动脚本报错。修复：\n"
+             "        git add --renormalize .\n"
+             "        git commit -m 'chore: normalize line endings'")
+    else:
+        ok("已跟踪文本文件行尾均为 LF")
+    return problems
+
+
+def _count_crlf_files():
+    """统计工作区里带 CRLF 行尾的已跟踪文本文件数（非 git 仓库返回 0）。"""
+    if not os.path.isdir(".git"):
+        return 0
+    p = run(["git", "ls-files", "-z"], capture=True)
+    if p.returncode != 0:
+        return 0
+    text_exts = {
+        ".py", ".sh", ".bash", ".md", ".txt", ".json", ".toml",
+        ".yaml", ".yml", ".env", ".ini", ".cfg", ".conf", ".dockerfile",
+    }
+    names = {".gitattributes", ".gitignore", ".npmrc", ".dockerignore",
+             "Dockerfile", "Makefile"}
+    count = 0
+    for raw in p.stdout.split("\0"):
+        if not raw:
+            continue
+        name = raw
+        base = os.path.basename(name)
+        if os.path.splitext(name)[1].lower() not in text_exts and base not in names:
+            continue
+        try:
+            with open(name, "rb") as f:
+                if b"\r\n" in f.read():
+                    count += 1
+        except OSError:
+            pass
+    return count
 
 
 def cmd_version(args):
@@ -499,7 +572,7 @@ def main(argv=None):
     sp = sub.add_parser("status", help="状态/健康检查")
     sp = sub.add_parser("logs", help="最近日志")
     sp.add_argument("arg", nargs="?", type=int)
-    sub.add_parser("doctor", help="环境自检")
+    sub.add_parser("doctor", help="环境自检（Python/venv/行尾/依赖/登录）")
     sub.add_parser("version", help="版本信息")
 
     args = p.parse_args(argv)
