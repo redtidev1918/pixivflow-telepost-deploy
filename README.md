@@ -76,6 +76,35 @@ Fly.io；否则 Docker Compose。也可 `--platform fly|compose` 显式指定。
   `--retries N`（部署失败重试）、`--no-color`。
 - 每次运行写完整日志到 `/tmp/deploy-logs/`（Windows 在 `%TEMP%`），失败时终端会提示日志路径。
 
+### Linux（Ubuntu/Debian）首次运行
+
+仓库用 `.gitattributes` 强制 LF；在 Windows 上改过文件的机器 clone 下来的老副本
+可能带 CRLF，Linux 下会让 `.sh` 启动脚本报 `\r` 错误。首次运行前先归一化一次：
+
+```bash
+git pull
+git add --renormalize .    # 老 clone 只需执行一次
+git commit -m "chore: normalize line endings"    # 有改动时提交
+```
+
+deploy.py 只用 Python 标准库，**无需 pip install**；`./deploy` 引导器没有
+python3 时还会自动安装。venv 只在你要**在宿主机直跑 TelePost**（不走 Docker /
+Fly）时才需要——精简版 Debian/Ubuntu 的 python3 默认不带 venv 组件：
+
+```bash
+sudo apt install -y python3-venv    # 或完整版 python3-full
+python3 -m venv .venv && source .venv/bin/activate
+pip install -r requirements.txt     # TelePost 目录下的依赖
+```
+
+先自检再部署，`doctor` 会检查 Python 版本、venv 组件、文本文件行尾以及
+docker/flyctl：
+
+```bash
+./deploy doctor
+./deploy deploy          # 或 ./deploy tp latest
+```
+
 ## 快速开始
 
 需要 Docker 24+、Compose v2、Python 3（只用于本地校验）。

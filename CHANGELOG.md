@@ -2,6 +2,13 @@
 
 ## [Unreleased]
 
+- deploy.py v2.2.0：`doctor` 新增 Linux 运行环境检查——Python 版本、venv 组件
+  缺失提示（含 `apt install python3-venv` 等修复命令）、已跟踪文本文件 CRLF
+  行尾检测（含 `git add --renormalize .` 修复命令）。deploy.py 本身仍为纯标准库、
+  无需 pip install。
+- README：新增「Linux（Ubuntu/Debian）首次运行」小节——老 clone 行尾归一化、
+  venv 仅在宿主机直跑 TelePost 时需要、`./deploy doctor` 自检流程。
+
 ## [1.8.28] - 2026-09-03
 
 - PixivFlow 升级到 **2.10.27**：修复 franc-min 对"中日混合"文本误判为日文
