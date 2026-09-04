@@ -107,7 +107,8 @@ systemd。也可 `--platform fly|compose|systemd` 显式指定。
 - **Fly**：首次使用把模板复制为仓库根目录的 `telesubmit.fly.toml` 并按需修改
   （`cp fly/deploy.fly-multi-bot.toml ./telesubmit.fly.toml`）；之后改它的
   `[build.args]` 镜像版本 → `fly deploy --remote-only`，等健康检查通过后回报。
-  默认常驻（always-on）。
+  默认常驻（always-on）。想要更低成本（PixivFlow 256MB 常驻 + TelePost 512MB
+  auto-stop，投递走 Flycast）用 `deploy split`，见 [docs/AUTOSTOP.md](docs/AUTOSTOP.md)。
 - **Compose**：compose 后端拆成 `telepost` 与 `pixivflow` 两个独立 service，
   各自拉取 ghcr 镜像（`.env` 的 `TELEPOST_IMAGE` / `PIXIVFLOW_IMAGE`），共享
   `./data` 卷、经 HTTP 通信（投递基址 `TELEPOST_API_BASE_URL`，默认

@@ -1,20 +1,21 @@
 # PixivFlow 独立调度器实例（拆两台：TelePost 与 PixivFlow 各一台 Fly 机器）
 #
-# 与「合一台」的 fly/deploy.fly-multi-bot.toml 相对：这里只跑 pixivflow scheduler，
-# 通过 Fly 6PN 私网投递给已单独部署的 TelePost（不走公网、不计 egress）。
+# 与「合一台」的 fly/deploy.fly-multi-bot.toml 相对：这里只跑 pixivflow scheduler。
+# 这是「低成本架构」的常驻半边：PixivFlow 维护 scheduler/cron，必须 24/7 常驻。
+#
+# 投递走 Flycast（<telepost-app>.flycast）：私网 + 经 Fly Proxy + 支持 auto-start。
+# 注意不要用 .internal（6PN 直连不经过 Proxy，无法唤醒 stopped 的 TelePost）。
 #
 # 部署步骤：
 #   fly apps create <your-pixivflow-app>
 #   fly volumes create pixivflow_data --size 1 -r iad
 #   fly secrets set -a <your-pixivflow-app> \
 #       PIXIV_REFRESH_TOKEN=... TELEPOST_BOT1_SUBMIT_TOKEN=... TELEPOST_BOT2_SUBMIT_TOKEN=...
+#   # TelePost 那台分配 Flycast 私网地址（只需一次）：
+#   fly ips allocate-v6 --private -a <your-telepost-app>
 #   # 把 config.json 放进卷（可用 fly sftp shell / fly ssh 挂载后写入）：
 #   #   deploy init 生成的 data/pixivflow/config.json（含 ${TELEPOST_API_BASE_URL} 占位符）
 #   fly deploy -c fly/deploy.pixivflow.toml
-#
-# 注意：TelePost 侧的投稿 API 只应监听私网 + 本机环回，不能额外声明成公开 service
-# （否则等于把投稿 API 开到公网）。fly/deploy.telepost.toml 已把 API 留在
-# 8080（webhook 入口），PixivFlow 从 6PN 私网访问它。
 
 app = "your-pixivflow-app"
 primary_region = "iad"
@@ -25,8 +26,8 @@ primary_region = "iad"
 [env]
   TZ = "Asia/Shanghai"
   PIXIV_DOWNLOADER_CONFIG = "/app/data/pixivflow/config.json"
-  # 拆两台：Fly 6PN 私网投递，<telepost-app>.internal 解析到同组织机器，不计 egress。
-  TELEPOST_API_BASE_URL = "http://your-telepost-app.internal:8080"
+  # 拆两台：Flycast 私网投递（经 Fly Proxy，能 auto-start stopped 的 TelePost，不计 egress）。
+  TELEPOST_API_BASE_URL = "http://your-telepost-app.flycast:8080"
   NODE_OPTIONS = "--max-old-space-size=96 --expose-gc"
   MALLOC_ARENA_MAX = "2"
   PIXIV_DB_CACHE_KB = "4096"

@@ -67,22 +67,37 @@ PixivFlow 的 outbox 也会重试。代价只是「第一次慢几秒」，不�
 
 ---
 
-## 拓扑：256 MiB 拆分
+## 推荐拓扑：PixivFlow 常驻 + TelePost 休眠
 
-把「常驻一台 512 MiB」进一步压到「两台 256 MiB + 按需唤醒」，可行性与改动面如下：
+这是 Fly 上**真正适合本项目的低成本架构**（双 Bot 时合一台 256 放不下）：
 
-| 拓扑 | 256 MiB 可行性 | 改动面 |
-|---|---|---|
-| **A**：双 Bot 单独一台 256 机器；PixivFlow 拆到自己机器（Fly 私网投递） | ✅ idle ~170 MiB，峰值约 200–230 MiB，可行 | 中：投递 URL 从 `127.0.0.1:8080` 改 Fly 私网域名、拆持久卷、部署套件拆两份 |
+```text
+PixivFlow  256MB  always-on（min_machines_running=1，auto_stop=false）
+    │  它是 system clock owner：scheduler/cron 必须 24/7 活着
+    │
+    │  投递走 Flycast：http://<telepost-app>.flycast:8080
+    │  （私网 + 经 Fly Proxy + 能 auto-start stopped 的 TelePost）
+    ▼
+TelePost   512MB  auto-stop（min_machines_running=0，auto_stop="stop"）
+    │  双 Bot；event-driven：webhook/用户投稿/PixivFlow 投递都是入站，来请求就醒
+    ▼
+  idle → auto-stop（省 RAM），来请求 → Fly Proxy 自动拉起
+```
 
-拆开后的关键点：
+| 半边 | 大小 | 常驻/休眠 | 原因 |
+|---|---|---|---|
+| PixivFlow | 256 MB | **always-on** | 维护 scheduler/cron，必须到点触发 |
+| TelePost | 512 MB | **auto-stop** | event-driven，入站请求（webhook/用户/PixivFlow）都能叫醒它 |
 
-- **投递 URL**：PixivFlow 不再走同容器 `127.0.0.1:8080`，而是走 Fly 私网
-  `http://<telepost-app>.internal:8080`（Fly 6PN 私网），`TELEPOST_API_BASE_URL`
-  一键切。
+关键点：
+
+- **投递 URL 用 Flycast，不用 `.internal`**：`.internal`（6PN）是机器直连、**不经过
+  Fly Proxy**，无法唤醒 stopped 的 TelePost；`.flycast` 走 Fly Proxy、支持 auto-start。
+  所以 `TELEPOST_API_BASE_URL = http://<telepost-app>.flycast:8080`。
+- **TelePost 那台要先分配 Flycast 私网地址**：`fly ips allocate-v6 --private -a <app>`（一次）。
 - **拆卷**：TelePost 与 PixivFlow 各自一份持久卷（不再共享 `/app/data`）。
-- **拆部署**：`fly/deploy.telepost.toml` + `fly/deploy.pixivflow.toml` 两个独立
-  app（本仓库已提供模板），各自 `auto_stop_machines = true`。
+- **拆部署**：`fly/deploy.telepost.toml`（512MB auto-stop）+ `fly/deploy.pixivflow.toml`
+  （256MB always-on），或直接 `deploy split` 生成。
 
 ---
 
