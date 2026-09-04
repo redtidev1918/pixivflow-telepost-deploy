@@ -1,20 +1,14 @@
 # Changelog
 
+> 发布说明面向普通用户：写「对用户有什么改变」，不写内部实现细节（模块名、CI job、配置键）；
+> 技术细节放进代码注释或 `docs/`。每个 Release 的正文由本文件对应版本段自动生成。
+
 ## [1.8.34] - 2026-09-04
 
-- **Deployment Kit release 不再只有源码**：`release.yml` 新增 bundle job，把 deploy
-  单二进制（6 平台）交叉编译并附到套件 release；release notes 追加「包含什么」说明。
-- **生产拆分落地**：Fly 从「合一台 512 always-on」拆成「PixivFlow 256MB always-on +
-  TelePost 512MB auto-stop」，投递走 **Flycast**（`http://<app>.flycast`，无端口）。
-  实测修正两处坑：Flycast 不能带 `:8080`（proxy 在 80 端口转发）；TelePost 拆机
-  模板 `force_https=false`（否则私网 HTTP 被 301 跳 HTTPS 导致投递失败）。
-- 外部闹钟改为**不依赖 GitHub**：移除 `.github/workflows/wakeup.yml`，改由
-  easycron（免费 HTTP cron，`*/5 9-10,17-18`）或 Fly `--schedule daily` 唤醒；
-  `docs/AUTOSTOP.md` 给出三种闹钟方案（easycron / Fly 原生 / 拆机常驻）与取舍。
-- 文档措辞收敛：去掉「傻瓜式」，统一用「一键 / 开箱即用」。
-- 文档：WebUI 管理面板配方改为**二选一**——方式 A（官方合体容器，API+前端一体）
-  与方式 B（独立前端容器：已发布的 `pixivflow-webui` 镜像 + 只跑 API 的后端，
-  前后端分开升级），共享 `./data` 说明与要点不变。
+- **更省钱的 Fly 部署**：可拆成「PixivFlow 常驻 + TelePost 自动休眠」的低成本架构，投递走 Fly 私网，比常驻一台省账单（详见 `docs/AUTOSTOP.md`）。
+- **套件 release 更完整**：每个 Deployment Kit release 现在自带 6 个平台的 `deploy` 单文件，下载即用。
+- **WebUI 管理面板（可选）**：官方合体容器（API+前端一体）或独立前端容器（`pixivflow-webui` 镜像 + API 后端）两种方式，共享 `./data`、分开升级。
+- 文档措辞统一为「一键 / 开箱即用」。
 
 ## [1.8.33] - 2026-09-04
 
