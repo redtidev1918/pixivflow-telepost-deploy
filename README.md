@@ -330,6 +330,47 @@ Mihomo 通常还会占用 50–100 MiB。整机只有 512 MiB 时优先使用外
 
 完整说明见 [性能与容量](docs/PERFORMANCE.md)。
 
+## 可选：PixivFlow WebUI 管理面板（需要 ≥1 GiB）
+
+组合镜像为了 512 MiB 档**默认不启动** WebUI，但 WebUI 在 PixivFlow 中是可选
+组件（官方提供单独容器）。≥1 GiB 的机器可以另起一个 webui 容器，与 kit 的
+stack **共享同一份 `./data`**（同一 config → 自动共享同一个 SQLite 与下载目录），
+kit 镜像本身零改动：
+
+```bash
+# 1) 准备一份含前端的 PixivFlow 镜像（官方源码仓库自带 webui-frontend 构建）
+git clone https://github.com/redtidev1918/PixivFlow /tmp/PixivFlow
+cd /tmp/PixivFlow && docker build -t pixivflow:webui .
+
+# 2) 与 kit 共卷启动 webui（把下面的 /path/to/kit 换成部署目录）
+docker run -d --name pixivflow-webui --restart unless-stopped \
+  -p 127.0.0.1:3000:3000 \
+  -e PIXIV_DOWNLOADER_CONFIG=/app/data/pixivflow/config.json \
+  -e PORT=3000 -e HOST=0.0.0.0 \
+  -e STATIC_PATH=/app/webui-frontend/dist \
+  -e WEBUI_USERNAME=${WEBUI_USERNAME:-} \
+  -e WEBUI_PASSWORD=${WEBUI_PASSWORD:-} \
+  -v /path/to/kit/data:/app/data \
+  pixivflow:webui node dist/webui/index.js
+```
+
+访问 `http://127.0.0.1:3000`。公网暴露前务必同时设置 `WEBUI_USERNAME` 与
+`WEBUI_PASSWORD`（两者都非空才启用 Basic Auth）。
+
+要点与限制：
+
+- **内存**：webui 是又一个 Node 进程（约 150–300 MiB），只适合 ≥1 GiB 整机；
+  512 MiB 档不要开。可给该容器加 `--memory 512m` 兜底。
+- **并发**：webui 与 supervisor 里的 PixivFlow scheduler 共用同一个 SQLite /
+  下载目录（官方即按共享卷设计）；日常查看、改计划没问题，但不要在 webui 里
+  与 scheduler 同时触发大规模下载/维护，避免 SQLite 锁竞争。
+- **版本对齐**：webui 镜像的 PixivFlow 版本不要低于 kit 内嵌的版本（当前
+  2.10.27），以免旧版本读不懂新 config 字段；config 用 `PIXIV_DOWNLOADER_CONFIG`
+  显式指向 kit 那份即可（相对路径会以该 config 为基准解析，两进程一致）。
+- 不想手工 clone/构建时，也可以把 PixivFlow 官方仓库的 `docker-compose.yml`
+  里 `pixivflow-webui` 服务单独 `docker compose up -d pixivflow-webui`，并把它的
+  volumes/env 按上面的写法指向 kit 的 `./data` 与 config（kit 侧只跑 stack）。
+
 ## 目录
 
 ```text

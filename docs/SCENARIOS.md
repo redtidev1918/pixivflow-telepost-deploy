@@ -47,3 +47,9 @@ cp fly/deploy.fly-multi-bot.toml ./telesubmit.fly.toml   # 改 app 名与版本�
 平台自动检测顺序（`--platform auto`）：`telesubmit.fly.toml` + flyctl 已登录 →
 Fly.io；目录里有 `docker-compose.yml` → Compose；Linux 有 systemctl → systemd。
 有公网不代表必须用 Webhook；无法稳定提供 HTTPS 入站时，Polling 更简单可靠。
+
+## 想要 WebUI 管理面板？
+
+kit 组合镜像默认不带 WebUI（512 MiB 档取舍）。≥1 GiB 机器可另起官方 webui
+容器与 kit **共享 `./data`**（kit 零改动），含构建命令、共卷启动与并发注意项，
+见 [README「可选：PixivFlow WebUI 管理面板」](../README.md)。
