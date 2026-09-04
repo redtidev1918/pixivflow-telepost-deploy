@@ -1,16 +1,13 @@
 name: pixivflow-telepost
 
+# 解耦部署：TelePost 与 PixivFlow 各是一个独立容器，通过 HTTP 通信。
+# 默认「合一台」——两个 service 落在同一台 Docker 主机，共享 data 卷与 app 网络；
+# 要「拆两台」时，只需把 pixivflow 服务部署到另一台主机（把 TELEPOST_API_BASE_URL
+# 指向 telepost 的公网地址即可）。
+
 services:
-  stack:
-    image: ${STACK_IMAGE:-ghcr.io/redtidev1918/pixivflow-telepost-deploy:latest}
-    build:
-      context: .
-      dockerfile: docker/combined.Dockerfile
-      args:
-        TELEPOST_IMAGE: ${TELEPOST_IMAGE:-ghcr.io/redtidev1918/telepost:2.10.33}
-        PIXIVFLOW_VERSION: ${PIXIVFLOW_VERSION:-2.10.27}
-        HTTP_PROXY: ${BUILD_HTTP_PROXY:-}
-        HTTPS_PROXY: ${BUILD_HTTPS_PROXY:-}
+  telepost:
+    image: ${TELEPOST_IMAGE:-ghcr.io/redtidev1918/telepost:2.10.34}
     restart: unless-stopped
     init: true
     environment:
@@ -24,7 +21,6 @@ services:
       REVIEW_PREVIEW_THREAD: ${REVIEW_PREVIEW_THREAD:-1}
       REVIEW_PREVIEW_INTERVAL_SECONDS: ${REVIEW_PREVIEW_INTERVAL_SECONDS:-0.75}
       REVIEW_PREVIEW_TIMEOUT_SECONDS: ${REVIEW_PREVIEW_TIMEOUT_SECONDS:-120}
-      # 审核群相册每组媒体数（小内存机器建议 4~5；失败自动降级逐张）
       REVIEW_ALBUM_SIZE: ${REVIEW_ALBUM_SIZE:-5}
       PENDING_REVIEW_RETENTION_DAYS: ${PENDING_REVIEW_RETENTION_DAYS:-1}
       PENDING_REVIEW_CLEANUP_BATCH_SIZE: ${PENDING_REVIEW_CLEANUP_BATCH_SIZE:-20}
@@ -45,22 +41,17 @@ services:
       BOT2_CHAT_REVIEW_REQUIRED: ${BOT2_CHAT_REVIEW_REQUIRED:-false}
       BOT2_REVIEW_CHAT_ID: ${BOT2_REVIEW_CHAT_ID:-}
       BOT2_WEBHOOK_SECRET_TOKEN: ${BOT2_WEBHOOK_SECRET_TOKEN:-}
-      PIXIVFLOW_ENABLED: ${PIXIVFLOW_ENABLED:-true}
-      PIXIVFLOW_CONFIG: /app/data/pixivflow/config.json
-      PIXIV_REFRESH_TOKEN: ${PIXIV_REFRESH_TOKEN:-}
+      # 投稿 token：TelePost 用它们校验 PixivFlow 的 HTTP 投稿
       TELEPOST_BOT1_SUBMIT_TOKEN: ${TELEPOST_BOT1_SUBMIT_TOKEN:-}
       TELEPOST_BOT2_SUBMIT_TOKEN: ${TELEPOST_BOT2_SUBMIT_TOKEN:-}
-      NODE_OPTIONS: ${NODE_OPTIONS:---max-old-space-size=96 --expose-gc}
-      MALLOC_ARENA_MAX: ${MALLOC_ARENA_MAX:-2}
       SEARCH_ENABLED: ${SEARCH_ENABLED:-false}
       SEARCH_ANALYZER: ${SEARCH_ANALYZER:-simple}
       DB_CACHE_KB: ${DB_CACHE_KB:-1024}
-      PIXIV_DB_CACHE_KB: ${PIXIV_DB_CACHE_KB:-4096}
       HTTP_PROXY: ${HTTP_PROXY_URL:-}
       HTTPS_PROXY: ${HTTP_PROXY_URL:-}
       ALL_PROXY: ${EGRESS_ALL_PROXY:-}
-      NO_PROXY: 127.0.0.1,localhost,stack,proxy
-      no_proxy: 127.0.0.1,localhost,stack,proxy
+      NO_PROXY: 127.0.0.1,localhost,telepost,pixivflow,proxy
+      no_proxy: 127.0.0.1,localhost,telepost,pixivflow,proxy
     volumes:
       - ./data:/app/data
     ports:
@@ -82,6 +73,45 @@ services:
         max-size: ${LOG_MAX_SIZE:-10m}
         max-file: ${LOG_MAX_FILES:-3}
 
+  pixivflow:
+    image: ${PIXIVFLOW_IMAGE:-ghcr.io/redtidev1918/pixivflow:2.10.27}
+    restart: unless-stopped
+    init: true
+    environment:
+      TZ: ${TZ:-Asia/Shanghai}
+      # 配置文件（与 telepost 共享 ./data 卷，落在 ./data/pixivflow/config.json）
+      PIXIV_DOWNLOADER_CONFIG: /app/data/pixivflow/config.json
+      PIXIV_REFRESH_TOKEN: ${PIXIV_REFRESH_TOKEN:-}
+      # 投递目标：默认同机 telepost 容器；拆两台时改成 telepost 的公网地址
+      TELEPOST_API_BASE_URL: ${TELEPOST_API_BASE_URL:-http://telepost:8080}
+      TELEPOST_BOT1_SUBMIT_TOKEN: ${TELEPOST_BOT1_SUBMIT_TOKEN:-}
+      TELEPOST_BOT2_SUBMIT_TOKEN: ${TELEPOST_BOT2_SUBMIT_TOKEN:-}
+      NODE_OPTIONS: ${NODE_OPTIONS:---max-old-space-size=96 --expose-gc}
+      MALLOC_ARENA_MAX: ${MALLOC_ARENA_MAX:-2}
+      PIXIV_DB_CACHE_KB: ${PIXIV_DB_CACHE_KB:-4096}
+      HTTP_PROXY: ${HTTP_PROXY_URL:-}
+      HTTPS_PROXY: ${HTTP_PROXY_URL:-}
+      ALL_PROXY: ${EGRESS_ALL_PROXY:-}
+      NO_PROXY: 127.0.0.1,localhost,telepost,pixivflow,proxy
+      no_proxy: 127.0.0.1,localhost,telepost,pixivflow,proxy
+    volumes:
+      - ./data:/app/data
+    depends_on:
+      telepost:
+        condition: service_healthy
+    mem_limit: ${PIXIVFLOW_MEMORY_LIMIT:-256m}
+    cpus: ${CPU_LIMIT:-1.0}
+    pids_limit: 256
+    healthcheck:
+      test: ["CMD", "node", "-e", "process.exit(require('fs').existsSync('/app/data/pixivflow/config.json') ? 0 : 1)"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    networks:
+      - app
+    logging: *default-logging
+
   # 公网 HTTPS 反代。只有运行 `docker compose --profile webhook up -d` 才启动。
   caddy:
     image: caddy:2-alpine
@@ -98,7 +128,7 @@ services:
       - caddy-data:/data
       - caddy-config:/config
     depends_on:
-      stack:
+      telepost:
         condition: service_healthy
     networks:
       - app

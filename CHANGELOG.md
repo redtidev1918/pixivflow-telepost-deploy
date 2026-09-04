@@ -2,6 +2,17 @@
 
 ## [Unreleased]
 
+- **解耦部署（compose 后端）**：`docker-compose.yml` 从「组合镜像 + supervisor」
+  拆成 `telepost` 与 `pixivflow` 两个独立 service，各自拉取 ghcr 镜像
+  （`TELEPOST_IMAGE` / `PIXIVFLOW_IMAGE`），通过 HTTP 通信、共享 `./data` 卷。
+- PixivFlow 投递基地址改用 `${TELEPOST_API_BASE_URL}` 占位符：默认
+  `http://telepost:8080`（合一台），拆两台时改成 telepost 公网地址即可；
+  同一份 config 模板在 Compose / Fly / systemd 间通用。
+- PixivFlow 新增独立精简调度镜像 `ghcr.io/redtidev1918/pixivflow`（不含
+  WebUI / Chromium / 登录工具，只跑 `pixivflow scheduler`），由 PixivFlow 仓库
+  的 `docker-publish.yml` 在 `v*` 标签时构建并推送。
+- `deploy` 工具 compose 后端据此读取/升级两个独立镜像版本；Fly 合一台仍走
+  `docker/combined.Dockerfile`（可选 co-locate 层）。
 - 文档：新增「可选：PixivFlow WebUI 管理面板（≥1 GiB）」配方——另起官方 webui
   容器与 kit 共享 `./data`（kit 零改动），含构建命令、共卷启动、Basic Auth 与
   并发/内存注意项；`docs/SCENARIOS.md` 同步指引。
