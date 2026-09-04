@@ -69,13 +69,14 @@ PixivFlow 的 outbox 也会重试。代价只是「第一次慢几秒」，不�
 
 ## 推荐拓扑：PixivFlow 常驻 + TelePost 休眠
 
-这是 Fly 上**真正适合本项目的低成本架构**（双 Bot 时合一台 256 放不下）：
+这是 Fly 上**真正适合本项目的低成本架构**（双 Bot 时合一台 256 放不下）。**生产已按
+此拓扑部署**（PixivFlow 256 always-on + TelePost 512 auto-stop）。
 
 ```text
 PixivFlow  256MB  always-on（min_machines_running=1，auto_stop=false）
     │  它是 system clock owner：scheduler/cron 必须 24/7 活着
     │
-    │  投递走 Flycast：http://<telepost-app>.flycast:8080
+    │  投递走 Flycast：http://<telepost-app>.flycast（无端口，走 80 → proxy → 8080）
     │  （私网 + 经 Fly Proxy + 能 auto-start stopped 的 TelePost）
     ▼
 TelePost   512MB  auto-stop（min_machines_running=0，auto_stop="stop"）
@@ -89,15 +90,27 @@ TelePost   512MB  auto-stop（min_machines_running=0，auto_stop="stop"）
 | PixivFlow | 256 MB | **always-on** | 维护 scheduler/cron，必须到点触发 |
 | TelePost | 512 MB | **auto-stop** | event-driven，入站请求（webhook/用户/PixivFlow）都能叫醒它 |
 
-关键点：
+关键点（实测踩过的坑）：
 
 - **投递 URL 用 Flycast，不用 `.internal`**：`.internal`（6PN）是机器直连、**不经过
   Fly Proxy**，无法唤醒 stopped 的 TelePost；`.flycast` 走 Fly Proxy、支持 auto-start。
-  所以 `TELEPOST_API_BASE_URL = http://<telepost-app>.flycast:8080`。
+  所以 `TELEPOST_API_BASE_URL = http://<telepost-app>.flycast`。
+- **Flycast 不能带 `:8080`**：Fly Proxy 在 **80 端口**监听 Flycast 流量再转发到内网
+  8080；带 `:8080` 会 `ECONNRESET`。
+- **TelePost 拆机模板必须 `force_https = false`**：`force_https=true` 会让 Flycast
+  私网 HTTP 被 301 跳 HTTPS 导致投递失败（webhook 仍走 HTTPS 直连，不受影响）。
 - **TelePost 那台要先分配 Flycast 私网地址**：`fly ips allocate-v6 --private -a <app>`（一次）。
 - **拆卷**：TelePost 与 PixivFlow 各自一份持久卷（不再共享 `/app/data`）。
 - **拆部署**：`fly/deploy.telepost.toml`（512MB auto-stop）+ `fly/deploy.pixivflow.toml`
   （256MB always-on），或直接 `deploy split` 生成。
+
+### 生产拆分后的已知状态
+
+- 旧 TelePost 卷里还留着 PixivFlow 的 ~280MB 下载缓存 + 旧 DB（已不用，占空间，可清理）。
+- 拆机时**没迁 PixivFlow 的 DB**（空库重下「昨日榜」，已发布的被 TelePost 7 天软去重
+  跳过，不会刷屏）。
+- 「TelePost 睡下 → 被投递唤醒」的完整闭环要等下一次 10:00/18:00 定时任务自然触发
+  才能最终确认（Flycast 直连已验证 200 OK，auto-start 是 proxy 层标准行为）。
 
 ---
 

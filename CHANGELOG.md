@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+- **生产拆分落地**：Fly 从「合一台 512 always-on」拆成「PixivFlow 256MB always-on +
+  TelePost 512MB auto-stop」，投递走 **Flycast**（`http://<app>.flycast`，无端口）。
+  实测修正两处坑：Flycast 不能带 `:8080`（proxy 在 80 端口转发）；TelePost 拆机
+  模板 `force_https=false`（否则私网 HTTP 被 301 跳 HTTPS 导致投递失败）。
 - 外部闹钟改为**不依赖 GitHub**：移除 `.github/workflows/wakeup.yml`，改由
   easycron（免费 HTTP cron，`*/5 9-10,17-18`）或 Fly `--schedule daily` 唤醒；
   `docs/AUTOSTOP.md` 给出三种闹钟方案（easycron / Fly 原生 / 拆机常驻）与取舍。
