@@ -1,5 +1,13 @@
 # Changelog
 
+## [Unreleased]
+
+- **deploy 工具 v3.3.0（init 傻瓜式一键初始化）**：compose/.env/示例配置等模板
+  用 go:embed 内嵌进二进制——全新机器只需 Docker + 一个二进制：`deploy init <dir>`
+  就地生成部署目录并向导式填写 Bot 信息（非交互环境自动静默、保留占位符），随后
+  `deploy doctor && deploy deploy` 即可。不再需要 clone 仓库、bash 或 python。
+- README：新增「傻瓜式一键部署」最快路径与 `go build -o deploy .` 用法。
+
 ## [1.8.29] - 2026-09-04
 
 - **一键部署工具改为 Go 单二进制**（deploy v3.0.0 → v3.1.0）：移除 Python
