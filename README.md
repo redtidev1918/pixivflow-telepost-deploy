@@ -42,24 +42,28 @@ supervisor 放在同一容器，适合 512 MiB 小机器，不启动 WebUI。
 | 无公网，Telegram/Pixiv 可直连 | `docker compose up -d` | AUTO 自动选择 Polling |
 | 有域名且 80/443 可入站 | `docker compose --profile webhook up -d` | AUTO 选择 Webhook |
 | 国内网络，需要代理 | `docker compose --profile proxy up -d` | Polling + Mihomo |
-| Fly.io | `deploy.py`（推荐，见下）或 `fly deploy -c fly/deploy.fly-multi-bot.toml` | Webhook |
+| Fly.io | `deploy`（推荐，见下）或 `fly deploy -c fly/deploy.fly-multi-bot.toml` | Webhook |
 
 Polling 与 Webhook 都提供相同的 `http://127.0.0.1:8080/api/botN/v1/*`，因此
 PixivFlow 的投递配置无需随网络模式改变。Webhook 注册失败时 AUTO 会回退 Polling。
 
-## 一键部署工具（deploy.py）
+## 一键部署工具（deploy）
 
-无需手改配置文件。跨平台（macOS / Linux / Windows，仅需 Python 3.8+，标准库零依赖）：
+无需手改配置文件、**无需预装 Python**。Linux/macOS 直接运行零依赖引导器 `./deploy`
+（没有 python3 时会自动安装）；Windows 用 `python deploy.py`：
 
 ```bash
-python3 deploy.py doctor          # 环境自检（依赖/配置/登录/网络）
-python3 deploy.py tp 2.10.33      # 升级 TelePost 到 2.10.33 并部署
-python3 deploy.py tp latest       # 升级到最新并部署
-python3 deploy.py pf 2.10.27      # 升级 PixivFlow 并部署
-python3 deploy.py status          # 状态 / 健康
-python3 deploy.py logs 200        # 最近 200 行日志
-python3 deploy.py version         # 显示工具与当前配置版本
+./deploy doctor                 # 环境自检（依赖/配置/登录/网络）
+./deploy tp 2.10.33             # 升级 TelePost 到 2.10.33 并部署
+./deploy tp latest              # 升级到最新并部署
+./deploy pf 2.10.27             # 升级 PixivFlow 并部署
+./deploy status                 # 状态 / 健康
+./deploy logs 200               # 最近 200 行日志
+./deploy version                # 显示工具与当前配置版本
 ```
+
+`deploy` 是零依赖 shell 引导器（只用 sh），自动检测/安装 python3 后转交 `deploy.py`
+（纯 Python 标准库，无第三方依赖）。等价地，也可直接 `python3 deploy.py ...`。
 
 平台自动检测（默认 `--platform auto`）：存在 `telesubmit.fly.toml` 且 flyctl 已登录 →
 Fly.io；否则 Docker Compose。也可 `--platform fly|compose` 显式指定。
