@@ -1,5 +1,11 @@
 # Changelog
 
+## [Unreleased]
+
+- 文档：新增「可选：PixivFlow WebUI 管理面板（≥1 GiB）」配方——另起官方 webui
+  容器与 kit 共享 `./data`（kit 零改动），含构建命令、共卷启动、Basic Auth 与
+  并发/内存注意项；`docs/SCENARIOS.md` 同步指引。
+
 ## [1.8.31] - 2026-09-04
 
 - **deploy 工具 v3.4.1**：内建帮助补充 `--platform systemd` 后端说明（首次
