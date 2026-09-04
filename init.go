@@ -22,6 +22,8 @@ import (
 //go:embed caddy/Caddyfile
 //go:embed proxy
 //go:embed fly/deploy.fly-multi-bot.toml
+//go:embed fly/deploy.telepost.toml
+//go:embed fly/deploy.pixivflow.toml
 var scaffold embed.FS
 
 // 与 docker-compose/.env 基线保持一致（发版时同步更新）。
