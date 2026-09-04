@@ -1,0 +1,58 @@
+# TelePost 独立实例（拆两台：不含 PixivFlow，只跑投稿/审核 bot）
+#
+# 与「合一台」的 fly/deploy.fly-multi-bot.toml 相对：直接用 TelePost 预构建镜像，
+# 不启用 PixivFlow（PixivFlow 拆到 fly/deploy.pixivflow.toml 单独部署）。
+#
+# 部署步骤：
+#   fly apps create <your-telepost-app>
+#   fly volumes create data --size 1 -r iad
+#   fly secrets set -a <your-telepost-app> BOT1_TOKEN=... BOT1_CHANNEL_ID=... \
+#       TELEPOST_BOT1_SUBMIT_TOKEN=... TELEPOST_BOT2_SUBMIT_TOKEN=...
+#   fly deploy -c fly/deploy.telepost.toml
+
+app = "your-telepost-app"
+primary_region = "iad"
+
+[build]
+  image = "ghcr.io/redtidev1918/telepost:2.10.34"
+
+[env]
+  PYTHONUNBUFFERED = "1"
+  PYTHONDONTWRITEBYTECODE = "1"
+  TZ = "Asia/Shanghai"
+  RUN_MODE = "WEBHOOK"
+  WEBHOOK_URL = "https://your-telepost-app.fly.dev"
+  SEARCH_ANALYZER = "simple"
+  SEARCH_ENABLED = "false"
+  DB_CACHE_KB = "1024"
+  # 投稿 token：TelePost 用它们校验 PixivFlow（独立实例）的 HTTP 投稿
+  REVIEW_PREVIEW_THREAD = "1"
+  REVIEW_PREVIEW_INTERVAL_SECONDS = "0.75"
+  REVIEW_PREVIEW_TIMEOUT_SECONDS = "120"
+  REVIEW_ALBUM_SIZE = "5"
+  PENDING_REVIEW_RETENTION_DAYS = "1"
+  PENDING_REVIEW_CLEANUP_BATCH_SIZE = "20"
+  REVIEW_RETENTION_DAYS = "30"
+
+[mounts]
+  source = "data"
+  destination = "/app/data"
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  auto_stop_machines = false
+  auto_start_machines = true
+  min_machines_running = 1
+
+  [[http_service.checks]]
+    grace_period = "120s"
+    interval = "60s"
+    method = "GET"
+    timeout = "30s"
+    path = "/health"
+
+[vm]
+  cpu_kind = "shared"
+  cpus = 1
+  memory_mb = 256
