@@ -1,0 +1,37 @@
+# PixivFlow 独立调度器实例（拆两台：TelePost 与 PixivFlow 各一台 Fly 机器）
+#
+# 与「合一台」的 fly/deploy.fly-multi-bot.toml 相对：这里只跑 pixivflow scheduler，
+# 投递给已单独部署的 TelePost 公网 API（TELEPOST_API_BASE_URL）。
+#
+# 部署步骤：
+#   fly apps create <your-pixivflow-app>
+#   fly volumes create pixivflow_data --size 1 -r iad
+#   fly secrets set -a <your-pixivflow-app> \
+#       PIXIV_REFRESH_TOKEN=... TELEPOST_BOT1_SUBMIT_TOKEN=... TELEPOST_BOT2_SUBMIT_TOKEN=...
+#   # 把 config.json 放进卷（可用 fly sftp shell / fly ssh 挂载后写入）：
+#   #   deploy init 生成的 data/pixivflow/config.json（含 ${TELEPOST_API_BASE_URL} 占位符）
+#   fly deploy -c fly/deploy.pixivflow.toml
+
+app = "your-pixivflow-app"
+primary_region = "iad"
+
+[build]
+  image = "ghcr.io/redtidev1918/pixivflow:2.10.27"
+
+[env]
+  TZ = "Asia/Shanghai"
+  PIXIV_DOWNLOADER_CONFIG = "/app/data/pixivflow/config.json"
+  # 拆两台：指向单独部署的 TelePost 公网地址（其 /api/botN/v1/submissions）
+  TELEPOST_API_BASE_URL = "https://your-telepost-app.fly.dev"
+  NODE_OPTIONS = "--max-old-space-size=96 --expose-gc"
+  MALLOC_ARENA_MAX = "2"
+  PIXIV_DB_CACHE_KB = "4096"
+
+[mounts]
+  source = "pixivflow_data"
+  destination = "/app/data"
+
+[vm]
+  cpu_kind = "shared"
+  cpus = 1
+  memory_mb = 256
