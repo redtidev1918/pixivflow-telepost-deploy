@@ -2,11 +2,11 @@
 # 可选 co-locate 层：Fly 合一台（一台机同跑 TelePost + PixivFlow，共享内存峰值）。
 # 解耦部署的默认路径是 docker-compose.yml 的两个独立镜像（telepost + pixivflow）。
 
-ARG TELEPOST_IMAGE=ghcr.io/redtidev1918/telepost:2.10.37
+ARG TELEPOST_IMAGE=ghcr.io/redtidev1918/telepost:2.10.38
 ARG NODE_IMAGE=node:24-bookworm-slim
 
 FROM ${NODE_IMAGE} AS pixivflow-builder
-ARG PIXIVFLOW_VERSION=2.10.27
+ARG PIXIVFLOW_VERSION=2.10.28
 ARG HTTP_PROXY
 ARG HTTPS_PROXY
 RUN apt-get update \

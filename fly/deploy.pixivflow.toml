@@ -16,7 +16,7 @@ app = "your-pixivflow-app"
 primary_region = "iad"
 
 [build]
-  image = "ghcr.io/redtidev1918/pixivflow:2.10.27"
+  image = "ghcr.io/redtidev1918/pixivflow:2.10.28"
 
 [env]
   TZ = "Asia/Shanghai"
