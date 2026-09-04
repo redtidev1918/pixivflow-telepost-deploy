@@ -124,10 +124,19 @@ jobs:
           python3 scripts/extract_changelog.py "$GITHUB_REF_NAME" > release-notes.md
           {
             echo
+            echo "## 怎么用（普通用户，三步）"
+            echo
+            echo "1. 下载下方对应你系统的 \`deploy-*.tar.gz\`（Windows / macOS / Linux）"
+            echo "2. 解压得到 \`deploy\` 单文件"
+            echo "3. 终端运行 \`./deploy\`，按提示一路回车即可"
+            echo
+            echo "> \`deploy\` 就是本套件的一键部署工具；「Deployment Kit」是这一整套的总称"
+            echo "> （deploy 工具 + Docker 镜像 + 配置模板）。普通用户只需下载 deploy 那一个文件。"
+            echo
             echo "## 这个 release 包含什么"
             echo
+            echo "- **deploy 单文件**：6 个压缩包（Windows / macOS / Linux 各 2 种架构）"
             echo "- **Docker 镜像**：\`ghcr.io/redtidev1918/pixivflow-telepost-deploy:$GITHUB_REF_NAME\`"
-            echo "- **deploy 单文件**：下方 6 个压缩包（Windows / macOS / Linux 各 2 种架构）"
             echo "- **源码**：\`git clone\` 后 \`docker compose up -d\` 一键启动"
           } >> release-notes.md
       - name: Download binaries
