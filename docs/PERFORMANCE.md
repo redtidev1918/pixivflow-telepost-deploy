@@ -5,6 +5,57 @@
 
 ---
 
+## 内存优化速查
+
+### 先测量，别盲调
+
+```bash
+curl -s http://127.0.0.1:8080/health | python3 -m json.tool   # process_rss / system_available_mb / storage
+docker stats --no-stream                                      # 各容器真实 RSS vs mem_limit
+# 再定位是 python 还是 node 吃的：
+docker exec telepost  ps aux --sort=-rss | head -5
+docker exec pixivflow ps aux --sort=-rss | head -5
+```
+
+### 按影响排序的杠杆
+
+**Python / TelePost 侧**
+
+| 动作 | 可省 | 何时用 |
+|---|---|---|
+| 关搜索（`SEARCH_ENABLED=false` + `simple` 分词） | ~100 MB（jieba 词典 + 索引） | ≤512 档必关 |
+| Bot 数量 2 → 1 | ~60–100 MB（每个 bot 一个 python 进程） | 256 档 / 峰值在 python |
+| `MALLOC_ARENA_MAX=2`（telepost 容器） | 防 glibc arena 膨胀 | 默认已加 |
+| 缩短 pending 保留、调小相册批 | 减少积压缓冲与消息体 | 审核群积压时 |
+
+**Node / PixivFlow 侧**
+
+| 动作 | 可省 | 何时用 |
+|---|---|---|
+| `NODE_OPTIONS=--max-old-space-size=96 --expose-gc` | 硬顶 V8 老生代堆 | 512 档默认；≥1 GiB 可提到 128 |
+| `download.concurrency=1` | 同时只下一个作品 | ≤512 档 |
+| 缓存有界（`cacheRetentionDays` / `cacheMaxSizeMB`） | 磁盘与内存不随缓存膨胀 | 长期运行 |
+| 用精简 scheduler 镜像、不开 WebUI | ~150 MB+（前端/Chromium） | 默认即是 |
+
+**容器 / 编排**
+
+- 两容器 `mem_limit` 按整机预算分配：telepost `320m` + pixivflow `192m` = 512
+  （`TELEPOST_MEMORY_LIMIT` / `PIXIVFLOW_MEMORY_LIMIT` 可调；256 档只跑 telepost）。
+- 日志轮转（`10m × 3`）、`pids_limit=256`、`NO_PROXY` 含容器名（流量不绕代理）。
+
+### 按症状排查
+
+| 症状 | 先查 | 应对 |
+|---|---|---|
+| `/health` 的 `process_rss` 逼近 mem_limit | `docker stats` 看哪个容器 | python 峰值 → 砍 Bot/关搜索；node 峰值 → 降 heap 或并发 |
+| OOM Kill（exit 137） | `docker inspect` / `dmesg` | 先按档位升内存（512→1 GiB）；**不要**删 outbox 换表面稳定 |
+| 审核积压涨内存 | `/health` 的 `review_queue` | 缩短 `PENDING_REVIEW_RETENTION_DAYS` / 手动清 pending |
+| 下载缓存占满卷 | `delivery_outbox` + `volume` | 检查 `cacheRetentionDays`/`cacheMaxSizeMB`，outbox 看 `kind` 再处理 |
+
+详细档位配置见下文的 256 MB / 512 MB / 1 GiB 三节与 `.env.example`。
+
+---
+
 ## 256 MB 档：单 Bot
 
 **适用场景**：低配 VPS、NAT 机器、开发测试
