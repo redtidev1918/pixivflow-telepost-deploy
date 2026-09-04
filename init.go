@@ -24,7 +24,7 @@ var scaffold embed.FS
 
 // 与 docker-compose/.env 基线保持一致（发版时同步更新）。
 const (
-	telepostBaseline = "2.10.33"
+	telepostBaseline = "2.10.34"
 	pixivBaseline    = "2.10.27"
 )
 

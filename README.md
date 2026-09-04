@@ -106,8 +106,11 @@ systemd。也可 `--platform fly|compose|systemd` 显式指定。
 - **Fly**：首次使用把模板复制为仓库根目录的 `telesubmit.fly.toml` 并按需修改
   （`cp fly/deploy.fly-multi-bot.toml ./telesubmit.fly.toml`）；之后改它的
   `[build.args]` 镜像版本 → `fly deploy --remote-only`，等健康检查通过后回报。
-- **Compose**：改 `.env` 的 `STACK_IMAGE` / `PIXIVFLOW_VERSION` → `docker compose pull/up`；
-  加 `--build` 走本地构建（用 `TELEPOST_IMAGE` 参数）。
+- **Compose**：compose 后端拆成 `telepost` 与 `pixivflow` 两个独立 service，
+  各自拉取 ghcr 镜像（`.env` 的 `TELEPOST_IMAGE` / `PIXIVFLOW_IMAGE`），共享
+  `./data` 卷、经 HTTP 通信（投递基址 `TELEPOST_API_BASE_URL`，默认
+  `http://telepost:8080`）。升级用 `./deploy tp <版本>` / `./deploy pf <版本>`
+  （或直接改 `.env` 后 `docker compose up -d`）。
 - **systemd**（Linux 裸机，免 Docker）：`deploy --platform systemd` 自动
   clone TelePost → 建 venv + `pip install` → 安装 Node + `npm i -g pixivflow`
   （组合单机省钱形态）→ 引导填写 `BOT1_TOKEN`/`BOT1_CHANNEL_ID` 及是否启用
@@ -155,11 +158,13 @@ docker compose ps
 curl http://127.0.0.1:8080/health
 ```
 
-预构建镜像从 GHCR 拉取（公开）；拉取不可用时可以在仓库内构建：
-`docker compose build stack`。国内构建机可在 `.env` 设置
-`BUILD_HTTP_PROXY` / `BUILD_HTTPS_PROXY`。
-生产环境建议把 `.env` 的 `STACK_IMAGE` 固定到明确 Release 标签；`latest` 适合首次体验，
-但会在重新拉取时升级。升级前先阅读 CHANGELOG 并备份持久卷。
+预构建镜像从 GHCR 拉取（公开）：`TELEPOST_IMAGE`（TelePost）与
+`PIXIVFLOW_IMAGE`（PixivFlow 精简调度镜像）由各自仓库发版构建，本仓库无需
+本地构建镜像（`--profile webhook/proxy` 的 Caddy/Mihomo 除外）。国内构建机
+可在 `.env` 设置 `BUILD_HTTP_PROXY` / `BUILD_HTTPS_PROXY`。
+生产环境建议把 `.env` 的 `TELEPOST_IMAGE` 与 `PIXIVFLOW_IMAGE` 固定到明确
+Release 标签；`latest` 适合首次体验，但会在重新拉取时升级。升级前先阅读
+CHANGELOG 并备份持久卷。
 
 ## 两个 Bot 与审核策略
 
@@ -375,8 +380,8 @@ docker run -d --name pixivflow-webui --restart unless-stopped \
 
 ```text
 deploy.go / go.mod                一键部署工具（Go 单二进制，v3.x）
-docker-compose.yml                主编排：联合容器 + 可选 Caddy/Mihomo
-docker/combined.Dockerfile        Node 24 LTS + TelePost 2.10 + PixivFlow 2.10 轻量运行时
+docker-compose.yml                Compose：telepost + pixivflow 两服务 + 可选 Caddy/Mihomo
+docker/combined.Dockerfile        Fly 合一台的 co-locate 层（TelePost + PixivFlow 单容器）
 data/                             数据库、下载缓存、outbox、实际配置（不入库）
 pixivflow/config/*.example.json   多计划安全模板
 config/telepost-policy.example.json 非敏感频道/审核策略模板
