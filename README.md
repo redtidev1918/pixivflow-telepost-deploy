@@ -43,6 +43,7 @@ supervisor 放在同一容器，适合 512 MiB 小机器，不启动 WebUI。
 | 有域名且 80/443 可入站 | `docker compose --profile webhook up -d` | AUTO 选择 Webhook |
 | 国内网络，需要代理 | `docker compose --profile proxy up -d` | Polling + Mihomo |
 | Fly.io | `deploy`（推荐，见下）或 `fly deploy -c fly/deploy.fly-multi-bot.toml` | Webhook |
+| Linux VPS（systemd，免 Docker） | `deploy --platform systemd` | Polling（源码直跑） |
 
 Polling 与 Webhook 都提供相同的 `http://127.0.0.1:8080/api/botN/v1/*`，因此
 PixivFlow 的投递配置无需随网络模式改变。Webhook 注册失败时 AUTO 会回退 Polling。
@@ -79,13 +80,19 @@ go build -o deploy deploy.go
 ```
 
 平台自动检测（默认 `--platform auto`）：存在 `telesubmit.fly.toml` 且 flyctl 已登录 →
-Fly.io；否则 Docker Compose。也可 `--platform fly|compose` 显式指定。
+Fly.io；否则有 `docker-compose.yml` → Docker Compose；再否则 Linux 上有 systemctl →
+systemd。也可 `--platform fly|compose|systemd` 显式指定。
 
 - **Fly**：首次使用把模板复制为仓库根目录的 `telesubmit.fly.toml` 并按需修改
   （`cp fly/deploy.fly-multi-bot.toml ./telesubmit.fly.toml`）；之后改它的
   `[build.args]` 镜像版本 → `fly deploy --remote-only`，等健康检查通过后回报。
 - **Compose**：改 `.env` 的 `STACK_IMAGE` / `PIXIVFLOW_VERSION` → `docker compose pull/up`；
   加 `--build` 走本地构建（用 `TELEPOST_IMAGE` 参数）。
+- **systemd**（Linux 裸机，免 Docker）：`deploy --platform systemd` 自动
+  clone TelePost → 建 venv + `pip install` → 引导填写 `TOKEN`/`CHANNEL_ID`（写入
+  `/opt/telepost/.env`）→ 写 `/etc/systemd/system/telepost.service` →
+  `systemctl enable --now telepost`。升级用 `tp latest`（git pull + pip + restart）。
+  仅部署 TelePost 本体（PixivFlow 需另用容器/Node 环境）。
 - 常用选项：`--dry-run`（只预览、不改配置）、`--verbose`（回显命令完整输出）、
   `--retries N`（部署失败重试）、`--no-color`。
 - 每次运行写完整日志到 `/tmp/deploy-logs/`（Windows 在 `%TEMP%`），失败时终端会提示日志路径。

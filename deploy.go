@@ -14,18 +14,22 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"strings"
 	"time"
 )
 
 const (
-	appVersion    = "3.1.0"
-	telepostRepo  = "ghcr.io/redtidev1918/telepost"
-	kitRepo       = "ghcr.io/redtidev1918/pixivflow-telepost-deploy"
-	defaultFlyCfg = "telesubmit.fly.toml"
-	defaultEnv    = ".env"
-	healthTimeout = 240 * time.Second
-	healthStep    = 6 * time.Second
+	appVersion        = "3.2.0"
+	telepostRepo      = "ghcr.io/redtidev1918/telepost"
+	kitRepo           = "ghcr.io/redtidev1918/pixivflow-telepost-deploy"
+	defaultFlyCfg     = "telesubmit.fly.toml"
+	defaultEnv        = ".env"
+	healthTimeout     = 240 * time.Second
+	healthStep        = 6 * time.Second
+	telepostGitURL    = "https://github.com/redtidev1918/TelePost.git"
+	systemdInstallDir = "/opt/telepost"
+	systemdUnitPath   = "/etc/systemd/system/telepost.service"
 )
 
 // verbose 开启时，run() 的捕获模式也会把命令输出回显到终端。
@@ -198,6 +202,11 @@ func detectPlatform(platform, config string) string {
 			return "compose"
 		}
 	}
+	// systemd 是 Linux 裸机的兜底：有 systemctl 即视为 systemd（不含 systemd 的
+	// 容器/最小系统仍走 docker/compose）。
+	if runtime.GOOS == "linux" && have("systemctl") {
+		return "systemd"
+	}
 	return "" // 未检测到；调用方决定是报错还是兜底（如 version）
 }
 
@@ -205,10 +214,14 @@ func configFor(platform, config string) string {
 	if config != "" {
 		return config
 	}
-	if platform == "fly" {
+	switch platform {
+	case "fly":
 		return defaultFlyCfg
+	case "systemd":
+		return filepath.Join(systemdInstallDir, ".env")
+	default:
+		return defaultEnv
 	}
-	return defaultEnv
 }
 
 // ---- toml / env 文本读写 ----
@@ -317,6 +330,15 @@ func tpVersion(platform, cfg string) string {
 		}
 		return v
 	}
+	if platform == "systemd" {
+		// 源码部署：读 git describe（无 git 目录则显示 git）
+		if have("git") {
+			if out, err := exec.Command("git", "-C", systemdInstallDir, "describe", "--tags", "--always").Output(); err == nil {
+				return strings.TrimSpace(string(out))
+			}
+		}
+		return "git"
+	}
 	v := envGet(cfg, "STACK_IMAGE")
 	if v == "" {
 		v = composeDefaultArg("STACK_IMAGE")
@@ -336,6 +358,9 @@ func pfVersion(platform, cfg string) string {
 			return v
 		}
 		return "?"
+	}
+	if platform == "systemd" {
+		return "n/a" // 第一版 systemd 后端只部署 TelePost，不含 PixivFlow
 	}
 	if v := envGet(cfg, "PIXIVFLOW_VERSION"); v != "" {
 		return v
@@ -375,6 +400,14 @@ func fetchHealth(url string, timeout time.Duration) map[string]any {
 func cmdDoctor(platform, cfg string) {
 	stepf("1/3", "平台")
 	okf("使用平台：%s", platform)
+
+	if platform == "systemd" {
+		systemdDoctor()
+		stepf("3/3", "当前版本")
+		okf("TelePost : %s", tpVersion(platform, cfg))
+		okf("PixivFlow: %s", pfVersion(platform, cfg))
+		return
+	}
 
 	stepf("2/3", "依赖与环境")
 	problems := 0
@@ -456,6 +489,9 @@ func cmdStatus(platform, cfg string) {
 		}
 		infof("app = %s", tomlGet(cfg, "app"))
 		run([]string{fb, "status", "-a", tomlGet(cfg, "app")}, true)
+	} else if platform == "systemd" {
+		systemdStatus()
+		return
 	} else {
 		run([]string{"docker", "compose", "ps"}, true)
 	}
@@ -472,6 +508,10 @@ func cmdStatus(platform, cfg string) {
 func cmdLogs(platform, cfg string, n int) {
 	if n <= 0 {
 		n = 100
+	}
+	if platform == "systemd" {
+		systemdLogs(n)
+		return
 	}
 	var out []byte
 	if platform == "fly" {
@@ -495,6 +535,15 @@ func cmdLogs(platform, cfg string, n int) {
 func cmdUpgrade(platform, cfg, kind, target string, dryRun bool) {
 	if target == "" {
 		die("缺少版本参数（用法：deploy %s <版本|latest>）", kind)
+	}
+	if platform == "systemd" {
+		cur := tpVersion(platform, cfg)
+		if dryRun {
+			infof("[dry-run] 将 %s 从 %s 升级到 %s（git pull + pip + restart）", kind, cur, target)
+			return
+		}
+		systemdUpgrade(kind, target, dryRun)
+		return
 	}
 	cur := tpVersion(platform, cfg)
 	if kind == "pf" {
@@ -523,6 +572,182 @@ func cmdUpgrade(platform, cfg, kind, target string, dryRun bool) {
 	}
 }
 
+// ---- systemd 后端（Linux 裸机直跑 TelePost）----
+
+const systemdUnitTemplate = `[Unit]
+Description=TelePost Telegram Bot
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=%s
+EnvironmentFile=%s
+ExecStart=%s/.venv/bin/python run.py
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+`
+
+func sudoCmd() []string {
+	if os.Geteuid() == 0 {
+		return nil
+	}
+	return []string{"sudo"}
+}
+
+func systemdRun(args []string, echo bool) int {
+	return run(append(sudoCmd(), args...), echo)
+}
+
+func prompt(label string) string {
+	fmt.Printf("  %s: ", label)
+	sc := bufio.NewScanner(os.Stdin)
+	if sc.Scan() {
+		return strings.TrimSpace(sc.Text())
+	}
+	return ""
+}
+
+func systemdEnsureEnv(cfg string, dryRun bool) {
+	// 引导填写最小配置 TOKEN / CHANNEL_ID（已存在则跳过）
+	if envGet(cfg, "TOKEN") != "" && envGet(cfg, "CHANNEL_ID") != "" {
+		return
+	}
+	if dryRun {
+		infof("[dry-run] 将引导填写 %s 的 TOKEN / CHANNEL_ID", cfg)
+		return
+	}
+	infof("首次部署需要填写最小配置（写入 %s）：", cfg)
+	token := envGet(cfg, "TOKEN")
+	if token == "" {
+		token = prompt("TOKEN（BotFather 获取）")
+	}
+	channel := envGet(cfg, "CHANNEL_ID")
+	if channel == "" {
+		channel = prompt("CHANNEL_ID（@频道 或 -100 数字 ID）")
+	}
+	if token == "" || channel == "" {
+		die("TOKEN 与 CHANNEL_ID 均为必填")
+	}
+	envSet(cfg, "TOKEN", token)
+	envSet(cfg, "CHANNEL_ID", channel)
+	if envGet(cfg, "RUN_MODE") == "" {
+		envSet(cfg, "RUN_MODE", "POLLING")
+	}
+}
+
+func systemdDoctor() {
+	problems := 0
+	for _, exe := range []string{"systemctl", "python3", "git"} {
+		if have(exe) {
+			okf("%s 可用", exe)
+		} else {
+			failf("缺 %s", exe)
+			problems++
+		}
+	}
+	if os.Geteuid() != 0 && !have("sudo") {
+		failf("非 root 且无 sudo（写 systemd unit 需要权限）")
+		problems++
+	} else {
+		okf("具备写入 systemd 的权限")
+	}
+	if _, err := os.Stat(systemdInstallDir); err == nil {
+		okf("%s 已存在", systemdInstallDir)
+	} else {
+		infof("%s 不存在（首次部署将 clone）", systemdInstallDir)
+	}
+	if problems > 0 {
+		die("自检存在 %d 个未满足项", problems)
+	}
+	okf("systemd 自检通过")
+}
+
+func systemdInstall(cfg string, dryRun bool) {
+	stepf("1/4", "获取 TelePost 源码")
+	if _, err := os.Stat(systemdInstallDir); err == nil {
+		infof("%s 已存在，git pull 更新", systemdInstallDir)
+		if !dryRun {
+			systemdRun([]string{"git", "-C", systemdInstallDir, "pull", "--ff-only"}, true)
+		}
+	} else {
+		infof("git clone 到 %s", systemdInstallDir)
+		if !dryRun {
+			systemdRun([]string{"git", "clone", "--depth", "1", telepostGitURL, systemdInstallDir}, true)
+		}
+	}
+
+	stepf("2/4", "安装 Python 依赖（venv + pip）")
+	if !dryRun {
+		if _, err := os.Stat(filepath.Join(systemdInstallDir, ".venv")); err != nil {
+			if systemdRun([]string{"python3", "-m", "venv", filepath.Join(systemdInstallDir, ".venv")}, true) != 0 {
+				infof("venv 创建失败，尝试安装 python3-venv …")
+				systemdRun([]string{"apt-get", "install", "-y", "python3-venv"}, true)
+				if systemdRun([]string{"python3", "-m", "venv", filepath.Join(systemdInstallDir, ".venv")}, true) != 0 {
+					die("无法创建 venv，请手动安装 python3-venv")
+				}
+			}
+		}
+		systemdRun([]string{filepath.Join(systemdInstallDir, ".venv", "bin", "pip"), "install", "-r",
+			filepath.Join(systemdInstallDir, "requirements.txt")}, true)
+	} else {
+		infof("[dry-run] python3 -m venv + pip install -r requirements.txt")
+	}
+
+	stepf("3/4", "配置")
+	systemdEnsureEnv(cfg, dryRun)
+	unit := fmt.Sprintf(systemdUnitTemplate, systemdInstallDir, cfg, systemdInstallDir)
+	if !dryRun {
+		writeLines(systemdUnitPath, strings.Split(strings.TrimRight(unit, "\n"), "\n"))
+		infof("已写入 %s", systemdUnitPath)
+	} else {
+		infof("[dry-run] 将写入 %s", systemdUnitPath)
+	}
+
+	stepf("4/4", "启动服务")
+	if !dryRun {
+		systemdRun([]string{"systemctl", "daemon-reload"}, true)
+		systemdRun([]string{"systemctl", "enable", "--now", "telepost"}, true)
+	} else {
+		infof("[dry-run] systemctl daemon-reload && enable --now telepost")
+	}
+}
+
+func systemdUpgrade(kind, target string, dryRun bool) {
+	// TelePost 源码部署：tp 升级 = git pull + pip install + restart；pf 无意义
+	if kind == "pf" {
+		die("systemd 后端只部署 TelePost，暂不支持升级 PixivFlow")
+	}
+	if dryRun {
+		infof("[dry-run] git pull + pip install + systemctl restart telepost")
+		return
+	}
+	systemdRun([]string{"git", "-C", systemdInstallDir, "pull", "--ff-only"}, true)
+	systemdRun([]string{filepath.Join(systemdInstallDir, ".venv", "bin", "pip"), "install", "-r",
+		filepath.Join(systemdInstallDir, "requirements.txt")}, true)
+	systemdRun([]string{"systemctl", "restart", "telepost"}, true)
+}
+
+func systemdStatus() {
+	systemdRun([]string{"systemctl", "status", "telepost", "--no-pager"}, true)
+	fmt.Println()
+	infof("健康端点：")
+	if h := fetchHealth("http://127.0.0.1:8080/health", 15*time.Second); h != nil {
+		b, _ := json.MarshalIndent(h, "", "  ")
+		fmt.Println(string(b))
+	} else {
+		warnf("http://127.0.0.1:8080/health 不可达（服务可能未启动或端口不同）")
+	}
+}
+
+func systemdLogs(n int) {
+	args := []string{"journalctl", "-u", "telepost", "-n", fmt.Sprint(n), "--no-pager"}
+	run(args, true)
+}
+
 func showHealth(url string) {
 	if h := fetchHealth(url, 10*time.Second); h != nil {
 		if s, ok := h["status"].(string); ok {
@@ -535,6 +760,25 @@ func showHealth(url string) {
 }
 
 func cmdDeploy(platform, cfg string, dryRun, build bool, retries int) {
+	if platform == "systemd" {
+		systemdInstall(cfg, dryRun)
+		// 健康检查
+		stepf("健康检查", "http://127.0.0.1:8080/health")
+		if dryRun {
+			return
+		}
+		deadline := time.Now().Add(healthTimeout)
+		for time.Now().Before(deadline) {
+			if fetchHealth("http://127.0.0.1:8080/health", 10*time.Second) != nil {
+				okf("健康检查通过")
+				return
+			}
+			time.Sleep(healthStep)
+		}
+		die("健康检查超时（%v）。查看 journalctl -u telepost", healthTimeout)
+		return
+	}
+
 	stepf("1/3", "部署前检查")
 	if platform == "fly" {
 		fb := flyBin()
@@ -626,7 +870,7 @@ func usage() {
 可在任意目录运行：自动定位仓库配置（当前目录 → 上级目录 → 可执行文件所在目录）。
 
 用法：
-  deploy [--platform fly|compose|auto] [全局选项] <子命令> [参数]
+  deploy [--platform fly|compose|systemd|auto] [全局选项] <子命令> [参数]
 
 子命令：
   deploy            部署当前配置（保持现有版本）
@@ -638,7 +882,8 @@ func usage() {
   version           显示工具与当前配置版本
 
 全局选项：
-  --platform fly|compose|auto  部署平台（默认 auto 自动检测）
+  --platform fly|compose|systemd|auto
+                                部署平台（默认 auto 自动检测）
   --config FILE                配置文件（fly: toml；compose: env）
   --dry-run                    只预览、不改配置
   --verbose                    回显命令完整输出
@@ -736,7 +981,7 @@ func main() {
 		if o.cmd == "version" {
 			platform = "fly" // version 仅展示版本，任意目录可用
 		} else {
-			die("无法自动检测部署平台，用 --platform fly|compose 指定")
+			die("无法自动检测部署平台，用 --platform fly|compose|systemd 指定")
 		}
 	}
 	cfg := configFor(platform, o.config)
