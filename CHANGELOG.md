@@ -9,6 +9,13 @@
 - **分平台发版**：新增 `.github/workflows/deploy-release.yml`——推送 `deploy-v*`
   标签时交叉编译 linux/darwin/windows × amd64/arm64（CGO 关闭、strip），打包
   tar.gz/zip 并附加到对应 GitHub Release。
+- **deploy 工具 v3.1.0**：可在任意目录运行（当前目录 → 上级目录 → 可执行文件
+  目录自动定位仓库配置）；`run()` 启动失败不再可能空指针；`--verbose` 现在会把
+  捕获模式的命令输出回显到终端；fly 平台缺 flyctl 时 status/logs 给出明确报错。
+- **镜像基线**：TelePost 默认镜像从 2.10.32 对齐到 2.10.33（`.env.example`、
+  `docker-compose.yml`、`docker/combined.Dockerfile` 同步）。
+- README：deploy 用法示例改用 `latest`、Fly 首次使用配置说明、Windows 手动初始化
+  步骤、目录清单与 Releases 链接；「快速开始」明确 bootstrap/validate 需 bash+python3。
 
 ## [1.8.28] - 2026-09-03
 
