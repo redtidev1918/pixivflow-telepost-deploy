@@ -11,6 +11,8 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"sort"
+	"strconv"
 	"strings"
 )
 
@@ -24,8 +26,8 @@ var scaffold embed.FS
 
 // 与 docker-compose/.env 基线保持一致（发版时同步更新）。
 const (
-	telepostBaseline = "2.10.34"
-	pixivBaseline    = "2.10.27"
+	telepostBaseline = "2.10.38"
+	pixivBaseline    = "2.10.28"
 )
 
 // 向导场景（answers 里的 SCENARIO 键；缺省 = polling）。
@@ -147,17 +149,28 @@ func wizard() map[string]string {
 			break // 中途 EOF（如 Ctrl-D）：用已收集的回答继续
 		}
 	}
-	// 可选第二个 Bot
-	v, err := read("是否启用第二个 Bot？(y/N)")
-	if err == nil && strings.EqualFold(v, "y") {
-		for _, k := range []string{"BOT2_TOKEN", "BOT2_CHANNEL_ID", "BOT2_OWNER_ID"} {
-			if x, err := read(k); err == nil && x != "" {
-				answers[k] = x
+	// Bot 数量（默认 2；2..N 依次询问）
+	botCount := 2
+	if v, err := read("几个 Bot？(1-9，默认 2)"); err == nil && v != "" {
+		if n, perr := strconv.Atoi(strings.TrimSpace(v)); perr == nil && n >= 1 && n <= 9 {
+			botCount = n
+		}
+	}
+	for b := 2; b <= botCount; b++ {
+		prefix := fmt.Sprintf("Bot %d", b)
+		keys := []struct{ key, prom string }{
+			{fmt.Sprintf("BOT%d_TOKEN", b), prefix + " Token（@BotFather 创建）"},
+			{fmt.Sprintf("BOT%d_CHANNEL_ID", b), prefix + " 频道 ID（@yourchannel 或 -100 数字）"},
+			{fmt.Sprintf("BOT%d_OWNER_ID", b), prefix + " 管理员 Telegram 用户 ID（数字）"},
+		}
+		for _, k := range keys {
+			if x, err := read(k.prom); err == nil && x != "" {
+				answers[k.key] = x
 			}
 		}
 	}
 	// 可选 PixivFlow
-	if v, err = read("是否启用 PixivFlow 自动投稿？(Y/n)"); err == nil && !strings.EqualFold(v, "n") {
+	if v, err := read("是否启用 PixivFlow 自动投稿？(Y/n)"); err == nil && !strings.EqualFold(v, "n") {
 		if x, err := read("PIXIV_REFRESH_TOKEN（Pixiv 登录令牌，可先留空）"); err == nil && x != "" {
 			answers["PIXIV_REFRESH_TOKEN"] = x
 		}
@@ -182,6 +195,9 @@ func wizard() map[string]string {
 			}
 		case "4":
 			answers["SCENARIO"] = scenarioFly
+			if v, err := read("启用 Fly auto-stop 省钱？(y/N，间断高峰画像推荐)"); err == nil && strings.EqualFold(v, "y") {
+				answers["AUTOSTOP"] = "true"
+			}
 		}
 	}
 	return answers
@@ -231,15 +247,28 @@ func fillEnv(tpl []byte, answers map[string]string) []byte {
 		return tpl
 	}
 	lines := strings.Split(string(tpl), "\n")
+	seen := map[string]bool{}
 	for i, line := range lines {
 		eq := strings.IndexByte(line, '=')
 		if eq <= 0 {
 			continue
 		}
 		key := strings.TrimSpace(line[:eq])
+		seen[key] = true
 		if val, ok := answers[key]; ok {
 			lines[i] = key + "=" + val
 		}
+	}
+	// 追加模板里没有的多 bot 键（BOT3_*、BOT4_*…），让向导收集的第 3 个及以后的 bot 生效。
+	var extra []string
+	for k := range answers {
+		if !seen[k] && strings.HasPrefix(k, "BOT") {
+			extra = append(extra, k)
+		}
+	}
+	sort.Strings(extra)
+	for _, k := range extra {
+		lines = append(lines, k+"="+answers[k])
 	}
 	return []byte(strings.Join(lines, "\n"))
 }
@@ -258,13 +287,25 @@ func writeFlyTpl(dir string, answers map[string]string) error {
 			lines[i] = "  TELEPOST_IMAGE = \"" + telepostRepo + ":" + telepostBaseline + "\""
 		case strings.HasPrefix(tr, "PIXIVFLOW_VERSION"):
 			lines[i] = "  PIXIVFLOW_VERSION = \"" + pixivBaseline + "\""
+		case strings.HasPrefix(tr, "auto_stop_machines"):
+			if answers["AUTOSTOP"] == "true" {
+				lines[i] = "  auto_stop_machines = \"stop\""
+			}
+		case strings.HasPrefix(tr, "min_machines_running"):
+			if answers["AUTOSTOP"] == "true" {
+				lines[i] = "  min_machines_running = 0"
+			}
 		}
 	}
 	dst := filepath.Join(dir, "telesubmit.fly.toml")
 	if err := os.WriteFile(dst, []byte(strings.Join(lines, "\n")), 0o644); err != nil {
 		return err
 	}
-	infof("已生成 telesubmit.fly.toml（镜像基线 TelePost %s + PixivFlow %s；请修改 app 名）",
-		telepostBaseline, pixivBaseline)
+	autoNote := ""
+	if answers["AUTOSTOP"] == "true" {
+		autoNote = "；已启用 auto-stop（stop 释放 RAM 停止计费）"
+	}
+	infof("已生成 telesubmit.fly.toml（镜像基线 TelePost %s + PixivFlow %s%s；请修改 app 名）",
+		telepostBaseline, pixivBaseline, autoNote)
 	return nil
 }
