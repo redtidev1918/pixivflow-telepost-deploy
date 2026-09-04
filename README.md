@@ -6,8 +6,9 @@
 
 一个面向实际运行的 Pixiv 自动投稿部署套件：PixivFlow 负责按主题/榜单抓取作品，
 TelePost 负责投稿审核与频道发布。同一份配置可用于海外 VPS、国内服务器、无公网
-NAT 主机、Mac/Linux 本机和 Fly.io。默认镜像把 PixivFlow 调度器与 TelePost 多 Bot
-supervisor 放在同一容器，适合 512 MiB 小机器，不启动 WebUI。
+NAT 主机、Mac/Linux 本机和 Fly.io。默认（Compose）以两个独立容器运行：TelePost
+多 Bot supervisor 与 PixivFlow 调度器各自拉取 ghcr 镜像、经 HTTP 通信，适合
+512 MiB 小机器，不启动 WebUI；Fly 合一台可选走组合镜像（combined）。
 
 ## 特性
 
