@@ -939,8 +939,8 @@ func usage() {
 子命令：
   init [目录]        全新部署：从内嵌模板生成目录并引导填写 Bot 信息（默认当前目录）
   deploy            部署当前配置（保持现有版本）
-  tp <版本|latest>  升级并部署（fly: TelePost 镜像 tag；compose: 部署套件 tag）
-  pf <版本>         升级 PixivFlow 并部署
+  tp <版本|latest>  升级 TelePost 镜像 tag 并部署
+  pf <版本>         升级 PixivFlow 镜像 tag（或 npm 包）并部署
   status            状态 / 健康
   logs [行数]       最近日志
   doctor            环境自检
