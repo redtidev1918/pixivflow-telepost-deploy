@@ -102,10 +102,12 @@ systemd。也可 `--platform fly|compose|systemd` 显式指定。
 - **Compose**：改 `.env` 的 `STACK_IMAGE` / `PIXIVFLOW_VERSION` → `docker compose pull/up`；
   加 `--build` 走本地构建（用 `TELEPOST_IMAGE` 参数）。
 - **systemd**（Linux 裸机，免 Docker）：`deploy --platform systemd` 自动
-  clone TelePost → 建 venv + `pip install` → 引导填写 `TOKEN`/`CHANNEL_ID`（写入
-  `/opt/telepost/.env`）→ 写 `/etc/systemd/system/telepost.service` →
-  `systemctl enable --now telepost`。升级用 `tp latest`（git pull + pip + restart）。
-  仅部署 TelePost 本体（PixivFlow 需另用容器/Node 环境）。
+  clone TelePost → 建 venv + `pip install` → 安装 Node + `npm i -g pixivflow`
+  （组合单机省钱形态）→ 引导填写 `BOT1_TOKEN`/`BOT1_CHANNEL_ID` 及是否启用
+  PixivFlow（写入 `/opt/telepost/.env`）→ 写 `/etc/systemd/system/telepost.service`
+  → `systemctl enable --now telepost`。TelePost 的 supervisor 同机托管 bot 与
+  PixivFlow 两个进程（复刻 Fly 上的省钱组合）。升级 `tp latest`（git pull + pip +
+  restart）、`pf latest`（npm 重装 + restart）。
 - 常用选项：`--dry-run`（只预览、不改配置）、`--verbose`（回显命令完整输出）、
   `--retries N`（部署失败重试）、`--no-color`。
 - 每次运行写完整日志到 `/tmp/deploy-logs/`（Windows 在 `%TEMP%`），失败时终端会提示日志路径。

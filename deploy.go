@@ -20,7 +20,7 @@ import (
 )
 
 const (
-	appVersion        = "3.3.0"
+	appVersion        = "3.4.0"
 	telepostRepo      = "ghcr.io/redtidev1918/telepost"
 	kitRepo           = "ghcr.io/redtidev1918/pixivflow-telepost-deploy"
 	defaultFlyCfg     = "telesubmit.fly.toml"
@@ -360,7 +360,7 @@ func pfVersion(platform, cfg string) string {
 		return "?"
 	}
 	if platform == "systemd" {
-		return "n/a" // 第一版 systemd 后端只部署 TelePost，不含 PixivFlow
+		return pixivflowVersion() // 全局 npm 包的 pixivflow 版本
 	}
 	if v := envGet(cfg, "PIXIVFLOW_VERSION"); v != "" {
 		return v
@@ -369,6 +369,16 @@ func pfVersion(platform, cfg string) string {
 		return v
 	}
 	return "?"
+}
+
+// pixivflowVersion 返回全局 pixivflow CLI 的版本；未安装则返回 "未安装"。
+func pixivflowVersion() string {
+	if have("pixivflow") {
+		if out, err := exec.Command("pixivflow", "--version").Output(); err == nil {
+			return strings.TrimSpace(string(out))
+		}
+	}
+	return "未安装"
 }
 
 // ---- 健康检查 ----
@@ -676,7 +686,7 @@ func systemdDoctor() {
 }
 
 func systemdInstall(cfg string, dryRun bool) {
-	stepf("1/4", "获取 TelePost 源码")
+	stepf("1/5", "获取 TelePost 源码")
 	if _, err := os.Stat(systemdInstallDir); err == nil {
 		infof("%s 已存在，git pull 更新", systemdInstallDir)
 		if !dryRun {
@@ -689,7 +699,7 @@ func systemdInstall(cfg string, dryRun bool) {
 		}
 	}
 
-	stepf("2/4", "安装 Python 依赖（venv + pip）")
+	stepf("2/5", "安装 Python 依赖（venv + pip）")
 	if !dryRun {
 		if _, err := os.Stat(filepath.Join(systemdInstallDir, ".venv")); err != nil {
 			if systemdRun([]string{"python3", "-m", "venv", filepath.Join(systemdInstallDir, ".venv")}, true) != 0 {
@@ -706,7 +716,10 @@ func systemdInstall(cfg string, dryRun bool) {
 		infof("[dry-run] python3 -m venv + pip install -r requirements.txt")
 	}
 
-	stepf("3/4", "配置")
+	stepf("3/5", "安装 PixivFlow（Node + npm，组合单机省钱形态）")
+	systemdInstallPixivflow(cfg, dryRun)
+
+	stepf("4/5", "配置")
 	systemdEnsureEnv(cfg, dryRun)
 	unit := fmt.Sprintf(systemdUnitTemplate, systemdInstallDir, cfg, systemdInstallDir)
 	if !dryRun {
@@ -716,7 +729,7 @@ func systemdInstall(cfg string, dryRun bool) {
 		infof("[dry-run] 将写入 %s", systemdUnitPath)
 	}
 
-	stepf("4/4", "启动服务")
+	stepf("5/5", "启动服务")
 	if !dryRun {
 		systemdRun([]string{"systemctl", "daemon-reload"}, true)
 		systemdRun([]string{"systemctl", "enable", "--now", "telepost"}, true)
@@ -725,10 +738,50 @@ func systemdInstall(cfg string, dryRun bool) {
 	}
 }
 
+// systemdInstallPixivflow 安装 Node 运行时与 pixivflow CLI（可选，缺 Node 22+ 时提示）。
+func systemdInstallPixivflow(cfg string, dryRun bool) {
+	enabled := envGet(cfg, "PIXIVFLOW_ENABLED") == "true"
+	if !enabled && !dryRun {
+		// 未启用自动投稿时跳过，但仍检查 node 供后续 pf 升级使用
+		if !have("node") {
+			infof("未启用 PixivFlow 且无 node，跳过（如需自动投稿，先装 Node 22+ 再 deploy）")
+		}
+		return
+	}
+	if dryRun {
+		infof("[dry-run] 检测 node>=22 → npm install -g pixivflow@latest")
+		return
+	}
+	if !have("node") || !have("npm") {
+		die("缺少 node/npm：PixivFlow 需要 Node 22+。建议：\n" +
+			"  curl -fsSL https://deb.nodesource.com/setup_22.x | sudo bash - && sudo apt-get install -y nodejs\n" +
+			"装好后重新运行 deploy")
+	}
+	// 版本检查：PixivFlow 需要 Node 22.12+
+	if out, err := exec.Command("node", "--version").Output(); err == nil {
+		v := strings.TrimSpace(strings.TrimPrefix(string(out), "v"))
+		if major := v; major != "" && major < "22" {
+			warnf("node 版本 %s 偏低，PixivFlow 建议 Node 22.12+", v)
+		}
+	}
+	if systemdRun([]string{"npm", "install", "-g", "pixivflow@latest"}, true) != 0 {
+		die("npm install -g pixivflow 失败")
+	}
+	okf("PixivFlow CLI 已安装")
+}
+
 func systemdUpgrade(kind, target string, dryRun bool) {
-	// TelePost 源码部署：tp 升级 = git pull + pip install + restart；pf 无意义
 	if kind == "pf" {
-		die("systemd 后端只部署 TelePost，暂不支持升级 PixivFlow")
+		if dryRun {
+			infof("[dry-run] npm install -g pixivflow@latest + systemctl restart telepost")
+			return
+		}
+		if !have("npm") {
+			die("缺少 npm：先安装 Node 22+ 再升级 PixivFlow")
+		}
+		systemdRun([]string{"npm", "install", "-g", "pixivflow@latest"}, true)
+		systemdRun([]string{"systemctl", "restart", "telepost"}, true)
+		return
 	}
 	if dryRun {
 		infof("[dry-run] git pull + pip install + systemctl restart telepost")
@@ -882,7 +935,6 @@ func usage() {
   deploy [--platform fly|compose|systemd|auto] [全局选项] <子命令> [参数]
 
 子命令：
-  init [目录]        全新部署：从内嵌模板生成目录并引导填写 Bot 信息（默认当前目录）
   deploy            部署当前配置（保持现有版本）
   tp <版本|latest>  升级并部署（fly: TelePost 镜像 tag；compose: 部署套件 tag）
   pf <版本>         升级 PixivFlow 并部署
@@ -900,7 +952,6 @@ func usage() {
   --no-color                   禁用彩色
   --retries N                  部署失败重试次数（默认 2）
   --build                      compose：本地构建
-  --force                      init：目标目录已有配置时强制重新生成
 `)
 	os.Exit(0)
 }
@@ -914,7 +965,6 @@ type opts struct {
 	noColor  bool
 	retries  int
 	build    bool
-	force    bool
 	cmd      string
 	arg      string
 }
@@ -942,8 +992,6 @@ func parseArgs(args []string) opts {
 			o.retries, _ = atoi(args[i])
 		case a == "--build":
 			o.build = true
-		case a == "--force":
-			o.force = true
 		case a == "-h" || a == "--help" || a == "help":
 			usage()
 		case strings.HasPrefix(a, "-"):
@@ -985,12 +1033,6 @@ func main() {
 	if o.cmd == "" {
 		usage()
 	}
-	// init 不需要任何现成配置/平台：在任何地方就地生成全新部署目录。
-	if o.cmd == "init" {
-		cmdInit(o.arg, o.force)
-		return
-	}
-
 	// 允许在任意目录运行：cwd 不是仓库时回退到可执行文件所在目录。
 	enterRepoDir()
 
