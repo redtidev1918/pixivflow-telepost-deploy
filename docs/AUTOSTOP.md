@@ -88,17 +88,52 @@ PixivFlow 的 outbox 也会重试。代价只是「第一次慢几秒」，不�
 
 ```toml
 [http_service]
-  auto_stop_machines = true     # 无流量时停机、释放 RAM 停止计费
+  auto_stop_machines = "stop"   # 无流量时 stop：释放 RAM、停止计费（睡多久省多久）
   auto_start_machines = true    # 来流量时 proxy 自动拉起
   min_machines_running = 0      # 允许完全停机（0 台常驻）
 ```
 
+> `auto_stop_machines` 取值：`"stop"`（释放 RAM、停止计费）或 `"suspend"`
+> （保留内存、继续计费，只快一点唤醒）。**省钱必须用 `"stop"`**；`true` 等价于
+> `"stop"`。这是整个方案成立的前提。
+
 配合 **Webhook 模式**（`RUN_MODE=WEBHOOK`）使用：webhook 请求本身就是唤醒信号，
 Polling 模式没有入站请求可触发 proxy 唤醒，不适合 auto-stop。
 
-> 若拆成两台（拓扑 A），PixivFlow 机器由「定时投递请求」唤醒（无需公网入口，
-> 可以不配 `http_service`，只靠 `fly machine` 常驻/按 cron 启停），TelePost 机器
-> 由「webhook 入站」唤醒。
+## 外部闹钟：PixivFlow 的 cron 不会自己醒
+
+**这是单机 auto-stop 最容易漏掉的坑**：PixivFlow 的调度 cron 活在进程里，机器一睡，
+cron 也跟着死——到 10:00 没有任何东西会叫醒它，定时投递就永远错过。
+
+所以单机 auto-stop 必须配一个**外部闹钟**：用一个免费的 GitHub Actions `schedule`
+在投递前几分钟 ping `/health` 唤醒机器，并**循环 ping 约 30 分钟**覆盖投递窗口
+（投递走 `127.0.0.1` 环回、不经 proxy，不会重置 auto-stop 计时，必须靠外部 ping
+续命）。
+
+本仓库已提供 `.github/workflows/wakeup.yml`：
+
+```yaml
+on:
+  schedule:
+    - cron: "58 1,9 * * *"   # UTC = 09:58 / 17:58 CST，比 10:00/18:00 投递提前 2 分钟
+jobs:
+  keep-awake:
+    runs-on: ubuntu-latest
+    steps:
+      - run: |
+          for i in $(seq 1 30); do
+            curl -sf --max-time 60 https://<your-app>.fly.dev/health || true
+            sleep 60
+          done
+```
+
+- 09:58 被 ping 醒 → 10:00 前就绪 → PixivFlow 正常点火；
+- 循环 ping 让机器醒到投递窗口结束，之后无流量自然睡回；
+- 万一 GitHub Actions 抖动晚到几分钟 → PixivFlow 的漏跑补跑（catch-up）会在下一次
+  唤醒时补跑错过的计划。
+
+> 若拆成两台（拓扑 A），PixivFlow 机器同样需要外部闹钟（它仍是"主动外呼方"，
+> 没有入站能自然唤醒它）；TelePost 机器由「webhook 入站」唤醒。
 
 ---
 
@@ -107,7 +142,8 @@ Polling 模式没有入站请求可触发 proxy 唤醒，不适合 auto-stop。
 - [ ] 流量确属「间断高峰」画像（大部分时间没人）？
 - [ ] 能接受第一条消息 ~5–15s 冷启动？
 - [ ] `RUN_MODE=WEBHOOK`（webhook 是唤醒信号）？
-- [ ] `auto_stop_machines=true` + `min_machines_running=0`？
+- [ ] `auto_stop_machines="stop"` + `min_machines_running=0`？
+- [ ] 已配外部闹钟（GitHub Actions 定时 ping，覆盖 PixivFlow 投递窗口）？
 - [ ] 拆两台时，PixivFlow 投递 URL 已切 Fly 私网、卷已拆？
 
-满足前三条再上 auto-stop；否则保持常驻更稳妥。
+满足前五条再上 auto-stop；否则保持常驻更稳妥。
