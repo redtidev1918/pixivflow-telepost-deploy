@@ -107,6 +107,8 @@ systemd。也可 `--platform fly|compose|systemd` 显式指定。
 - **Fly**：首次使用把模板复制为仓库根目录的 `telesubmit.fly.toml` 并按需修改
   （`cp fly/deploy.fly-multi-bot.toml ./telesubmit.fly.toml`）；之后改它的
   `[build.args]` 镜像版本 → `fly deploy --remote-only`，等健康检查通过后回报。
+  流量是「间断高峰」时可开 auto-stop 省账单（机制与 256 MiB 拆分见
+  [docs/AUTOSTOP.md](docs/AUTOSTOP.md)）。
 - **Compose**：compose 后端拆成 `telepost` 与 `pixivflow` 两个独立 service，
   各自拉取 ghcr 镜像（`.env` 的 `TELEPOST_IMAGE` / `PIXIVFLOW_IMAGE`），共享
   `./data` 卷、经 HTTP 通信（投递基址 `TELEPOST_API_BASE_URL`，默认
@@ -400,7 +402,7 @@ data/                             数据库、下载缓存、outbox、实际配�
 pixivflow/config/*.example.json   多计划安全模板
 config/telepost-policy.example.json 非敏感频道/审核策略模板
 scripts/                          初始化、校验、本机/SSH 原子更新
-docs/                             架构、场景、性能、Webhook/代理等说明
+docs/                             架构、场景、性能、Webhook/代理、auto-stop 省钱等说明
 fly/                              Fly.io 512 MiB 配置与更新脚本
 proxy/                            可选 Mihomo 镜像
 .github/workflows/deploy-release.yml 打 deploy-v* 标签时产出各平台二进制并附到 Release
