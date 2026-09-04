@@ -954,6 +954,11 @@ func usage() {
   --retries N                  部署失败重试次数（默认 2）
   --build                      compose：本地构建
   --force                      init：目标目录已有配置时强制重新生成
+
+说明：
+  --platform systemd 面向“无 Docker 的 Linux VPS”裸机直跑：首次 deploy 自动
+  clone TelePost 源码到 /opt/telepost、创建 venv、安装依赖与 telepost.service
+  （写 /etc/systemd 与 /opt 需要 root/sudo，非 root 自动用 sudo）。
 `)
 	os.Exit(0)
 }
