@@ -2,6 +2,24 @@
 
 本仓库只负责组合、配置与运维，不复制 PixivFlow 或 TelePost 的业务实现。
 
+## 核心运行时 vs 平台优化
+
+**Core Runtime 是项目的核心，与任何云平台/外部服务无关**：
+
+```text
+docker compose up -d   # 之后就能完整工作
+│
+├── TelePost   常驻：用户投稿 / 审核 / 发布 / 接收 PixivFlow 投递
+└── PixivFlow  常驻：自己维护 scheduler / cron，到点自动下载并投递
+```
+
+- 默认**常驻（always-on）**，假定宿主环境能长期运行进程。
+- 不依赖 GitHub Actions、easycron、Cloudflare 或任何外部定时/唤醒服务。
+- 「宿主平台把整台机器关掉后如何自己醒来」**不属于应用职责**，那是部署平台能力。
+
+**Platform Optimization（可选，不进 Core）**：Fly auto-stop、拆机部署、6PN 私网、
+外部唤醒等，只放在 `docs/AUTOSTOP.md` 等高级文档里，默认不开。
+
 ```mermaid
 flowchart LR
     P[Pixiv API] -->|HTTPS| F[PixivFlow scheduler]
@@ -35,6 +53,11 @@ API 临时文件，只保存 `file_id` 与审核状态，因此待审核积压�
 
 任何清理工具都不得先删除仍被 outbox 引用的文件。升级或迁移前应先备份整个持久卷；
 SQLite WAL 活跃时应使用卷快照，或连同 `-wal`/`-shm` 一起备份。
+
+**catch-up ≠ wake-up**：PixivFlow 的 catch-up 是**应用级容错**——程序因重启、崩溃、
+宿主机维护、网络故障、downtime 错过计划任务后，恢复运行时判断漏跑并补执行。它解决
+「已经启动之后补任务」；而 wake-up 解决「让停止的基础设施重新启动」，那是部署平台
+的事，不属于 Core Runtime。两者不要混淆。
 
 ## 配置更新
 
