@@ -1,16 +1,22 @@
 # Changelog
 
-## [Unreleased]
+## [1.8.33] - 2026-09-04
 
-- **版本基线**：TelePost **2.10.38**（重抓/换一张只重跑单个 target：投稿透传
-  `target_id`）+ PixivFlow **2.10.28**（`run-once --target <id>`、delivery 变量
-  `{{targetId}}`）。生产实盘 config 已同步 `target_id: {{targetId}}`。
-- **文档：Fly 自动休眠（auto-stop）省钱**：新增 `docs/AUTOSTOP.md`，讲精确
-  stop（释放 RAM 停止计费）vs suspend（保留内存照计费）、proxy 排队唤醒请求
-  （不丢只慢 5–15s）、两条自愈兜底（PixivFlow outbox / 首条消息付冷启动）、
-  睡眠比例→账单换算（70–80% 睡眠 → ~$3.9→~$1–1.5/月）、以及「双 Bot 拆一台 256
-  + PixivFlow 拆自己机器（Fly 私网投递）」拓扑与改动面；`fly/README.md`、
-  `docs/SCENARIOS.md`、`docs/PERFORMANCE.md` 同步指引。
+- **deploy 工具 v3.5.0**：
+  - 新增 `split` 子命令：把 Fly「合一台」拆成 telepost + pixivflow 两个独立 app
+    （生成两份 toml + 打印 app 创建/卷/secret/deploy 步骤；投稿走 6PN 私网
+    `http://<app>.internal:8080`，不计 egress、不暴露公网）。
+  - `init` 向导扩展：`几个 Bot？(1-9)`（第 3 个及以后的 bot 自动追加进 `.env`）+
+    Fly 场景的「启用 auto-stop 省钱？」开关（选 y 自动写 `auto_stop_machines="stop"` +
+    `min_machines_running=0`）；基线常量刷新到 TelePost 2.10.38 + PixivFlow 2.10.28。
+  - 新增外部闹钟 `.github/workflows/wakeup.yml`（GitHub Actions cron 在 09:58/17:58
+    CST 循环 ping `/health` 约 30 分钟，覆盖投递窗口给 auto-stop 机器续命）。
+- **文档**：新增 `docs/AUTOSTOP.md`（stop vs suspend、proxy 排队唤醒、外部闹钟、
+  实测 idle timeout ≈300s、拓扑 A 拆机与改动面）与 `docs/MULTI-BOT.md`（加第 N 个
+  bot 的完整说明）；`fly/README.md`、`docs/SCENARIOS.md`、`docs/PERFORMANCE.md`、
+  `README.md` 同步。
+- **版本基线**：TelePost **2.10.38**（重抓/换一张只重跑单个 target）+ PixivFlow
+  **2.10.28**（`run-once --target <id>`）。生产实盘 config 已同步 `target_id`。
 
 ## [1.8.32] - 2026-09-04
 
