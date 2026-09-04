@@ -1,11 +1,14 @@
 # Changelog
 
-## [Unreleased]
+## [1.8.31] - 2026-09-04
 
-- 文档优化：`docs/SCENARIOS.md` 场景速查重写——按 Compose / 无 Docker Linux
-  VPS（systemd 后端）/ Fly.io 分路径给出命令与 `.env` 关键项；README「傻瓜式
-  一键部署」补充无 Docker 时的 systemd 指引与 `deploy init` 用法行；deploy
-  内建帮助（`usage()`）补充 `--platform systemd` 的说明。
+- **deploy 工具 v3.4.1**：内建帮助补充 `--platform systemd` 后端说明（首次
+  deploy 自动 clone TelePost 到 /opt/telepost、建 venv、装 telepost.service，
+  需 root/sudo）。
+- **文档优化**：`docs/SCENARIOS.md` 场景速查重写——按 Compose / 无 Docker
+  Linux VPS（systemd 后端）/ Fly.io 分路径给出命令与 `.env` 关键项；README
+  「傻瓜式一键部署」补充无 Docker 时的 systemd 指引与 `deploy init` 用法行。
+- 套件镜像基线不变：TelePost **2.10.33** + PixivFlow **2.10.27**。
 
 ## [1.8.30] - 2026-09-04
 

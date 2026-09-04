@@ -20,7 +20,7 @@ import (
 )
 
 const (
-	appVersion        = "3.4.0"
+	appVersion        = "3.4.1"
 	telepostRepo      = "ghcr.io/redtidev1918/telepost"
 	kitRepo           = "ghcr.io/redtidev1918/pixivflow-telepost-deploy"
 	defaultFlyCfg     = "telesubmit.fly.toml"
