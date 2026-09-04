@@ -2,12 +2,13 @@
 
 ## [Unreleased]
 
-- deploy.py v2.2.0：`doctor` 新增 Linux 运行环境检查——Python 版本、venv 组件
-  缺失提示（含 `apt install python3-venv` 等修复命令）、已跟踪文本文件 CRLF
-  行尾检测（含 `git add --renormalize .` 修复命令）。deploy.py 本身仍为纯标准库、
-  无需 pip install。
-- README：新增「Linux（Ubuntu/Debian）首次运行」小节——老 clone 行尾归一化、
-  venv 仅在宿主机直跑 TelePost 时需要、`./deploy doctor` 自检流程。
+- **一键部署工具重写为 Go 单二进制**（deploy v3.0.0）：替换原 Python
+  deploy.py + sh 引导器。Windows / macOS / Linux 直接运行，静态编译、零运行时
+  依赖（无需 Python / venv / pip）。子命令、平台检测、toml/.env 版本编辑与
+  健康检查等待逻辑保持不变。README 同步改为「下载 Releases 二进制或 go build」。
+- **分平台发版**：新增 `.github/workflows/deploy-release.yml`——推送 `deploy-v*`
+  标签时交叉编译 linux/darwin/windows × amd64/arm64（CGO 关闭、strip），打包
+  tar.gz/zip 并附加到对应 GitHub Release。
 
 ## [1.8.28] - 2026-09-03
 

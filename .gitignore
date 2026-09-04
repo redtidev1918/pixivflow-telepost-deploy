@@ -3,6 +3,11 @@
 .env.*
 !.env.example
 
+# 本机构建的 deploy 二进制（从 GitHub Releases 下载或 go build 产物）
+/deploy
+/deploy.exe
+/deploy-*
+
 # 运行时数据（数据库、下载文件、日志、代理缓存）
 data/
 proxy-data/

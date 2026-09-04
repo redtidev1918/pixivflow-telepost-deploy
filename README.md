@@ -94,6 +94,7 @@ Fly.io；否则 Docker Compose。也可 `--platform fly|compose` 显式指定。
 ./deploy deploy          # 或 ./deploy tp latest
 ```
 
+## 快速开始
 
 需要 Docker 24+、Compose v2、Python 3（只用于本地校验）。
 
