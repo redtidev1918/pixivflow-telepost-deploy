@@ -928,6 +928,91 @@ func cmdDeploy(platform, cfg string, dryRun, build bool, retries int) {
 }
 
 // ---- 用法 ----
+// ---- 拆机（Fly 专用）----
+
+// splitRewrite 把 toml 文本里 key 开头的行改写为 key = "value"（保留缩进）。
+func splitRewrite(data, key, value string) string {
+	lines := strings.Split(data, "\n")
+	for i, line := range lines {
+		tr := strings.TrimSpace(line)
+		if strings.HasPrefix(tr, key+" ") || strings.HasPrefix(tr, key+"=") {
+			indent := line[:len(line)-len(strings.TrimLeft(line, " \t"))]
+			lines[i] = indent + key + ` = "` + value + `"`
+		}
+	}
+	return strings.Join(lines, "\n")
+}
+
+// cmdSplit 把当前 Fly「合一台」部署拆成 telepost + pixivflow 两个独立 app。
+// 生成两份 toml 并打印步骤；不自动创建/重建资源（生产操作由用户确认后手动执行）。
+func cmdSplit(platform, cfg string) {
+	if platform != "fly" {
+		die("split 目前仅支持 Fly（compose/systemd 拆机 = 部署到另一台主机，手动即可）")
+	}
+	app := tomlGet(cfg, "app")
+	if app == "" {
+		die("无法从 %s 读取 app 名", cfg)
+	}
+	region := tomlGet(cfg, "primary_region")
+	if region == "" {
+		region = "iad"
+	}
+	tp := tpVersion("fly", cfg)
+	pf := pfVersion("fly", cfg)
+	pfApp := app + "-pixivflow"
+
+	stepf("1/2", "生成拆分模板")
+	tpData, err := scaffold.ReadFile("fly/deploy.telepost.toml")
+	if err != nil {
+		die("读取 telepost 拆分模板: %v", err)
+	}
+	tpToml := splitRewrite(string(tpData), "app", app)
+	tpToml = splitRewrite(tpToml, "primary_region", region)
+	tpToml = splitRewrite(tpToml, "image", telepostRepo+":"+tp)
+	tpToml = splitRewrite(tpToml, "WEBHOOK_URL", "https://"+app+".fly.dev")
+	tpToml = strings.ReplaceAll(tpToml, "your-telepost-app", app)
+
+	pfData, err := scaffold.ReadFile("fly/deploy.pixivflow.toml")
+	if err != nil {
+		die("读取 pixivflow 拆分模板: %v", err)
+	}
+	pfToml := splitRewrite(string(pfData), "app", pfApp)
+	pfToml = splitRewrite(pfToml, "primary_region", region)
+	pfToml = splitRewrite(pfToml, "image", pixivflowRepo+":"+pf)
+	pfToml = splitRewrite(pfToml, "TELEPOST_API_BASE_URL", "http://"+app+".internal:8080")
+	pfToml = strings.ReplaceAll(pfToml, "your-pixivflow-app", pfApp)
+	pfToml = strings.ReplaceAll(pfToml, "your-telepost-app", app)
+
+	if err := os.MkdirAll("fly", 0o755); err != nil {
+		die("创建 fly 目录失败: %v", err)
+	}
+	tpDst := filepath.Join("fly", "telepost-split.toml")
+	pfDst := filepath.Join("fly", "pixivflow-split.toml")
+	if err := os.WriteFile(tpDst, []byte(tpToml), 0o644); err != nil {
+		die("写入 %s 失败: %v", tpDst, err)
+	}
+	if err := os.WriteFile(pfDst, []byte(pfToml), 0o644); err != nil {
+		die("写入 %s 失败: %v", pfDst, err)
+	}
+	okf("已生成 %s（app=%s）与 %s（app=%s）", tpDst, app, pfDst, pfApp)
+
+	stepf("2/2", "执行步骤（确认后手动运行）")
+	fb := flyBin()
+	if fb == "" {
+		fb = "fly"
+	}
+	fmt.Printf("  # 1) 创建 PixivFlow 独立 app 与卷\n")
+	fmt.Printf("  %s apps create %s\n", fb, pfApp)
+	fmt.Printf("  %s volumes create pixivflow_data --size 1 -r %s\n", fb, region)
+	fmt.Printf("  # 2) 注入 PixivFlow 所需 secret（refresh token + 投稿 token）\n")
+	fmt.Printf("  %s secrets set -a %s PIXIV_REFRESH_TOKEN=... TELEPOST_BOT1_SUBMIT_TOKEN=... TELEPOST_BOT2_SUBMIT_TOKEN=...\n", fb, pfApp)
+	fmt.Printf("  # 3) 把 config.json 放进 pixivflow 卷（deploy init 生成的 data/pixivflow/config.json）\n")
+	fmt.Printf("  # 4) 部署：telepost 复用现有 app 名（改配成纯 bot 256MiB），pixivflow 新 app\n")
+	fmt.Printf("  %s deploy -c %s --remote-only --strategy rolling\n", fb, tpDst)
+	fmt.Printf("  %s deploy -c %s --remote-only\n", fb, pfDst)
+	fmt.Printf("  # 投递走 6PN 私网 http://%s.internal:8080（不计 egress、不暴露公网）\n", app)
+}
+
 func usage() {
 	fmt.Print(`deploy — TelePost/PixivFlow 多平台一键部署（Go 单二进制）
 
@@ -945,6 +1030,7 @@ func usage() {
   logs [行数]       最近日志
   doctor            环境自检
   version           显示工具与当前配置版本
+  split             Fly：把「合一台」拆成 telepost + pixivflow 两个 app（生成模板+步骤）
 
 全局选项：
   --platform fly|compose|systemd|auto
@@ -1079,6 +1165,8 @@ func main() {
 		cmdDoctor(platform, cfg)
 	case "version":
 		cmdVersion(platform, cfg)
+	case "split":
+		cmdSplit(platform, cfg)
 	default:
 		failf("未知子命令：%s", o.cmd)
 		usage()
