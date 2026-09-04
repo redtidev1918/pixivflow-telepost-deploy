@@ -1,21 +1,20 @@
 # Changelog
 
-## [Unreleased]
+## [1.8.29] - 2026-09-04
 
-- **一键部署工具重写为 Go 单二进制**（deploy v3.0.0）：替换原 Python
-  deploy.py + sh 引导器。Windows / macOS / Linux 直接运行，静态编译、零运行时
-  依赖（无需 Python / venv / pip）。子命令、平台检测、toml/.env 版本编辑与
-  健康检查等待逻辑保持不变。README 同步改为「下载 Releases 二进制或 go build」。
+- **一键部署工具改为 Go 单二进制**（deploy v3.0.0 → v3.1.0）：移除 Python
+  deploy.py 与 sh 引导器，Windows / macOS / Linux 直接运行、静态编译、零运行时
+  依赖（无需 Python / venv / pip）。v3.1.0 支持**任意目录运行**（当前目录 →
+  上级目录 → 可执行文件目录自动定位仓库配置）；`run()` 启动失败不再可能空指针；
+  `--verbose` 会把捕获模式的命令输出回显；fly 平台缺 flyctl 时 status/logs 给出
+  明确报错；`version` 在无法定位仓库配置时也能正常显示版本信息。
 - **分平台发版**：新增 `.github/workflows/deploy-release.yml`——推送 `deploy-v*`
   标签时交叉编译 linux/darwin/windows × amd64/arm64（CGO 关闭、strip），打包
-  tar.gz/zip 并附加到对应 GitHub Release。
-- **deploy 工具 v3.1.0**：可在任意目录运行（当前目录 → 上级目录 → 可执行文件
-  目录自动定位仓库配置）；`run()` 启动失败不再可能空指针；`--verbose` 现在会把
-  捕获模式的命令输出回显到终端；fly 平台缺 flyctl 时 status/logs 给出明确报错。
-- **镜像基线**：TelePost 默认镜像从 2.10.32 对齐到 2.10.33（`.env.example`、
-  `docker-compose.yml`、`docker/combined.Dockerfile` 同步）。
-- README：deploy 用法示例改用 `latest`、Fly 首次使用配置说明、Windows 手动初始化
-  步骤、目录清单与 Releases 链接；「快速开始」明确 bootstrap/validate 需 bash+python3。
+  tar.gz 并附加到对应 GitHub Release。
+- **镜像基线同步**：TelePost 默认镜像 **2.10.32 → 2.10.33**（`.env.example`、
+  `docker-compose.yml`、`docker/combined.Dockerfile` 同步）；PixivFlow 保持 2.10.27。
+- README 重构：deploy 工具获取/用法与 Fly 首次配置、Windows 手动初始化步骤、
+  「快速开始」前置条件、目录清单与 Releases 链接。
 
 ## [1.8.28] - 2026-09-03
 
