@@ -1,12 +1,20 @@
 # Changelog
 
-## [Unreleased]
+## [1.8.30] - 2026-09-04
 
-- **deploy 工具 v3.3.0（init 傻瓜式一键初始化）**：compose/.env/示例配置等模板
-  用 go:embed 内嵌进二进制——全新机器只需 Docker + 一个二进制：`deploy init <dir>`
-  就地生成部署目录并向导式填写 Bot 信息（非交互环境自动静默、保留占位符），随后
-  `deploy doctor && deploy deploy` 即可。不再需要 clone 仓库、bash 或 python。
-- README：新增「傻瓜式一键部署」最快路径与 `go build -o deploy .` 用法。
+- **deploy 工具升级（v3.2.0 → v3.4.0，README 与二进制 Release 同步）**：
+  - `init` 傻瓜式一键初始化（v3.3.0）：compose/.env/示例配置等模板经 go:embed
+    内嵌进二进制——全新机器只需 Docker + 一个二进制即可 `deploy init <dir>`
+    生成部署目录并向导式填写 Bot 信息（非交互自动静默、保留占位符），随后
+    `deploy doctor && deploy deploy` 即可；不再需要 clone 仓库、bash 或 python。
+  - init 向导**部署场景分支**（v3.4.0）：可选用 Webhook（自动填 `WEBHOOK_*` 并
+    提示 `--profile webhook`）、国内+Mihomo 代理（填代理/订阅并提示
+    `--profile proxy`）或 Fly.io（生成 `telesubmit.fly.toml` 并提示 secrets 与
+    `--platform fly`）；直接回车保持 Polling。
+  - **systemd 后端**（v3.2.0）：无 Docker 的 Linux VPS 可直接以 systemd 单元运行
+    TelePost + PixivFlow（install/status/logs/upgrade），由 deploy 统一管理。
+- 套件镜像基线保持不变：TelePost **2.10.33** + PixivFlow **2.10.27**。
+- README：新增「傻瓜式一键部署（全新机器）」流程与 init 场景说明。
 
 ## [1.8.29] - 2026-09-04
 
