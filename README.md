@@ -430,7 +430,7 @@ Basic Auth）。
 ## 目录
 
 ```text
-deploy.go / go.mod                一键部署工具（Go 单二进制，v3.x）
+deploy.go / go.mod                一键部署工具（Go 单二进制，随本套件 release 附带）
 docker-compose.yml                Compose：telepost + pixivflow 两服务 + 可选 Caddy/Mihomo
 docker/combined.Dockerfile        Fly 合一台的 co-locate 层（TelePost + PixivFlow 单容器）
 data/                             数据库、下载缓存、outbox、实际配置（不入库）
@@ -440,7 +440,7 @@ scripts/                          初始化、校验、本机/SSH 原子更新
 docs/                             架构、场景、性能、Webhook/代理等说明（auto-stop 省钱见 AUTOSTOP.md）
 fly/                              Fly.io 512 MiB 配置与更新脚本
 proxy/                            可选 Mihomo 镜像
-.github/workflows/deploy-release.yml 打 deploy-v* 标签时产出各平台二进制并附到 Release
+.github/workflows/release.yml      打 v* 标签时产出各平台 deploy 二进制并附到 Release
 ```
 
 各平台 `deploy` 二进制见 [Releases](https://github.com/redtidev1918/pixivflow-telepost-deploy/releases)。
