@@ -935,6 +935,7 @@ func usage() {
   deploy [--platform fly|compose|systemd|auto] [全局选项] <子命令> [参数]
 
 子命令：
+  init [目录]        全新部署：从内嵌模板生成目录并引导填写 Bot 信息（默认当前目录）
   deploy            部署当前配置（保持现有版本）
   tp <版本|latest>  升级并部署（fly: TelePost 镜像 tag；compose: 部署套件 tag）
   pf <版本>         升级 PixivFlow 并部署
@@ -952,6 +953,7 @@ func usage() {
   --no-color                   禁用彩色
   --retries N                  部署失败重试次数（默认 2）
   --build                      compose：本地构建
+  --force                      init：目标目录已有配置时强制重新生成
 `)
 	os.Exit(0)
 }
@@ -965,6 +967,7 @@ type opts struct {
 	noColor  bool
 	retries  int
 	build    bool
+	force    bool
 	cmd      string
 	arg      string
 }
@@ -992,6 +995,8 @@ func parseArgs(args []string) opts {
 			o.retries, _ = atoi(args[i])
 		case a == "--build":
 			o.build = true
+		case a == "--force":
+			o.force = true
 		case a == "-h" || a == "--help" || a == "help":
 			usage()
 		case strings.HasPrefix(a, "-"):
@@ -1032,6 +1037,11 @@ func main() {
 	}
 	if o.cmd == "" {
 		usage()
+	}
+	// init 不需要任何现成配置/平台：在任何地方就地生成全新部署目录。
+	if o.cmd == "init" {
+		cmdInit(o.arg, o.force)
+		return
 	}
 	// 允许在任意目录运行：cwd 不是仓库时回退到可执行文件所在目录。
 	enterRepoDir()
