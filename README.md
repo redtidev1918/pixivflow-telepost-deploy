@@ -63,8 +63,11 @@ cd mybot
 deploy doctor && deploy deploy   # 2) 自检 → 3) 一键部署（docker compose pull/up + 健康检查）
 ```
 
-`init` 默认生成 Polling 模式的 `.env` 与双 Bot 示例配置；国内/Webhook/Fly 等
-场景在此之后照常按本 README 对应小节调整即可。
+`init` 默认生成 Polling 模式的 `.env` 与双 Bot 示例配置，向导会继续询问部署
+场景：**Webhook**（有域名，自动填 `WEBHOOK_*` 并提示 `--profile webhook`）、
+**国内+Mihomo 代理**（填代理/订阅并提示 `--profile proxy`）或 **Fly.io**
+（生成 `telesubmit.fly.toml` 并提示 secrets 与 `--platform fly` 部署）；
+直接回车则保持 Polling。非交互（管道/CI）运行时全部静默、只生成占位配置。
 
 ### 获取
 
