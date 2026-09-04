@@ -1,4 +1,4 @@
-// deploy init — 傻瓜式一键初始化：从二进制内嵌的模板就地生成一个全新部署目录。
+// deploy init — 一键初始化：从二进制内嵌的模板就地生成一个全新部署目录。
 //
 // 用户只需要：下载一个 deploy 二进制 → 运行 deploy init → 按向导填 Bot 信息 →
 // deploy doctor && deploy deploy。不需要 clone 仓库、不需要 bash/python。

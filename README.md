@@ -54,7 +54,7 @@ PixivFlow 的投递配置无需随网络模式改变。Webhook 注册失败时 A
 **Go 编译的单二进制**，Windows / macOS / Linux 直接运行，零运行时依赖
 （无需 Python / sh / venv / pip），也不需要 clone 本仓库。
 
-### 傻瓜式一键部署（全新机器）
+### 一键部署（全新机器）
 
 只装 **Docker** + 一个二进制，三条命令即可跑起来：
 
