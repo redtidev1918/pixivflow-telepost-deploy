@@ -1,8 +1,12 @@
 # Fly.io 自动休眠（auto-stop）成本优化
 
-> 本文说明如何在 Fly.io 上用 `auto_stop_machines` 让机器在无流量时停机，
-> 把「常驻一台 512 MiB」的账单压到「按需唤醒」的额度。结论对流量画像高度敏感：
-> 先读「适用画像」，确认你的流量确实匹配，再动手。
+> **这是可选的高级优化，不是默认部署方式。** 默认是常驻（always-on）：
+> `docker compose up -d` 或 `fly deploy` 之后，TelePost 与 PixivFlow 常驻、
+> PixivFlow 的 scheduler 到点自动执行，不依赖任何外部定时器/唤醒服务。
+>
+> 本文只说明「想要省钱、且能接受一个外部闹钟」时如何开 auto-stop。结论对流量
+> 画像高度敏感：先读「适用画像」，确认你的流量确实匹配，再动手。若不匹配，
+> 保持常驻更简单可靠。
 
 ---
 
@@ -155,7 +159,8 @@ TelePost 那半 auto-stop（webhook/用户消息/投递请求都能叫醒它）�
 - [ ] 能接受第一条消息 ~5–15s 冷启动？
 - [ ] `RUN_MODE=WEBHOOK`（webhook 是唤醒信号）？
 - [ ] `auto_stop_machines="stop"` + `min_machines_running=0`？
-- [ ] 已配外部闹钟（GitHub Actions 定时 ping，覆盖 PixivFlow 投递窗口）？
+- [ ] 已配外部闹钟（easycron / Fly `--schedule daily` / PixivFlow 拆机常驻，三选一，
+  覆盖 PixivFlow 投递窗口）？
 - [ ] 拆两台时，PixivFlow 投递 URL 已切 Fly 私网、卷已拆？
 
-满足前五条再上 auto-stop；否则保持常驻更稳妥。
+满足前五条再上 auto-stop；否则保持常驻更稳妥（默认就是常驻，这是最可靠的选择）。

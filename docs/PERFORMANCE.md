@@ -70,8 +70,8 @@ docker exec pixivflow ps aux --sort=-rss | head -5
 | PixivFlow | 不启用（内存不足） |
 
 > **拆分后可放双 Bot**：把 PixivFlow 拆到自己机器（不再与 TelePost 同机争内存）后，
-> 双 Bot 的 TelePost 在 256 MiB 上 idle 约 170 MiB、峰值约 200–230 MiB，可行。这正
-> 是 Fly auto-stop 省钱拓扑的形态，见 [AUTOSTOP.md](AUTOSTOP.md)。
+> 双 Bot 的 TelePost 在 256 MiB 上 idle 约 170 MiB、峰值约 200–230 MiB，可行。
+> 拆机是可选部署拓扑（见 [AUTOSTOP.md](AUTOSTOP.md)），默认仍是合一台常驻。
 
 ### 配置
 

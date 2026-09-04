@@ -197,9 +197,8 @@ func wizard() map[string]string {
 			}
 		case "4":
 			answers["SCENARIO"] = scenarioFly
-			if v, err := read("启用 Fly auto-stop 省钱？(y/N，间断高峰画像推荐)"); err == nil && strings.EqualFold(v, "y") {
-				answers["AUTOSTOP"] = "true"
-			}
+			// 默认生成 always-on 配置；auto-stop 是可选省钱优化，不在向导里引导，
+			// 见 docs/AUTOSTOP.md。
 		}
 	}
 	return answers
@@ -289,25 +288,13 @@ func writeFlyTpl(dir string, answers map[string]string) error {
 			lines[i] = "  TELEPOST_IMAGE = \"" + telepostRepo + ":" + telepostBaseline + "\""
 		case strings.HasPrefix(tr, "PIXIVFLOW_VERSION"):
 			lines[i] = "  PIXIVFLOW_VERSION = \"" + pixivBaseline + "\""
-		case strings.HasPrefix(tr, "auto_stop_machines"):
-			if answers["AUTOSTOP"] == "true" {
-				lines[i] = "  auto_stop_machines = \"stop\""
-			}
-		case strings.HasPrefix(tr, "min_machines_running"):
-			if answers["AUTOSTOP"] == "true" {
-				lines[i] = "  min_machines_running = 0"
-			}
 		}
 	}
 	dst := filepath.Join(dir, "telesubmit.fly.toml")
 	if err := os.WriteFile(dst, []byte(strings.Join(lines, "\n")), 0o644); err != nil {
 		return err
 	}
-	autoNote := ""
-	if answers["AUTOSTOP"] == "true" {
-		autoNote = "；已启用 auto-stop（stop 释放 RAM 停止计费）"
-	}
-	infof("已生成 telesubmit.fly.toml（镜像基线 TelePost %s + PixivFlow %s%s；请修改 app 名）",
-		telepostBaseline, pixivBaseline, autoNote)
+	infof("已生成 telesubmit.fly.toml（镜像基线 TelePost %s + PixivFlow %s；默认常驻，请修改 app 名）",
+		telepostBaseline, pixivBaseline)
 	return nil
 }
