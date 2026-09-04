@@ -51,7 +51,20 @@ PixivFlow 的投递配置无需随网络模式改变。Webhook 注册失败时 A
 ## 一键部署工具（deploy）
 
 **Go 编译的单二进制**，Windows / macOS / Linux 直接运行，零运行时依赖
-（无需 Python / sh / venv / pip）。
+（无需 Python / sh / venv / pip），也不需要 clone 本仓库。
+
+### 傻瓜式一键部署（全新机器）
+
+只装 **Docker** + 一个二进制，三条命令即可跑起来：
+
+```bash
+deploy init mybot        # 1) 就地生成全新部署目录（内嵌 compose/.env/示例配置模板，向导式填 Bot 信息）
+cd mybot
+deploy doctor && deploy deploy   # 2) 自检 → 3) 一键部署（docker compose pull/up + 健康检查）
+```
+
+`init` 默认生成 Polling 模式的 `.env` 与双 Bot 示例配置；国内/Webhook/Fly 等
+场景在此之后照常按本 README 对应小节调整即可。
 
 ### 获取
 
@@ -62,7 +75,7 @@ PixivFlow 的投递配置无需随网络模式改变。Webhook 注册失败时 A
 方式二：源码编译（本机有 Go 1.22+）：
 
 ```bash
-go build -o deploy deploy.go
+go build -o deploy .
 ```
 
 ### 用法

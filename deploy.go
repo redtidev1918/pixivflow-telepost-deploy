@@ -20,7 +20,7 @@ import (
 )
 
 const (
-	appVersion        = "3.2.0"
+	appVersion        = "3.3.0"
 	telepostRepo      = "ghcr.io/redtidev1918/telepost"
 	kitRepo           = "ghcr.io/redtidev1918/pixivflow-telepost-deploy"
 	defaultFlyCfg     = "telesubmit.fly.toml"
@@ -612,30 +612,39 @@ func prompt(label string) string {
 }
 
 func systemdEnsureEnv(cfg string, dryRun bool) {
-	// 引导填写最小配置 TOKEN / CHANNEL_ID（已存在则跳过）
-	if envGet(cfg, "TOKEN") != "" && envGet(cfg, "CHANNEL_ID") != "" {
+	// 组合部署走多 bot 模式（BOT1_TOKEN），supervisor 才能同时托管 PixivFlow。
+	if envGet(cfg, "BOT1_TOKEN") != "" && envGet(cfg, "BOT1_CHANNEL_ID") != "" {
 		return
 	}
 	if dryRun {
-		infof("[dry-run] 将引导填写 %s 的 TOKEN / CHANNEL_ID", cfg)
+		infof("[dry-run] 将引导填写 %s 的 BOT1_TOKEN / BOT1_CHANNEL_ID", cfg)
 		return
 	}
 	infof("首次部署需要填写最小配置（写入 %s）：", cfg)
-	token := envGet(cfg, "TOKEN")
-	if token == "" {
-		token = prompt("TOKEN（BotFather 获取）")
+	bot1Token := envGet(cfg, "BOT1_TOKEN")
+	if bot1Token == "" {
+		bot1Token = prompt("BOT1_TOKEN（BotFather 获取）")
 	}
-	channel := envGet(cfg, "CHANNEL_ID")
-	if channel == "" {
-		channel = prompt("CHANNEL_ID（@频道 或 -100 数字 ID）")
+	bot1Channel := envGet(cfg, "BOT1_CHANNEL_ID")
+	if bot1Channel == "" {
+		bot1Channel = prompt("BOT1_CHANNEL_ID（@频道 或 -100 数字 ID）")
 	}
-	if token == "" || channel == "" {
-		die("TOKEN 与 CHANNEL_ID 均为必填")
+	if bot1Token == "" || bot1Channel == "" {
+		die("BOT1_TOKEN 与 BOT1_CHANNEL_ID 均为必填")
 	}
-	envSet(cfg, "TOKEN", token)
-	envSet(cfg, "CHANNEL_ID", channel)
+	envSet(cfg, "BOT1_TOKEN", bot1Token)
+	envSet(cfg, "BOT1_CHANNEL_ID", bot1Channel)
 	if envGet(cfg, "RUN_MODE") == "" {
 		envSet(cfg, "RUN_MODE", "POLLING")
+	}
+	if envGet(cfg, "PIXIVFLOW_ENABLED") == "" {
+		if strings.EqualFold(prompt("启用 PixivFlow 自动投稿？(y/N)"), "y") {
+			envSet(cfg, "PIXIVFLOW_ENABLED", "true")
+			envSet(cfg, "PIXIVFLOW_COMMAND", "pixivflow scheduler")
+			envSet(cfg, "PIXIVFLOW_CONFIG", filepath.Join(systemdInstallDir, "data", "pixivflow", "config.json"))
+		} else {
+			envSet(cfg, "PIXIVFLOW_ENABLED", "false")
+		}
 	}
 }
 
@@ -873,6 +882,7 @@ func usage() {
   deploy [--platform fly|compose|systemd|auto] [全局选项] <子命令> [参数]
 
 子命令：
+  init [目录]        全新部署：从内嵌模板生成目录并引导填写 Bot 信息（默认当前目录）
   deploy            部署当前配置（保持现有版本）
   tp <版本|latest>  升级并部署（fly: TelePost 镜像 tag；compose: 部署套件 tag）
   pf <版本>         升级 PixivFlow 并部署
@@ -890,6 +900,7 @@ func usage() {
   --no-color                   禁用彩色
   --retries N                  部署失败重试次数（默认 2）
   --build                      compose：本地构建
+  --force                      init：目标目录已有配置时强制重新生成
 `)
 	os.Exit(0)
 }
@@ -903,6 +914,7 @@ type opts struct {
 	noColor  bool
 	retries  int
 	build    bool
+	force    bool
 	cmd      string
 	arg      string
 }
@@ -930,6 +942,8 @@ func parseArgs(args []string) opts {
 			o.retries, _ = atoi(args[i])
 		case a == "--build":
 			o.build = true
+		case a == "--force":
+			o.force = true
 		case a == "-h" || a == "--help" || a == "help":
 			usage()
 		case strings.HasPrefix(a, "-"):
@@ -970,6 +984,11 @@ func main() {
 	}
 	if o.cmd == "" {
 		usage()
+	}
+	// init 不需要任何现成配置/平台：在任何地方就地生成全新部署目录。
+	if o.cmd == "init" {
+		cmdInit(o.arg, o.force)
+		return
 	}
 
 	// 允许在任意目录运行：cwd 不是仓库时回退到可执行文件所在目录。
