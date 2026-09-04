@@ -66,13 +66,13 @@
   需 root/sudo）。
 - **文档优化**：`docs/SCENARIOS.md` 场景速查重写——按 Compose / 无 Docker
   Linux VPS（systemd 后端）/ Fly.io 分路径给出命令与 `.env` 关键项；README
-  「傻瓜式一键部署」补充无 Docker 时的 systemd 指引与 `deploy init` 用法行。
+  「一键部署」补充无 Docker 时的 systemd 指引与 `deploy init` 用法行。
 - 套件镜像基线不变：TelePost **2.10.33** + PixivFlow **2.10.27**。
 
 ## [1.8.30] - 2026-09-04
 
 - **deploy 工具升级（v3.2.0 → v3.4.0，README 与二进制 Release 同步）**：
-  - `init` 傻瓜式一键初始化（v3.3.0）：compose/.env/示例配置等模板经 go:embed
+  - `init` 一键初始化（v3.3.0）：compose/.env/示例配置等模板经 go:embed
     内嵌进二进制——全新机器只需 Docker + 一个二进制即可 `deploy init <dir>`
     生成部署目录并向导式填写 Bot 信息（非交互自动静默、保留占位符），随后
     `deploy doctor && deploy deploy` 即可；不再需要 clone 仓库、bash 或 python。
@@ -83,7 +83,7 @@
   - **systemd 后端**（v3.2.0）：无 Docker 的 Linux VPS 可直接以 systemd 单元运行
     TelePost + PixivFlow（install/status/logs/upgrade），由 deploy 统一管理。
 - 套件镜像基线保持不变：TelePost **2.10.33** + PixivFlow **2.10.27**。
-- README：新增「傻瓜式一键部署（全新机器）」流程与 init 场景说明。
+- README：新增「一键部署（全新机器）」流程与 init 场景说明。
 
 ## [1.8.29] - 2026-09-04
 

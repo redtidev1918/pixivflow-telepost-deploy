@@ -2,7 +2,7 @@
 
 两条路径，任选其一：
 
-- **Docker Compose（推荐，本机/海外/国内 VPS）**：用 `deploy init`（傻瓜式，
+- **Docker Compose（推荐，本机/海外/国内 VPS）**：用 `deploy init`（开箱即用，
   一个二进制即可）或仓库内 `./scripts/bootstrap.sh` 初始化，再按场景补 `.env`。
 - **`deploy` 工具（Go 单二进制）**：Docker / Fly.io / 无 Docker 的 Linux VPS
   （systemd 后端）统一入口，自动检测或 `--platform` 显式指定。
