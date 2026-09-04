@@ -425,6 +425,8 @@ Issue、日志、截图或 Git 历史，应立即吊销。
 ## 参与项目
 
 - 架构与组件边界：[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
+- 加第 N 个频道（多 bot）：[docs/MULTI-BOT.md](docs/MULTI-BOT.md)
+- Fly 自动休眠省钱：见上文 Fly 段引用的 [docs/AUTOSTOP.md](docs/AUTOSTOP.md)
 - 贡献代码：[CONTRIBUTING.md](CONTRIBUTING.md)
 - 使用与排障：[SUPPORT.md](SUPPORT.md)
 - 私下报告漏洞：[SECURITY.md](SECURITY.md)
