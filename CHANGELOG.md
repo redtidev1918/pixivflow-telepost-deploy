@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+- 外部闹钟改为**不依赖 GitHub**：移除 `.github/workflows/wakeup.yml`，改由
+  easycron（免费 HTTP cron，`*/5 9-10,17-18`）或 Fly `--schedule daily` 唤醒；
+  `docs/AUTOSTOP.md` 给出三种闹钟方案（easycron / Fly 原生 / 拆机常驻）与取舍。
 - 文档：WebUI 管理面板配方改为**二选一**——方式 A（官方合体容器，API+前端一体）
   与方式 B（独立前端容器：已发布的 `pixivflow-webui` 镜像 + 只跑 API 的后端，
   前后端分开升级），共享 `./data` 说明与要点不变。

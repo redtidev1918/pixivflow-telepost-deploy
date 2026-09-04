@@ -103,42 +103,49 @@ Polling 模式没有入站请求可触发 proxy 唤醒，不适合 auto-stop。
 ## 外部闹钟：PixivFlow 的 cron 不会自己醒
 
 **这是单机 auto-stop 最容易漏掉的坑**：PixivFlow 的调度 cron 活在进程里，机器一睡，
-cron 也跟着死——到 10:00 没有任何东西会叫醒它，定时投递就永远错过。
+cron 也跟着死——到 10:00 没有任何东西会叫醒它，定时投递就永远错过。而且投递走
+`127.0.0.1` 环回、不经 Fly proxy，**不会重置 auto-stop 计时**，所以闹钟必须**持续
+ping 到投递窗口结束**，不能只 ping 一次。
 
-所以单机 auto-stop 必须配一个**外部闹钟**：用一个免费的 GitHub Actions `schedule`
-在投递前几分钟 ping `/health` 唤醒机器，并**循环 ping 约 30 分钟**覆盖投递窗口
-（投递走 `127.0.0.1` 环回、不经 proxy，不会重置 auto-stop 计时，必须靠外部 ping
-续命）。
+**实测 idle timeout ≈ 300s（5 分钟）**（2026-09 实测唤醒后无流量 → `stopped` 约
+379s）：ping 间隔必须 < 300s，机器才会在投递窗口内持续在线；只 ping 一次（如 09:58）
+会在 ~10:03 睡回，正好打断 10:00 点火的投递。
 
-本仓库已提供 `.github/workflows/wakeup.yml`：
+### 闹钟怎么选（按「零外部依赖」从强到弱）
 
-```yaml
-on:
-  schedule:
-    - cron: "58 1,9 * * *"   # UTC = 09:58 / 17:58 CST，比 10:00/18:00 投递提前 2 分钟
-jobs:
-  keep-awake:
-    runs-on: ubuntu-latest
-    steps:
-      - run: |
-          for i in $(seq 1 30); do
-            curl -sf --max-time 60 https://<your-app>.fly.dev/health || true
-            sleep 60
-          done
+| 方案 | 外部依赖 | 精度 | 月费 |
+|---|---|---|---|
+| **easycron**（免费 HTTP cron 服务） | 有（第三方，非 GitHub） | ✅ 精确 | ~$1-1.5 |
+| **Fly `--schedule daily`**（平台原生） | 无 | ❌ 粗（每天档，漂移） | ~$1-1.5 |
+| **拆机 + PixivFlow 常驻** | 无 | ✅ 精确 | ~$2.5 |
+
+### 方案 1：easycron（推荐，精确、非 GitHub）
+
+[easycron](https://www.easycron.com) 免费版即可。建 **2 个 HTTP GET 任务**，时区选
+`Asia/Shanghai`，URL 填 `https://<your-app>.fly.dev/health`：
+
+```
+任务 1：cron  */5 9-10 * * *    # 每天 09:00–10:59 每 5 分钟 ping 一次
+任务 2：cron  */5 17-18 * * *   # 每天 17:00–18:59 每 5 分钟 ping 一次
 ```
 
-- 09:58 被 ping 醒 → 10:00 前就绪 → PixivFlow 正常点火；
-- 循环 ping 让机器醒到投递窗口结束，之后无流量自然睡回；
-- 万一 GitHub Actions 抖动晚到几分钟 → PixivFlow 的漏跑补跑（catch-up）会在下一次
-  唤醒时补跑错过的计划。
+- 09:00 第一次 ping 就把机器叫醒 → PixivFlow 10:00/10:10 正常点火；
+- 每 5 分钟一 ping（< 300s idle timeout）让机器醒到投递窗口结束，之后自然睡回；
+- 万一某次 ping 漏了 → PixivFlow 的漏跑补跑（catch-up）在下一次唤醒时补跑。
 
-**实测 idle timeout ≈ 300s（5 分钟）**：本仓库 2026-09 实测「唤醒后无流量 → 机器
-`stopped`」约 379s（含冷启动 + 轮询粒度，接近 Fly 默认 300s）。所以循环 ping 的
-间隔（60s）**远小于** idle timeout，能保证投递窗口内机器持续在线；反过来也说明
-**只 ping 一次（如 09:58）会在 ~10:03 就睡回**，正好打断 10:00 点火的投递——必须循环。
+### 方案 2：Fly 原生 `--schedule daily`（容错版，零第三方）
 
-> 若拆成两台（拓扑 A），PixivFlow 机器同样需要外部闹钟（它仍是"主动外呼方"，
-> 没有入站能自然唤醒它）；TelePost 机器由「webhook 入站」唤醒。
+Fly 能给机器设「每天启动」的调度（`fly machine update --schedule daily`），这是
+平台自带、不依赖任何第三方。但**只有「每小时/每天/每周/每月」粗粒度档**，没有
+cron 精度，也**不能「持续保持机器醒」**——机器每天被启动一次、约 5 分钟无流量又
+睡回，很可能错过 10:00 的 cron，只能靠 catch-up 在下次唤醒时补跑。适合「错过就
+错过、下次补」的容错场景，不适合要求准时投递。
+
+### 方案 3：拆机 + PixivFlow 常驻（零依赖、精确，但贵一点）
+
+把 PixivFlow 拆到自己机器且**不 auto-stop**（它要常驻才能跑 cron，$1.94/月），
+TelePost 那半 auto-stop（webhook/用户消息/投递请求都能叫醒它）。零外部依赖、精确，
+但比方案 1 贵约 $1/月。见拓扑 A。
 
 ---
 
