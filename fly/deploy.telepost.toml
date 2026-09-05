@@ -36,6 +36,9 @@ primary_region = "iad"
   PENDING_REVIEW_RETENTION_DAYS = "1"
   PENDING_REVIEW_CLEANUP_BATCH_SIZE = "20"
   REVIEW_RETENTION_DAYS = "30"
+  # 多相册投稿都回复主贴（post）而不是逐级嵌套成链；投稿文件上限放宽到 100
+  CHANNEL_ALBUM_REPLY = "post"
+  API_MAX_FILES = "100"
 
 [mounts]
   source = "data"
