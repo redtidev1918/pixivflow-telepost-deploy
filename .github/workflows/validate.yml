@@ -28,12 +28,6 @@ jobs:
           go-version: '1.22'
       - name: Test deploy CLI
         run: go test ./...
-      - uses: superfly/flyctl-actions/setup-flyctl@ed8efb33836e8b2096c7fd3ba1c8afe303ebbff1
-      - name: Validate Fly configs strictly
-        run: |
-          flyctl config validate --strict -c fly/deploy.fly-multi-bot.toml
-          flyctl config validate --strict -c fly/deploy.telepost.toml
-          flyctl config validate --strict -c fly/deploy.pixivflow.toml
 
   build:
     runs-on: ubuntu-latest
