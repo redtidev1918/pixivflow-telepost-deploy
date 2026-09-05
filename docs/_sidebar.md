@@ -1,0 +1,14 @@
+- 开始部署
+  - [文档中心](/)
+  - [部署场景速查](SCENARIOS.md)
+  - [Polling：无公网部署](POLLING.md)
+  - [Webhook：公网 HTTPS 部署](WEBHOOK.md)
+- 场景
+  - [国内网络与 Mihomo](MIHOMO.md)
+  - [多 Bot：加第 N 个频道](MULTI-BOT.md)
+  - [从 Mac 远程更新策略](REMOTE_UPDATES.md)
+- 运维
+  - [Fly.io 自动休眠（auto-stop）](AUTOSTOP.md)
+  - [性能与内存调优](PERFORMANCE.md)
+- 进阶
+  - [架构与信任边界](ARCHITECTURE.md)
