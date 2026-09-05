@@ -1,5 +1,18 @@
 # 从 Mac 远程更新策略
 
+## PixivFlow 源码热修复
+
+配置热重载不需要重建镜像。只有修改 PixivFlow 程序代码时，才从干净且已提交的
+源码工作区执行：
+
+```bash
+./deploy --platform fly --config fly/pixivflow-split.toml source ../PixivFlow
+```
+
+不要用 `docker/combined.Dockerfile` 部署未发布代码；它明确只安装固定的 npm Release。
+`source` 会剥离 Fly 配置的构建段，传入当前 Git SHA，并在部署后校验镜像与运行进程，
+因此旧 npm 包或 `[build].image` 都不能伪装成成功的源码部署。
+
 ## PixivFlow：真正热重载
 
 先保存一份不含真实密钥的策略 JSON。真实 Pixiv 与投稿 Token 通过远端 `.env`

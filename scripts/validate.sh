@@ -19,16 +19,29 @@ fi
 if python3 -c 'import tomllib' >/dev/null 2>&1; then
   while IFS= read -r file; do
     if python3 - "$file" <<'PY'
+from pathlib import Path
 import sys
 import tomllib
 
 with open(sys.argv[1], "rb") as handle:
-    tomllib.load(handle)
+    config = tomllib.load(handle)
+build = config.get("build", {})
+if "image" in build:
+    raise SystemExit("[build].image is forbidden; use a passthrough Dockerfile")
+dockerfile = build.get("dockerfile")
+if dockerfile and not Path(dockerfile).is_file():
+    raise SystemExit(f"missing build.dockerfile: {dockerfile}")
 PY
     then ok "$file TOML"; else fail "$file TOML"; fi
-  done < <(find fly -type f -name '*.toml' -print | sort)
+  done < <(find fly -type f -name '*.toml' -print; [[ -f telesubmit.fly.toml ]] && printf '%s\n' telesubmit.fly.toml)
 else
   echo "[SKIP] TOML validation requires Python 3.11+"
+fi
+
+if grep -Eq 'npm (install|i).*pixivflow@' docker/pixivflow.Dockerfile; then
+  fail "source-capable PixivFlow Dockerfile installs a published npm package"
+else
+  ok "PixivFlow passthrough Dockerfile has no npm source substitution"
 fi
 
 for file in scripts/*.sh proxy/docker-entrypoint.sh fly/scripts/*.sh; do

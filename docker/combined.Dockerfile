@@ -1,12 +1,14 @@
 # syntax=docker/dockerfile:1.7
+# RELEASE-ONLY：只组合已经发布的 TelePost 镜像与 npm PixivFlow 版本。
+# 不得用于部署 PixivFlow 未发布源码；源码热修复请使用 `deploy source <PixivFlow目录>`。
 # 可选 co-locate 层：Fly 合一台（一台机同跑 TelePost + PixivFlow，共享内存峰值）。
 # 解耦部署的默认路径是 docker-compose.yml 的两个独立镜像（telepost + pixivflow）。
 
-ARG TELEPOST_IMAGE=ghcr.io/redtidev1918/telepost:2.10.38
+ARG TELEPOST_IMAGE=ghcr.io/redtidev1918/telepost:2.10.41
 ARG NODE_IMAGE=node:24-bookworm-slim
 
 FROM ${NODE_IMAGE} AS pixivflow-builder
-ARG PIXIVFLOW_VERSION=2.10.28
+ARG PIXIVFLOW_VERSION=2.10.30
 ARG HTTP_PROXY
 ARG HTTPS_PROXY
 RUN apt-get update \

@@ -93,8 +93,9 @@ go build -o deploy .
 ```bash
 ./deploy init <dir>             # 全新部署：生成部署目录并引导填写 Bot 信息
 ./deploy doctor                 # 环境自检（依赖/配置/登录/网络）
-./deploy tp latest              # 升级 TelePost 到最新并部署（也可指定如 2.10.38）
-./deploy pf 2.10.28             # 升级 PixivFlow 到指定版本并部署
+./deploy tp latest              # 升级 TelePost 到最新并部署（也可指定如 2.10.41）
+./deploy pf 2.10.30             # 升级 PixivFlow 到指定版本并部署
+./deploy --platform fly --config fly/pixivflow-split.toml source ../PixivFlow
 ./deploy status                 # 状态 / 健康
 ./deploy logs 200               # 最近 200 行日志
 ./deploy version                # 显示工具与当前配置版本
@@ -110,6 +111,9 @@ systemd。也可 `--platform fly|compose|systemd` 显式指定。
   默认常驻（always-on）。更低成本的推荐架构（PixivFlow 256MB 常驻 + TelePost
   512MB auto-stop，投递走 Flycast，**生产已按此部署**）用 `deploy split`，见
   [docs/AUTOSTOP.md](docs/AUTOSTOP.md)。
+  `combined.Dockerfile` 只组合已发布版本，不能部署 PixivFlow 未发布提交。源码热修复
+  必须使用 `source <PixivFlow目录>`：工具要求工作区干净、移除临时配置中的全部
+  `[build]` 段、传入当前 Git SHA，并在部署后同时核对镜像标签与运行时 revision。
 - **Compose**：compose 后端拆成 `telepost` 与 `pixivflow` 两个独立 service，
   各自拉取 ghcr 镜像（`.env` 的 `TELEPOST_IMAGE` / `PIXIVFLOW_IMAGE`），共享
   `./data` 卷、经 HTTP 通信（投递基址 `TELEPOST_API_BASE_URL`，默认
@@ -423,7 +427,7 @@ Basic Auth）。
   共享卷设计）；日常查看、改计划没问题，但不要在 webui 里与 scheduler 同时触发
   大规模下载/维护，避免 SQLite 锁竞争。
 - **版本对齐**：webui 后端镜像的 PixivFlow 版本不要低于 kit 内嵌的版本（当前
-  2.10.28），以免旧版本读不懂新 config 字段；config 用 `PIXIV_DOWNLOADER_CONFIG`
+  2.10.30），以免旧版本读不懂新 config 字段；config 用 `PIXIV_DOWNLOADER_CONFIG`
   显式指向 kit 那份即可（相对路径会以该 config 为基准解析，各进程一致）。
 - **前端升级**：方式 B 的前端独立成镜像，换 tag 重启即可，无需重新构建后端。
 
@@ -432,7 +436,8 @@ Basic Auth）。
 ```text
 deploy.go / go.mod                一键部署工具（Go 单二进制，随本套件 release 附带）
 docker-compose.yml                Compose：telepost + pixivflow 两服务 + 可选 Caddy/Mihomo
-docker/combined.Dockerfile        Fly 合一台的 co-locate 层（TelePost + PixivFlow 单容器）
+docker/combined.Dockerfile        Fly 合一台的 Release-only co-locate 层
+docker/{telepost,pixivflow}.Dockerfile  Fly 预构建镜像透传层（不使用 build.image）
 data/                             数据库、下载缓存、outbox、实际配置（不入库）
 pixivflow/config/*.example.json   多计划安全模板
 config/telepost-policy.example.json 非敏感频道/审核策略模板

@@ -3,6 +3,15 @@
 > 发布说明面向普通用户：写「对用户有什么改变」，不写内部实现细节（模块名、CI job、配置键）；
 > 技术细节放进代码注释或 `docs/`。每个 Release 的正文由本文件对应版本段自动生成。
 
+## [Unreleased]
+
+- Fly 模板不再使用会覆盖源码 Dockerfile 的 `build.image`；旧配置会在自检和部署前
+  直接报错，预构建版本改用无额外运行层的透传 Dockerfile。
+- 新增可验证的 PixivFlow 源码部署：只接受干净 Git 工作区，构建时写入提交 SHA，
+  部署后核对镜像标签与运行时 revision，避免“部署成功但仍运行旧 npm 包”。
+- `combined.Dockerfile` 明确为 Release-only，默认基线更新为 TelePost 2.10.41 与
+  PixivFlow 2.10.30。
+
 ## [1.8.34] - 2026-09-04
 
 - **更省钱的 Fly 部署**：可拆成「PixivFlow 常驻 + TelePost 自动休眠」的低成本架构，投递走 Fly 私网，比常驻一台省账单（详见 `docs/AUTOSTOP.md`）。

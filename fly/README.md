@@ -30,6 +30,22 @@ curl -H "Authorization: Bearer $TELEPOST_BOT1_SUBMIT_TOKEN" \
 ./fly/scripts/update_telepost_policy.sh your-app-name ./telepost-policy.json
 ```
 
+## 镜像部署与源码部署
+
+Fly 模板不使用 `[build].image`，而通过 `docker/telepost.Dockerfile` 和
+`docker/pixivflow.Dockerfile` 透传固定 Release 镜像，避免它静默覆盖命令行的
+`--dockerfile`。
+
+`docker/combined.Dockerfile` 只用于已发布 TelePost/PixivFlow 版本。要把尚未发布的
+PixivFlow 提交部署到分拆实例，只能使用：
+
+```bash
+./deploy --platform fly --config fly/pixivflow-split.toml source ../PixivFlow
+```
+
+源码目录必须是干净的 PixivFlow Git 工作区。工具会将 Git SHA 写入镜像标签和
+`PIXIVFLOW_REVISION`，部署后两处均匹配才返回成功。
+
 PixivFlow 配置原子热加载，不重启。日常修改单个 TelePost Bot 可由 OWNER 在 Telegram
 使用 `/botconfig`，只重载对应 Bot；上面的批量策略脚本通过 staged secrets 一次部署，
 会重启 Machine，但不会重建/删除持久卷。
