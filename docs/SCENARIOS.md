@@ -55,4 +55,4 @@ Fly.io；目录里有 `docker-compose.yml` → Compose；Linux 有 systemctl →
 
 kit 组合镜像默认不带 WebUI（512 MiB 档取舍）。≥1 GiB 机器可另起官方 webui
 容器与 kit **共享 `./data`**（kit 零改动），含构建命令、共卷启动与并发注意项，
-见 [README「可选：PixivFlow WebUI 管理面板」](../README.md)。
+见 [README「可选：PixivFlow WebUI 管理面板」](https://github.com/redtidev1918/pixivflow-telepost-deploy/blob/main/README.md)。
