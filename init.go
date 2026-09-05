@@ -21,6 +21,7 @@ import (
 //go:embed pixivflow/config/fly-two-bots.example.json
 //go:embed caddy/Caddyfile
 //go:embed proxy
+//go:embed docker
 //go:embed fly/deploy.fly-multi-bot.toml
 //go:embed fly/deploy.telepost.toml
 //go:embed fly/deploy.pixivflow.toml
@@ -28,8 +29,8 @@ var scaffold embed.FS
 
 // 与 docker-compose/.env 基线保持一致（发版时同步更新）。
 const (
-	telepostBaseline = "2.10.38"
-	pixivBaseline    = "2.10.28"
+	telepostBaseline = "2.10.41"
+	pixivBaseline    = "2.10.30"
 )
 
 // 向导场景（answers 里的 SCENARIO 键；缺省 = polling）。
@@ -222,6 +223,9 @@ func writeScaffold(dir string, answers map[string]string) error {
 		{"proxy/Dockerfile", "proxy/Dockerfile", 0o644},
 		{"proxy/docker-entrypoint.sh", "proxy/docker-entrypoint.sh", 0o755},
 		{"proxy/config.example.yaml", "proxy/config.example.yaml", 0o644},
+		{"docker/combined.Dockerfile", "docker/combined.Dockerfile", 0o644},
+		{"docker/telepost.Dockerfile", "docker/telepost.Dockerfile", 0o644},
+		{"docker/pixivflow.Dockerfile", "docker/pixivflow.Dockerfile", 0o644},
 	}
 	for _, f := range files {
 		data, err := scaffold.ReadFile(f.src)
