@@ -30,7 +30,7 @@ var scaffold embed.FS
 // 与 docker-compose/.env 基线保持一致（发版时同步更新）。
 const (
 	telepostBaseline = "2.10.41"
-	pixivBaseline    = "2.10.30"
+	pixivBaseline    = "2.10.31"
 )
 
 // 向导场景（answers 里的 SCENARIO 键；缺省 = polling）。

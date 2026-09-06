@@ -808,6 +808,14 @@ func systemdInstallPixivflow(cfg string, dryRun bool) {
 			warnf("node 版本 %s 偏低，PixivFlow 建议 Node 22.12+", v)
 		}
 	}
+	// 动图（ugoira）转 GIF 在运行时 spawn python3 + ffmpeg；缺 ffmpeg 会退化成投递 ZIP/JSON。
+	if !have("ffmpeg") {
+		infof("安装 ffmpeg（PixivFlow 动图转 GIF 所需）…")
+		if systemdRun([]string{"apt-get", "update"}, true) != 0 ||
+			systemdRun([]string{"apt-get", "install", "-y", "ffmpeg", "python3"}, true) != 0 {
+			warnf("ffmpeg 自动安装失败，请手动安装（apt-get install -y ffmpeg），否则 ugoira 动图将投递 ZIP/JSON")
+		}
+	}
 	if systemdRun([]string{"npm", "install", "-g", "pixivflow@latest"}, true) != 0 {
 		die("npm install -g pixivflow 失败")
 	}

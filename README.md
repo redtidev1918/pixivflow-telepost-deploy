@@ -95,7 +95,7 @@ go build -o deploy .
 ./deploy init <dir>             # 全新部署：生成部署目录并引导填写 Bot 信息
 ./deploy doctor                 # 环境自检（依赖/配置/登录/网络）
 ./deploy tp latest              # 升级 TelePost 到最新并部署（也可指定如 2.10.41）
-./deploy pf 2.10.30             # 升级 PixivFlow 到指定版本并部署
+./deploy pf 2.10.31             # 升级 PixivFlow 到指定版本并部署（动图转 GIF 需 ≥2.10.31）
 ./deploy --platform fly --config fly/pixivflow-split.toml source ../PixivFlow
 ./deploy status                 # 状态 / 健康
 ./deploy logs 200               # 最近 200 行日志
@@ -239,8 +239,11 @@ TelePost 接收后写入审核队列并把媒体暂存到审核群、只保存 T
   API 说明与 token 由 Bot 内 `/gen_token` 签发）；PixivFlow 只是其中一个上游。
 - 反过来 PixivFlow 的 `httpMultipart` delivery 也可指向任意兼容该表单约定的接收端，
   模板变量（`{{title}}/{{link}}/{{workTags}}/{{spoiler}}` 等）与接收方解耦。
-- 小说投稿为 `.txt` 文档（document），插画为图片；审核群与频道都按媒体类型发送，
-  发布到频道时自动按每组 ≤10 拆成多个 Telegram media group。
+- 小说投稿为 `.txt` 文档（document），插画为图片；Pixiv 动图（ugoira）自 PixivFlow
+  **2.10.31** 起按每帧延迟合成**循环 GIF** 以动画（animation）直接播放，不再投递 ZIP +
+  帧 JSON。转换在运行时 spawn `python3` + `ffmpeg`：PixivFlow 独立镜像/合一台镜像已内置
+  ffmpeg；裸机（systemd）由 `deploy` 自动 `apt-get install -y ffmpeg`。审核群与频道都按
+  媒体类型发送，发布到频道时自动按每组 ≤10 拆成多个 Telegram media group。
 
 ### 审核群相册与回复链
 
@@ -428,7 +431,7 @@ Basic Auth）。
   共享卷设计）；日常查看、改计划没问题，但不要在 webui 里与 scheduler 同时触发
   大规模下载/维护，避免 SQLite 锁竞争。
 - **版本对齐**：webui 后端镜像的 PixivFlow 版本不要低于 kit 内嵌的版本（当前
-  2.10.30），以免旧版本读不懂新 config 字段；config 用 `PIXIV_DOWNLOADER_CONFIG`
+  2.10.31），以免旧版本读不懂新 config 字段；config 用 `PIXIV_DOWNLOADER_CONFIG`
   显式指向 kit 那份即可（相对路径会以该 config 为基准解析，各进程一致）。
 - **前端升级**：方式 B 的前端独立成镜像，换 tag 重启即可，无需重新构建后端。
 

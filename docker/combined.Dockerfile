@@ -8,7 +8,7 @@ ARG TELEPOST_IMAGE=ghcr.io/redtidev1918/telepost:2.10.41
 ARG NODE_IMAGE=node:24-bookworm-slim
 
 FROM ${NODE_IMAGE} AS pixivflow-builder
-ARG PIXIVFLOW_VERSION=2.10.30
+ARG PIXIVFLOW_VERSION=2.10.31
 ARG HTTP_PROXY
 ARG HTTPS_PROXY
 RUN apt-get update \
@@ -17,6 +17,11 @@ RUN apt-get update \
     && npm cache clean --force
 
 FROM ${TELEPOST_IMAGE}
+# PixivFlow 的 ugoira（动图）转 GIF 在运行时 spawn python3 + ffmpeg；
+# 基础镜像缺 ffmpeg，合一台必须装上，否则动图只投递 ZIP/JSON。
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends ffmpeg \
+    && rm -rf /var/lib/apt/lists/*
 COPY --from=pixivflow-builder /usr/local/bin/node /usr/local/bin/node
 COPY --from=pixivflow-builder /opt/pixivflow /opt/pixivflow
 RUN ln -s /opt/pixivflow/node_modules/.bin/pixivflow /usr/local/bin/pixivflow \
