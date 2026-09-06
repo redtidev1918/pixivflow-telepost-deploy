@@ -29,7 +29,7 @@ build = config.get("build", {})
 if "image" in build:
     raise SystemExit("[build].image is forbidden; use a passthrough Dockerfile")
 dockerfile = build.get("dockerfile")
-if dockerfile and not Path(dockerfile).is_file():
+if dockerfile and not (Path(sys.argv[1]).parent / dockerfile).is_file():
     raise SystemExit(f"missing build.dockerfile: {dockerfile}")
 PY
     then ok "$file TOML"; else fail "$file TOML"; fi

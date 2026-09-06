@@ -1,7 +1,4 @@
-  # 直接 `fly deploy -c fly/<本文件>` 时，dockerfile 路径按本 toml 所在的 fly/
-  # 目录解析，所以要写 ../docker/ 指回仓库根的 docker/ 目录（写 docker/ 会
-  # 报 fly/docker/... not found）。
-  dockerfile = "../docker/# TelePost 独立实例（拆两台：不含 PixivFlow，只跑投稿/审核 bot）
+# TelePost 独立实例（拆两台：不含 PixivFlow，只跑投稿/审核 bot）
 #
 # 与「合一台」的 fly/deploy.fly-multi-bot.toml 相对：直接用 TelePost 预构建镜像，
 # 不启用 PixivFlow（PixivFlow 拆到 fly/deploy.pixivflow.toml 单独部署）。

@@ -1,7 +1,4 @@
-  # 直接 `fly deploy -c fly/<本文件>` 时，dockerfile 路径按本 toml 所在的 fly/
-  # 目录解析，所以要写 ../docker/ 指回仓库根的 docker/ 目录（写 docker/ 会
-  # 报 fly/docker/... not found）。
-  dockerfile = "../docker/# TelePost 多 bot 实例（一台机承载 BOT1 + BOT2 两个频道）
+# TelePost 多 bot 实例（一台机承载 BOT1 + BOT2 两个频道）
 # 模式：Webhook + 常驻一台（保证定时任务与投稿 bot 不被停机）
 # 从仓库根目录部署：fly deploy -c fly/deploy.fly-multi-bot.toml --now
 app = "your-app-name"
