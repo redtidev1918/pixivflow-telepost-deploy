@@ -3,6 +3,14 @@
 > 发布说明面向普通用户：写「对用户有什么改变」，不写内部实现细节（模块名、CI job、配置键）；
 > 技术细节放进代码注释或 `docs/`。每个 Release 的正文由本文件对应版本段自动生成。
 
+## [1.9.1](https://github.com/redtidev1918/pixivflow-telepost-deploy/compare/v1.9.0...v1.9.1) (2026-09-06)
+
+
+### Bug Fixes
+
+* **ci:** repair Fly TOML headers and relative path validation ([02cae05](https://github.com/redtidev1918/pixivflow-telepost-deploy/commit/02cae05a596d4898264f463c43f5d5ec13efbd41))
+* **fly:** tracked templates use ../docker/ Dockerfile path (direct fly deploy resolves dockerfile relative to the toml dir) ([ba6d249](https://github.com/redtidev1918/pixivflow-telepost-deploy/commit/ba6d249431bf4eee5a9a3859c89f6497ccf1bf13))
+
 ## [1.9.0](https://github.com/redtidev1918/pixivflow-telepost-deploy/compare/v1.8.34...v1.9.0) (2026-09-06)
 
 
