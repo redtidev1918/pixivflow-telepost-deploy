@@ -8,6 +8,18 @@
 这是 PixivFlow + TelePost 的部署套件：`deploy` CLI（Go 单二进制）+ Docker Compose +
 Fly.io，把 PixivFlow 的定时下载和 TelePost 的 Telegram 审核/发布串起来。按你的目标选一条路线:
 
+## 📥 下载 deploy CLI
+
+`deploy` 是套件的一键部署工具（单二进制，零依赖）。按你系统选一个压缩包，解压后运行 `./deploy`：
+
+| 平台 | 压缩包 |
+|---|---|
+| Linux | `deploy-linux-amd64.tar.gz` / `deploy-linux-arm64.tar.gz` |
+| macOS | `deploy-darwin-amd64.tar.gz` / `deploy-darwin-arm64.tar.gz` |
+| Windows | `deploy-windows-amd64.tar.gz` / `deploy-windows-arm64.tar.gz` |
+
+👉 最新版见 [GitHub Releases](https://github.com/redtidev1918/pixivflow-telepost-deploy/releases/latest)。
+
 ## 🧭 按任务找文档
 
 | 你想做什么 | 路线 |
