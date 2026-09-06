@@ -18,7 +18,13 @@ def main() -> int:
         version = version[1:]
     changelog = Path(__file__).resolve().parent.parent / "CHANGELOG.md"
     content = changelog.read_text(encoding="utf-8")
-    heading = re.compile(rf"^## \[{re.escape(version)}\](?:\s+-\s+[^\n]+)?\s*$", re.MULTILINE)
+    # 兼容手写格式 `## [1.9.0] - 2026-09-06` 与 release-please 自动格式
+    # `## [1.9.0](https://github.com/.../compare/...) (2026-09-06)`：
+    # 版本括号后允许紧跟 Markdown 链接 `(比较URL)`，再允许任意行尾后缀（日期等）。
+    heading = re.compile(
+        rf"^## \[{re.escape(version)}\](?:\([^)\n]*\))?(?:\s+[^\n]*)?\s*$",
+        re.MULTILINE,
+    )
     match = heading.search(content)
     if not match:
         print(f"CHANGELOG.md has no section for {version}", file=sys.stderr)
