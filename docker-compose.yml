@@ -75,7 +75,7 @@ services:
         max-file: ${LOG_MAX_FILES:-3}
 
   pixivflow:
-    image: ${PIXIVFLOW_IMAGE:-ghcr.io/redtidev1918/pixivflow:2.10.30}
+    image: ${PIXIVFLOW_IMAGE:-ghcr.io/redtidev1918/pixivflow:2.10.31}
     restart: unless-stopped
     init: true
     environment:
@@ -100,7 +100,7 @@ services:
     depends_on:
       telepost:
         condition: service_healthy
-    mem_limit: ${PIXIVFLOW_MEMORY_LIMIT:-192m}
+    mem_limit: ${PIXIVFLOW_MEMORY_LIMIT:-256m}
     cpus: ${CPU_LIMIT:-1.0}
     pids_limit: 256
     healthcheck:

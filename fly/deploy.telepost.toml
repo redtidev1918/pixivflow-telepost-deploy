@@ -14,6 +14,9 @@ app = "your-telepost-app"
 primary_region = "iad"
 
 [build]
+  # 从仓库根部署：context 指回根目录，dockerfile 才按根相对路径解析（否则 fly 以
+  # 本 toml 所在的 fly/ 为 build context，报 docker/telepost.Dockerfile not found）。
+  context = ".."
   dockerfile = "docker/telepost.Dockerfile"
 
 [build.args]
