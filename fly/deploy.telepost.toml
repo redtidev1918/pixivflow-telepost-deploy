@@ -1,4 +1,7 @@
-# TelePost 独立实例（拆两台：不含 PixivFlow，只跑投稿/审核 bot）
+  # 直接 `fly deploy -c fly/<本文件>` 时，dockerfile 路径按本 toml 所在的 fly/
+  # 目录解析，所以要写 ../docker/ 指回仓库根的 docker/ 目录（写 docker/ 会
+  # 报 fly/docker/... not found）。
+  dockerfile = "../docker/# TelePost 独立实例（拆两台：不含 PixivFlow，只跑投稿/审核 bot）
 #
 # 与「合一台」的 fly/deploy.fly-multi-bot.toml 相对：直接用 TelePost 预构建镜像，
 # 不启用 PixivFlow（PixivFlow 拆到 fly/deploy.pixivflow.toml 单独部署）。
@@ -14,10 +17,9 @@ app = "your-telepost-app"
 primary_region = "iad"
 
 [build]
-  # 从仓库根部署：context 指回根目录，dockerfile 才按根相对路径解析（否则 fly 以
-  # 本 toml 所在的 fly/ 为 build context，报 docker/telepost.Dockerfile not found）。
-  context = ".."
-  dockerfile = "docker/telepost.Dockerfile"
+  # 直接 `fly deploy -c fly/<本文件>`：dockerfile 路径按本 toml 所在的 fly/ 目录
+  # 解析，须用 ../docker/ 指回仓库根（写 docker/ 会报 fly/docker/... not found）。
+  dockerfile = "../docker/telepost.Dockerfile"
 
 [build.args]
   TELEPOST_IMAGE = "ghcr.io/redtidev1918/telepost:2.10.41"
