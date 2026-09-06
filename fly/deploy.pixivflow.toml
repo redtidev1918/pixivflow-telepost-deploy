@@ -1,7 +1,4 @@
-  # 直接 `fly deploy -c fly/<本文件>` 时，dockerfile 路径按本 toml 所在的 fly/
-  # 目录解析，所以要写 ../docker/ 指回仓库根的 docker/ 目录（写 docker/ 会
-  # 报 fly/docker/... not found）。
-  dockerfile = "../docker/# PixivFlow 独立调度器实例（拆两台：TelePost 与 PixivFlow 各一台 Fly 机器）
+# PixivFlow 独立调度器实例（拆两台：TelePost 与 PixivFlow 各一台 Fly 机器）
 #
 # 与「合一台」的 fly/deploy.fly-multi-bot.toml 相对：这里只跑 pixivflow scheduler。
 # 这是「低成本架构」的常驻半边：PixivFlow 维护 scheduler/cron，必须 24/7 常驻。
