@@ -150,8 +150,17 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh release create "$GITHUB_REF_NAME" --verify-tag --notes-file release-notes.md --title "Deployment Kit $GITHUB_REF_NAME"
-          gh release upload "$GITHUB_REF_NAME" dist/*.tar.gz
+          # release-please already creates the GitHub release when the release PR
+          # merges; re-running this tag workflow must not 422 on a duplicate.
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            gh release edit "$GITHUB_REF_NAME" \
+              --title "Deployment Kit $GITHUB_REF_NAME" \
+              --notes-file release-notes.md
+          else
+            gh release create "$GITHUB_REF_NAME" --verify-tag \
+              --notes-file release-notes.md --title "Deployment Kit $GITHUB_REF_NAME"
+          fi
+          gh release upload "$GITHUB_REF_NAME" dist/*.tar.gz --clobber
       - name: Prune old releases (keep latest per track)
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
