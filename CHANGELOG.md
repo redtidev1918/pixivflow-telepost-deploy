@@ -3,6 +3,18 @@
 > 发布说明面向普通用户：写「对用户有什么改变」，不写内部实现细节（模块名、CI job、配置键）；
 > 技术细节放进代码注释或 `docs/`。每个 Release 的正文由本文件对应版本段自动生成。
 
+## [1.9.0](https://github.com/redtidev1918/pixivflow-telepost-deploy/compare/v1.8.34...v1.9.0) (2026-09-06)
+
+
+### Features
+
+* ugoira GIF support (PixivFlow 2.10.31) + ffmpeg runtime across deploy paths ([5582cac](https://github.com/redtidev1918/pixivflow-telepost-deploy/commit/5582cacbd69d7bcdc42a0c493109604a91ba38dc))
+
+
+### Bug Fixes
+
+* 补提交透传 Dockerfile 与 deploy 测试（上一条漏了未跟踪文件） ([fd96aa7](https://github.com/redtidev1918/pixivflow-telepost-deploy/commit/fd96aa7b52f2b32b38a5360542d93185a482fa5b))
+
 ## [Unreleased]
 
 - Fly 模板不再使用会覆盖源码 Dockerfile 的 `build.image`；旧配置会在自检和部署前
