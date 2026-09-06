@@ -1,5 +1,6 @@
 - 开始部署
   - [文档中心](/)
+  - [📥 下载](download.md)
   - [部署场景速查](SCENARIOS.md)
   - [Polling：无公网部署](POLLING.md)
   - [Webhook：公网 HTTPS 部署](WEBHOOK.md)
