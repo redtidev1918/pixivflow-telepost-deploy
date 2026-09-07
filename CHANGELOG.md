@@ -3,6 +3,13 @@
 > 发布说明面向普通用户：写「对用户有什么改变」，不写内部实现细节（模块名、CI job、配置键）；
 > 技术细节放进代码注释或 `docs/`。每个 Release 的正文由本文件对应版本段自动生成。
 
+## [1.9.3](https://github.com/redtidev1918/pixivflow-telepost-deploy/compare/v1.9.2...v1.9.3) (2026-09-07)
+
+
+### Bug Fixes
+
+* **ci:** make release step idempotent when release-please already created the release ([dbe8507](https://github.com/redtidev1918/pixivflow-telepost-deploy/commit/dbe8507bc776aba5ee7edb5411ac271a50ba05b1))
+
 ## [1.9.2](https://github.com/redtidev1918/pixivflow-telepost-deploy/compare/v1.9.1...v1.9.2) (2026-09-06)
 
 
