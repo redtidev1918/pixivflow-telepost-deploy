@@ -6,6 +6,11 @@ name: Release
 # 仍支持手动推 v* tag / workflow_dispatch 重跑（release-please 不在这两种场景运行）。
 on:
   workflow_dispatch:
+    inputs:
+      tag:
+        description: 要重跑/重发布的已有 tag（如 v1.9.4）；main push 自动发版时忽略此输入
+        required: true
+        type: string
   push:
     branches: [main]
     tags: ["v*"]
@@ -44,11 +49,11 @@ jobs:
       github.ref == 'refs/heads/main' && needs.release-please.outputs.releases_created == 'true' ||
       startsWith(github.ref, 'refs/tags/')
     env:
-      RELEASE_TAG: ${{ needs.release-please.outputs.tag_name || github.ref_name }}
+      RELEASE_TAG: ${{ needs.release-please.outputs.tag_name || inputs.tag || github.ref_name }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ needs.release-please.outputs.tag_name || github.ref }}
+          ref: ${{ needs.release-please.outputs.tag_name || inputs.tag || github.ref }}
           fetch-depth: 0
       - name: Install shell lint
         run: sudo apt-get update && sudo apt-get install -y --no-install-recommends shellcheck
@@ -67,14 +72,14 @@ jobs:
       github.ref == 'refs/heads/main' && needs.release-please.outputs.releases_created == 'true' ||
       startsWith(github.ref, 'refs/tags/')
     env:
-      RELEASE_TAG: ${{ needs.release-please.outputs.tag_name || github.ref_name }}
+      RELEASE_TAG: ${{ needs.release-please.outputs.tag_name || inputs.tag || github.ref_name }}
     permissions:
       contents: read
       packages: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ needs.release-please.outputs.tag_name || github.ref }}
+          ref: ${{ needs.release-please.outputs.tag_name || inputs.tag || github.ref }}
           fetch-depth: 0
       - uses: docker/setup-qemu-action@1f40c72289eff860ee54a304f14383cff362e0a # v4.3.0
       - uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # v4.3.0
@@ -86,23 +91,20 @@ jobs:
       - name: Compute image tags
         id: imgtags
         run: |
-          # 本 run 触发于 main 分支时 metadata action 的 type=semver 取不到 tag，
-          # 所以直接从 release-please 输出的版本号派生全量 tag 与 major.minor tag。
+          # GHCR 镜像 tag 不带 v 前缀（如 1.9.3），git/release tag 带 v（v1.9.3）。
+          # 自动发版时 run 触发于 main，metadata action 的 type=semver 取不到 git tag，
+          # 所以统一从 RELEASE_TAG 派生全量 tag 与 major.minor tag（两种触发路径都生效）。
           V="${RELEASE_TAG#v}"
-          echo "full=$RELEASE_TAG" >> "$GITHUB_OUTPUT"
-          echo "minor=v${V%%.*}.$(echo "$V" | cut -d. -f2)" >> "$GITHUB_OUTPUT"
+          echo "full=$V" >> "$GITHUB_OUTPUT"
+          echo "minor=${V%%.*}.$(echo "$V" | cut -d. -f2)" >> "$GITHUB_OUTPUT"
       - name: Image metadata
         id: meta
         uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
         with:
           images: ghcr.io/${{ github.repository_owner }}/pixivflow-telepost-deploy
           tags: |
-            # tag/dispatch 重跑：从 git tag 派生
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
-            # release-please 在本 run 内发版：显式传 tag
-            type=raw,value=${{ steps.imgtags.outputs.full }},enable=${{ needs.release-please.outputs.releases_created == 'true' }}
-            type=raw,value=${{ steps.imgtags.outputs.minor }},enable=${{ needs.release-please.outputs.releases_created == 'true' }}
+            type=raw,value=${{ steps.imgtags.outputs.full }}
+            type=raw,value=${{ steps.imgtags.outputs.minor }}
             type=raw,value=latest
 
       - name: Build and push amd64/arm64
@@ -146,7 +148,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ needs.release-please.outputs.tag_name || github.ref }}
+          ref: ${{ needs.release-please.outputs.tag_name || inputs.tag || github.ref }}
           fetch-depth: 0
       - uses: actions/setup-go@v7
         with:
@@ -177,11 +179,11 @@ jobs:
     permissions:
       contents: write
     env:
-      RELEASE_TAG: ${{ needs.release-please.outputs.tag_name || github.ref_name }}
+      RELEASE_TAG: ${{ needs.release-please.outputs.tag_name || inputs.tag || github.ref_name }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ needs.release-please.outputs.tag_name || github.ref }}
+          ref: ${{ needs.release-please.outputs.tag_name || inputs.tag || github.ref }}
           fetch-depth: 0
       - name: Prepare release notes
         run: |
@@ -200,7 +202,7 @@ jobs:
             echo "## 这个 release 包含什么"
             echo
             echo "- **deploy 单文件**：6 个压缩包（Windows / macOS / Linux 各 2 种架构）"
-            echo "- **Docker 镜像**：\`ghcr.io/redtidev1918/pixivflow-telepost-deploy:$RELEASE_TAG\`"
+            echo "- **Docker 镜像**：\`ghcr.io/redtidev1918/pixivflow-telepost-deploy:${RELEASE_TAG#v}\`"
             echo "- **源码**：\`git clone\` 后 \`docker compose up -d\` 一键启动"
           } >> release-notes.md
       - name: Download binaries
