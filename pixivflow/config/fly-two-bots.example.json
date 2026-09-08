@@ -27,26 +27,30 @@
   },
   "schedules": [
     {
-      "id": "bot1-daily",
-      "name": "Bot1 每日 10:00 & 18:00 主题示例A 插画 + 小说",
-      "enabled": false,
-      "cron": "0 10,18 * * *",
+      "id": "morning",
+      "name": "今日早班 · 10:00",
+      "enabled": true,
+      "cron": "0 10 * * *",
       "timezone": "Asia/Shanghai",
       "targetIds": [
         "bot1-illust-topic-a",
-        "bot1-novel-topic-a"
+        "bot1-novel-topic-a",
+        "bot2-illust-topic-b",
+        "bot2-novel-topic-b"
       ],
       "timeout": 1800000,
       "maxConsecutiveFailures": 5,
       "failureRetryDelay": 30000
     },
     {
-      "id": "bot2-daily",
-      "name": "Bot2 每日 10:10 & 18:10 主题示例B 插画 + 小说",
-      "enabled": false,
-      "cron": "10 10,18 * * *",
+      "id": "evening",
+      "name": "今日晚班 · 18:00",
+      "enabled": true,
+      "cron": "0 18 * * *",
       "timezone": "Asia/Shanghai",
       "targetIds": [
+        "bot1-illust-topic-a",
+        "bot1-novel-topic-a",
         "bot2-illust-topic-b",
         "bot2-novel-topic-b"
       ],
@@ -56,9 +60,17 @@
     }
   ],
   "schedulerRuntime": {
+    "mode": "external",
+    "catchUpMissedRuns": false,
     "watchConfig": true,
     "reloadDebounceMs": 500,
-    "queueLimit": 2
+    "queueLimit": 2,
+    "trigger": {
+      "enabled": true,
+      "port": 8090,
+      "host": "0.0.0.0",
+      "graceMinutes": 90
+    }
   },
   "download": {
     "concurrency": 1,
@@ -92,7 +104,10 @@
           "target_id": "{{targetId}}",
           "anonymous": true,
           "spoiler": false,
-          "idempotency_key": "pixiv:bot1:{{type}}:{{pixivId}}"
+          "idempotency_key": "pixiv:bot1:{{type}}:{{pixivId}}",
+          "source_ref": "{{executionId}}",
+          "scheduled_at": "{{occurrenceAt}}",
+          "source_label": "PixivFlow · {{slotName}} · Bot1"
         },
         "success": {
           "statuses": [
@@ -125,7 +140,10 @@
           "target_id": "{{targetId}}",
           "anonymous": true,
           "spoiler": false,
-          "idempotency_key": "pixiv:bot2:{{type}}:{{pixivId}}"
+          "idempotency_key": "pixiv:bot2:{{type}}:{{pixivId}}",
+          "source_ref": "{{executionId}}",
+          "scheduled_at": "{{occurrenceAt}}",
+          "source_label": "PixivFlow · {{slotName}} · Bot2"
         },
         "success": {
           "statuses": [

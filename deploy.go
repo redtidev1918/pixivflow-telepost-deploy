@@ -272,6 +272,23 @@ func tomlSet(path, key, val string) {
 	writeLines(path, lines)
 }
 
+func flyProfileIsAutosleep(path string) bool {
+	// The defining trait of scale-to-zero is auto_stop_machines = "stop".
+	return tomlGet(path, "auto_stop_machines") == "stop"
+}
+
+// tomlRawValue returns a key's raw scalar (including any surrounding quotes),
+// for diagnostics that want to show exactly what the file contains.
+func tomlRawValue(path, key string) string {
+	for _, line := range readLines(path) {
+		m := tomlKV.FindStringSubmatch(line)
+		if m != nil && m[2] == key {
+			return strings.TrimSpace(m[3])
+		}
+	}
+	return ""
+}
+
 func flyConfigHasBuildImage(path string) bool {
 	section := ""
 	for _, line := range readLines(path) {
@@ -446,6 +463,10 @@ func fetchHealth(url string, timeout time.Duration) map[string]any {
 func cmdDoctor(platform, cfg string) {
 	stepf("1/3", "平台")
 	okf("使用平台：%s", platform)
+	autosleep := platform == "fly" && flyProfileIsAutosleep(cfg)
+	if autosleep {
+		okf("生命周期：autosleep（停机=健康省钱的 idle，外部时钟唤醒）")
+	}
 
 	if platform == "systemd" {
 		systemdDoctor()
@@ -470,6 +491,22 @@ func cmdDoctor(platform, cfg string) {
 			if flyConfigHasBuildImage(cfg) {
 				failf("%s 使用已禁用的 [build].image；请迁移到透传 Dockerfile", cfg)
 				problems++
+			}
+			if autosleep {
+				// Autosleep invariant checks on the Fly lifecycle settings.
+				stop := tomlGet(cfg, "auto_stop_machines")
+				minMachines := tomlGet(cfg, "min_machines_running")
+				if stop == "stop" {
+					okf("auto_stop_machines = stop（空闲停机）")
+				} else {
+					warnf("autosleep 期望 auto_stop_machines = \"stop\"（当前 %q）", stop)
+				}
+				if minMachines == "0" || minMachines == "" {
+					okf("min_machines_running = 0（允许完全停机）")
+				} else {
+					warnf("autosleep 期望 min_machines_running = 0（当前 %q）", minMachines)
+				}
+				okf("调度：schedulerRuntime.mode=external（在 data/pixivflow/config.json；外部时钟 POST /internal/schedules/<id>/run）")
 			}
 		} else {
 			failf("%s 不存在", cfg)
@@ -532,6 +569,7 @@ func cmdVersion(platform, cfg string) {
 }
 
 func cmdStatus(platform, cfg string) {
+	autosleep := platform == "fly" && flyProfileIsAutosleep(cfg)
 	if platform == "fly" {
 		fb := flyBin()
 		if fb == "" {
@@ -546,6 +584,19 @@ func cmdStatus(platform, cfg string) {
 		run([]string{"docker", "compose", "ps"}, true)
 	}
 	fmt.Println()
+	// A stopped autosleep machine is the healthy, cost-saving idle state — it
+	// only answers /health while awake. Don't report that as "down": hint that
+	// a wake trigger (Telegram webhook or the schedule clock) brings it up.
+	if autosleep {
+		infof("健康端点（autosleep：仅在机器被唤醒后可达）：")
+		if h := fetchHealth(healthURL(platform, cfg), 15*time.Second); h != nil {
+			b, _ := json.MarshalIndent(h, "", "  ")
+			fmt.Println(string(b))
+		} else {
+			okf("机器当前停机（healthy idle）。Telegram webhook 或外部时钟 POST /internal/schedules/<id>/run 会自动拉起。")
+		}
+		return
+	}
 	infof("健康端点：")
 	if h := fetchHealth(healthURL(platform, cfg), 15*time.Second); h != nil {
 		b, _ := json.MarshalIndent(h, "", "  ")

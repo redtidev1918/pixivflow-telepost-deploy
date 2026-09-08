@@ -13,8 +13,8 @@
 ## 不变量（改调度代码时必须守住）
 
 1. **daemon 启动 ≠ 定时触发**。冷启动（用户发 Telegram 消息叫醒机器）绝不自动跑/补定时任务。
-2. **外部触发幂等**。同一个 Slot 被重复 POST（Cloudflare + GitHub watchdog + 网络重试）只产生一个 Slot。
-3. **一个 cell 最多锁定一个作品**。`UNIQUE(slot_id, target_id)`：某天早班的 bot1 小说永远只有一篇。
+2. **外部触发幂等**。同一 occurrence 被重复 POST（Cloudflare + GitHub watchdog + 网络重试）只产生一个 Slot/一组 item。
+3. **一个 item 最多锁定一个作品**。`UNIQUE(slot_id, target_id)`：某次 occurrence 里同一 target 永远只有一篇。
 4. **自动重试绝不更换已选作品**。选中 pixivId 后，下载失败、HTTP 响应丢失、进程重启、outbox
    重放都继续处理同一个作品；「换一篇」只能是显式人工操作。
 5. **outbox 只做投递重试，不重跑选品**。outbox manifest 固化了 pixivId 和文件，重试只重发。
@@ -70,10 +70,12 @@
 
 ## Slot 模型
 
-一个 Slot = 一个业务批次（`2026-09-08:morning` / `:evening`）。每个启用的 target 在 Slot 里
-占一个 cell（当前生产 4 个：bot1/bot2 × 插图/小说；按 config 动态生成，不写死 bot 数）。
+一个 Slot = 一个 schedule 的一次 canonical occurrence（`<scheduleId>@<计划时刻>`，如
+`morning@2026-09-08T1000`），不是“早班/晚班”固定行。每个该 schedule 的 target 在 occurrence 里
+占一个 item（成员在首次物化时按当时 config 快照冻结；任意数量 target，不写死 bot 数）。
 
-- `schedule_slots`：`id(=date:name)`、`slot_date`、`slot_name`、`schedule_id`、`status`、时间戳、`last_error`。
+- `schedule_slots`：`id(=<scheduleId>@<occurrenceStamp>)`、`schedule_id`、`occurrence_at`、
+  `occurrence_date/label`、`timezone`、`target_ids`（成员快照 JSON）、`status`、`trigger_source`、时间戳、`last_error`。
 - `schedule_slot_items`：`slot_id`、`target_id`、`work_id`、`work_type`、`status`、`attempt_count`、
   `last_error`、时间戳；**`UNIQUE(slot_id, target_id)`**。
 
@@ -84,43 +86,53 @@ Cell 状态：`pending → selected → submitted`，或终态 `no_candidate | f
 
 ## External 触发 API
 
-PixivFlow scheduler 进程内置一个最小 HTTP 服务（external 模式才启用）：
+PixivFlow scheduler 进程内置一个最小 HTTP 触发服务（external 模式总是启用；internal
+模式可经 `schedulerRuntime.trigger.enabled=true` 额外开放作手动运维）。按 **schedule id**
+触发，服务端用该 schedule 自己的 cron+timezone 解析 canonical occurrence：
 
 ```
-POST /internal/schedules/run
+POST /internal/schedules/{scheduleId}/run
 Authorization: Bearer <SCHEDULER_TRIGGER_TOKEN>
 Content-Type: application/json
 
-{ "slot": "morning" }     # 或 "evening"；省略则按当前时间推断
+{ "label": "今日早班" }      # 可选；仅人类可读来源标签，不参与身份/日期
 ```
 
-- **必须认证**：未配置 token 时端点 fail-closed（503）；token 错返回 401。
-- **同步执行**：请求保持打开直到整个 Slot 跑完——这个 HTTP 连接本身就是「保活租约」，
-  防止 Fly 在任务中途认为空闲而停机。
-- **幂等**：重复调用命中同一 Slot 行，已完成返回 `already_completed`，不重复投稿。
-- **不信任客户端日期**：只接受当前时间窗口（grace）内的 morning/evening。
+- **必须认证**：未配置 token 时端点 fail-closed（503）；token 错/缺失返回 401。token 不进日志/响应。
+- **按 schedule id**：未知 id 返回 404；不存在“一次 POST 跑全部 schedule”，每个 schedule 独立触发。
+- **同步执行**：请求保持打开直到该 schedule 的本次 occurrence 跑完——这个 HTTP 连接本身就是
+  「保活租约」，防止 Fly 在任务中途认为空闲而停机。
+- **幂等**：重复/并发调用经 in-process singleflight + DB `UNIQUE` 收敛到同一 occurrence，
+  已完成返回 `already_completed`，不重复投稿。
+- **不信任客户端日期**：请求体不接受日期；只接受当前 grace 窗口（`trigger.graceMinutes`，默认 90 分钟）
+  内的触发。未到点 425、过期 410，公开端点无法回填历史。
 - 合一台部署时，TelePost 的 8080 路由把公网 `/internal/*` 反代到容器内 PixivFlow 的 8090
   （`PIXIVFLOW_TRIGGER_PORT`，默认 8090），所以外部时钟只需要打公网 Fly 域名。
 
-## 外部时钟（dumb clock）
+## 外部时钟（dumb clock，可替换）
 
-核心业务不绑定任何 provider，只认「受认证的 HTTP 触发」。官方提供两个适配器模板：
+核心业务不绑定任何 provider，只认「受认证的 HTTP 触发」。**cron → schedule id 的映射是数据驱动的**，
+可支持任意数量/任意 cron 的 schedule，不在代码里写 morning/evening。官方提供两个适配器模板：
 
-- **Cloudflare Worker（推荐主时钟）**：`scheduler/cloudflare/`。Cron 用 UTC，
-  北京 10:00/18:00 = UTC 02:00/10:00。Worker 只 POST Slot，不碰 Pixiv、不存状态。
-  Secret：`SCHEDULE_TRIGGER_URL`、`SCHEDULE_TRIGGER_TOKEN`。
-- **GitHub Actions（可选看门狗）**：`scheduler/github/slot-watchdog.yml`，北京 10:10/18:10
-  再 POST 一次同一 Slot。成功则 `already_completed`，失败则 resume。不是主时钟。
-- 也可以用 cron-job.org / EasyCron / 自己 VPS 的 cron：任何能发带 Bearer 的 POST 的东西都行。
+- **Cloudflare Worker（推荐主时钟）**：`scheduler/cloudflare/`。Cron 用 UTC（北京 10:00/18:00 =
+  UTC 02:00/10:00）。Worker 用 `[vars] SCHEDULES`（JSON：`{"0 2 * * *":"morning", ...}`）把每次触发的
+  cron 映射到 PixivFlow schedule id，然后 POST `/internal/schedules/<id>/run`；不碰 Pixiv、不存状态。
+  Secret：`SCHEDULE_TRIGGER_URL`（**base URL**，worker 自动追加路径）、`SCHEDULE_TRIGGER_TOKEN`。
+- **GitHub Actions（可选看门狗）**：`scheduler/github/slot-watchdog.yml`，每次计划时刻 +10 分钟用同样的
+  cron→id 映射再 POST 一次。成功则 `already_completed`，失败则 resume。不是正确性依赖，只是备份。
+- 也可以用 cron-job.org / EasyCron / 自己 VPS 的 cron：任何能发带 Bearer 的 POST 的东西都行；
+  替换时钟**不需要**改 PixivFlow Core。
 
 ## Fly Autosleep 生命周期
 
 ```
-stopped（省钱，健康）
-   │  Telegram webhook ─────────────► auto-start ─► TelePost 处理投稿 ─► idle ─► stop
-   │  Cloudflare POST /internal/run ─► auto-start ─► PixivFlow 跑 Slot（同步）─► idle ─► stop
+stopped（省钱，健康 idle）
+   │  Telegram webhook ───────────────────────────► auto-start ─► TelePost 处理投稿 ─► idle ─► stop
+   │  外部时钟 POST /internal/schedules/<id>/run ─► auto-start ─► PixivFlow 跑该 occurrence（同步）─► idle ─► stop
 ```
 
+- 普通 Telegram webhook / 健康检查冷启动机器时：TelePost 正常工作，但 PixivFlow **零**定时执行（external
+  模式不 catch-up、不起 cron）。只有显式的 `/internal/schedules/<id>/run` 才触发定时 occurrence。
 - 冷启动那几秒由 Fly Proxy 排队吸收：Telegram webhook 会重试，PixivFlow outbox 也会重试，请求不丢。
 - Telegram 叫醒机器只处理 Telegram，**不会**顺带跑定时投稿（不变量 1、8）。
 - 不再用「持续 ping /health 等内部 cron 恰好到点」这种方式（见下文 Legacy）。

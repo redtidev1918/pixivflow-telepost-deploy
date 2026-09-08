@@ -1,17 +1,32 @@
-name = "pixivflow-slot-clock"
+name = "pixivflow-schedule-clock"
 main = "src/index.ts"
 compatibility_date = "2025-09-01"
 
-# Beijing 10:00 = UTC 02:00 (morning); Beijing 18:00 = UTC 10:00 (evening).
-# Cloudflare cron is UTC. Adjust the minute to stagger if you run multiple apps.
+# Cloudflare cron is UTC. Add/remove/edit freely — there is NO hardcoded schedule
+# in the worker: each firing cron is mapped to a PixivFlow schedule id via the
+# SCHEDULES variable below, so any number/times of schedule works.
+# Example: Beijing 10:00 = UTC 02:00, Beijing 18:00 = UTC 10:00.
 [triggers]
 crons = ["0 2 * * *", "0 10 * * *"]
 
+# Maps each firing cron (exact string match to the crons above) to a PixivFlow
+# schedule id. Change the right-hand ids to YOUR schedule ids (see your PixivFlow
+# config `schedules[].id`). This is non-secret config; it can live here or be set
+# with `wrangler secret put SCHEDULES` / a dashboard var.
+[vars]
+SCHEDULES = '''{"0 2 * * *":"morning","0 10 * * *":"evening"}'''
+
 # Secrets (do NOT put real values here):
-#   wrangler secret put SCHEDULE_TRIGGER_URL    -> https://<your-fly-app>.fly.dev/internal/schedules/run
+#   wrangler secret put SCHEDULE_TRIGGER_URL    -> base URL, e.g. https://<your-fly-app>.fly.dev
+#                                                 (the worker appends /internal/schedules/<id>/run)
 #   wrangler secret put SCHEDULE_TRIGGER_TOKEN  -> the PixivFlow SCHEDULER_TRIGGER_TOKEN
 #
 # Deploy:
 #   npm i && npx wrangler deploy
-# Smoke test (idempotent, safe to repeat):
-#   curl -H "Authorization: Bearer $TOKEN" "https://<worker>.workers.dev/__sched?slot=morning"
+#
+# Manual smoke test / ops trigger (idempotent, safe to repeat) — POST a schedule id:
+#   curl -X POST -H "Authorization: Bearer $TOKEN" \
+#     "https://<worker>.workers.dev/__trigger/morning"
+#   # optional human provenance label:
+#   curl -X POST -H "Authorization: Bearer $TOKEN" \
+#     "https://<worker>.workers.dev/__trigger/morning?label=%E4%BB%8A%E6%97%A5%E6%97%A9%E7%8F%AD"

@@ -3,15 +3,17 @@
 # 1 × 512MB 合一台：TelePost（双 bot）+ PixivFlow，平时完全停机省 RAM。
 # 唤醒源：
 #   1) Telegram webhook / 用户投稿 → 经 Fly Proxy 自动拉起；
-#   2) 外部 Slot 时钟（Cloudflare Worker / cron）→ POST
-#      https://<app>.fly.dev/internal/schedules/run （run.py 反代到容器内
-#      PixivFlow 的 trigger 端口 8090），同步跑完 morning/evening Slot。
+#   2) 外部时钟（Cloudflare Worker / 任意 HTTP cron）→ 对每个 schedule id POST
+#      https://<app>.fly.dev/internal/schedules/<scheduleId>/run
+#      （run.py 反代到容器内 PixivFlow 的 trigger 端口 8090），同步跑完该
+#      schedule 的本次 occurrence。schedule id 是数据驱动的（如 morning/evening）。
 #
 # 关键不变量：
-#   - schedulerRuntime.mode = "external"（在 data/pixivflow/config.json）：
-#     内部 cron 关闭、冷启动不补跑；普通 Telegram 流量绝不触发定时投稿。
-#   - 外部触发幂等：Slot 账本（schedule_slots/slot_items）保证重复 trigger、
-#     重启、outbox 重放只恢复原任务，不造第二篇、不补历史。
+#   - schedulerRuntime.mode = "external"（见 pixivflow/config/fly-two-bots.example.json，
+#     复制进 data/pixivflow/config.json）：内部 cron 关闭、冷启动不补跑；普通
+#     Telegram 流量绝不触发定时投稿。
+#   - 外部触发幂等：occurrence 账本（schedule_slots/schedule_slot_items）保证重复
+#     trigger、重启、outbox 重放只恢复原 occurrence，不造第二篇、不补历史。
 #
 # 部署步骤：
 #   fly apps create <your-app>
@@ -22,9 +24,11 @@
 #     PIXIV_REFRESH_TOKEN=... \
 #     TELEPOST_BOT1_SUBMIT_TOKEN=... TELEPOST_BOT2_SUBMIT_TOKEN=... \
 #     SCHEDULER_TRIGGER_TOKEN=<strong-random-secret>
-#   # 把 data/pixivflow/config.json 放入卷，schedulerRuntime.mode 设为 "external"
+#   # 把 pixivflow/config/fly-two-bots.example.json 复制为 data/pixivflow/config.json
+#   # （已含 schedulerRuntime.mode="external" 与 trigger 块），按你的主题/target 调整。
 #   fly deploy -c fly/deploy.fly-autosleep.toml
-#   # 然后配置 Cloudflare Worker（见 scheduler/cloudflare/）指向 /internal/schedules/run
+#   # 然后配置 Cloudflare Worker（见 scheduler/cloudflare/）：SCHEDULES 映射到你的
+#   # schedule id，SCHEDULE_TRIGGER_URL 用本 app 的 base URL（worker 自动追加 /internal/schedules/<id>/run）
 
 app = "your-app-name"
 primary_region = "iad"

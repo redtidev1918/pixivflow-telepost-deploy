@@ -23,14 +23,18 @@ import (
 //go:embed proxy
 //go:embed docker
 //go:embed fly/deploy.fly-multi-bot.toml
+//go:embed fly/deploy.fly-autosleep.toml
 //go:embed fly/deploy.telepost.toml
 //go:embed fly/deploy.pixivflow.toml
 var scaffold embed.FS
 
 // 与 docker-compose/.env 基线保持一致（发版时同步更新）。
+// 已知兼容版本：PixivFlow 2.11.0（durable occurrences + external clock +
+// generic provenance）与 TelePost 2.12.0（generic source_label/source_ref/
+// scheduled_at 入参）。
 const (
-	telepostBaseline = "2.10.44"
-	pixivBaseline    = "2.10.31"
+	telepostBaseline = "2.12.0"
+	pixivBaseline    = "2.11.0"
 )
 
 // 向导场景（answers 里的 SCENARIO 键；缺省 = polling）。
@@ -198,8 +202,12 @@ func wizard() map[string]string {
 			}
 		case "4":
 			answers["SCENARIO"] = scenarioFly
-			// 默认生成 always-on 配置；auto-stop 是可选省钱优化，不在向导里引导，
-			// 见 docs/AUTOSTOP.md。
+			// 生命周期：autosleep（停机省钱，需要外部时钟）vs always-on（常驻、内部 cron）。
+			if lc, err := read("Fly 生命周期？\n      1) autosleep（默认推荐：空闲停机最省钱，需配外部时钟 Cloudflare/cron，见 docs/AUTOSTOP.md）\n      2) always-on（常驻，内部 cron 定时）\n    输入 1-2 或回车=1"); err == nil && strings.TrimSpace(lc) == "2" {
+				answers["FLY_LIFECYCLE"] = "always-on"
+			} else {
+				answers["FLY_LIFECYCLE"] = "autosleep"
+			}
 		}
 	}
 	return answers
@@ -280,7 +288,11 @@ func fillEnv(tpl []byte, answers map[string]string) []byte {
 
 // writeFlyTpl 生成 ./telesubmit.fly.toml（把内嵌模板的镜像基线刷新到当前值）。
 func writeFlyTpl(dir string, answers map[string]string) error {
-	data, err := scaffold.ReadFile("fly/deploy.fly-multi-bot.toml")
+	tpl := "fly/deploy.fly-multi-bot.toml"
+	if answers["FLY_LIFECYCLE"] == "autosleep" || answers["FLY_LIFECYCLE"] == "" {
+		tpl = "fly/deploy.fly-autosleep.toml"
+	}
+	data, err := scaffold.ReadFile(tpl)
 	if err != nil {
 		return fmt.Errorf("读取内嵌 fly 模板: %w", err)
 	}
@@ -298,7 +310,13 @@ func writeFlyTpl(dir string, answers map[string]string) error {
 	if err := os.WriteFile(dst, []byte(strings.Join(lines, "\n")), 0o644); err != nil {
 		return err
 	}
-	infof("已生成 telesubmit.fly.toml（镜像基线 TelePost %s + PixivFlow %s；默认常驻，请修改 app 名）",
-		telepostBaseline, pixivBaseline)
+	if tpl == "fly/deploy.fly-autosleep.toml" {
+		okf("已生成 telesubmit.fly.toml（autosleep：TelePost %s + PixivFlow %s；空闲停机，需配外部时钟 + SCHEDULER_TRIGGER_TOKEN）",
+			telepostBaseline, pixivBaseline)
+		infof("autosleep 下一步：设置 SCHEDULER_TRIGGER_TOKEN secret；data/pixivflow/config.json 已含 schedulerRuntime.mode=external；配置 scheduler/cloudflare（SCHEDULES 映射到你的 schedule id）。")
+	} else {
+		infof("已生成 telesubmit.fly.toml（always-on 常驻：TelePost %s + PixivFlow %s，内部 cron；请修改 app 名）",
+			telepostBaseline, pixivBaseline)
+	}
 	return nil
 }
