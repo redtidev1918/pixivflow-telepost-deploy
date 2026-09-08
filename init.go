@@ -29,12 +29,12 @@ import (
 var scaffold embed.FS
 
 // 与 docker-compose/.env 基线保持一致（发版时同步更新）。
-// 已知兼容版本：PixivFlow 2.11.0（durable occurrences + external clock +
-// generic provenance）与 TelePost 2.12.0（generic source_label/source_ref/
+// 已知兼容版本：PixivFlow 2.12.0（durable occurrences + external clock +
+// generic provenance）与 TelePost 2.14.0（generic source_label/source_ref/
 // scheduled_at 入参）。
 const (
-	telepostBaseline = "2.12.0"
-	pixivBaseline    = "2.11.0"
+	telepostBaseline = "2.14.0"
+	pixivBaseline    = "2.12.0"
 )
 
 // 向导场景（answers 里的 SCENARIO 键；缺省 = polling）。

@@ -37,8 +37,8 @@ primary_region = "iad"
   dockerfile = "../docker/combined.Dockerfile"
 
 [build.args]
-  TELEPOST_IMAGE = "ghcr.io/redtidev1918/telepost:2.12.0"
-  PIXIVFLOW_VERSION = "2.11.0"
+  TELEPOST_IMAGE = "ghcr.io/redtidev1918/telepost:2.14.0"
+  PIXIVFLOW_VERSION = "2.12.0"
 
 [env]
   PYTHONUNBUFFERED = "1"
