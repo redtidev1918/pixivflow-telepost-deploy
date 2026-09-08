@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+rm -rf dist/release
+mkdir -p dist/release
+for platform in linux/amd64 linux/arm64 darwin/amd64 darwin/arm64 windows/amd64 windows/arm64; do
+  os=${platform%/*}
+  arch=${platform#*/}
+  name="deploy-$os-$arch"
+  [[ $os == windows ]] && name="$name.exe"
+  CGO_ENABLED=0 GOOS=$os GOARCH=$arch go build -trimpath -ldflags "-s -w -X main.appVersion=$RELEASE_VERSION" -o "dist/release/$name" .
+  tar -C dist/release -czf "dist/release/deploy-$os-$arch.tar.gz" "$name"
+  rm "dist/release/$name"
+done
