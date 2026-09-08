@@ -1,6 +1,7 @@
 name: Release
 
 on:
+  pull_request:
   push:
     branches: [main]
   schedule:
@@ -24,8 +25,8 @@ jobs:
     uses: redtidev1918/release-infra/.github/workflows/reusable-release.yml@v1
     with:
       version: ${{ inputs.version || '' }}
-      dry_run: ${{ inputs.dry_run || false }}
+      dry_run: ${{ github.event_name == 'pull_request' || inputs.dry_run || false }}
       force: ${{ inputs.force || false }}
-      repair: ${{ inputs.repair || false }}
+      repair: ${{ github.event_name == 'pull_request' || inputs.repair || false }}
       stage: ${{ inputs.stage || 'all' }}
     secrets: inherit
