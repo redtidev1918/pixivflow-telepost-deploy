@@ -3,6 +3,13 @@
 > 发布说明面向普通用户：写「对用户有什么改变」，不写内部实现细节（模块名、CI job、配置键）；
 > 技术细节放进代码注释或 `docs/`。每个 Release 的正文由本文件对应版本段自动生成。
 
+## [1.10.1](https://github.com/redtidev1918/pixivflow-telepost-deploy/compare/v1.10.0...v1.10.1) (2026-09-08)
+
+
+### Bug Fixes
+
+* **cloudflare:** '*/6' inside block comment prematurely closed the comment; build error ([6116e86](https://github.com/redtidev1918/pixivflow-telepost-deploy/commit/6116e867fe6e44fc477da4ac1fc983ceb1cf3d50))
+
 ## [1.10.0](https://github.com/redtidev1918/pixivflow-telepost-deploy/compare/v1.9.3...v1.10.0) (2026-09-08)
 
 
