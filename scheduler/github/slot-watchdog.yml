@@ -1,48 +1,66 @@
-# Optional watchdog for the Fly-autosleep Slot trigger.
+# Optional watchdog for the external-clock (Fly autosleep) schedule trigger.
 #
-# This is NOT the primary clock — the Cloudflare Worker is. It re-POSTs the
-# same idempotent Slot trigger 10 minutes after each scheduled slot (Beijing
-# 10:10 / 18:10 == UTC 02:10 / 10:10). If the Worker already succeeded, PixivFlow
-# answers `already_completed` and nothing is re-posted; if the Worker failed, this
-# resumes the slot. Safe to leave disabled.
+# This is NOT the primary clock — the Cloudflare Worker (or another HTTP
+# scheduler) is. It re-POSTs the same idempotent schedule trigger ~10 minutes
+# after each scheduled fire (Beijing 10:10 / 18:10 == UTC 02:10 / 10:10). If the
+# primary already succeeded, PixivFlow answers `already_completed` and nothing is
+# re-posted; if the primary failed or the machine never woke, this resumes the
+# SAME canonical occurrence. Safe to leave disabled — the system is correct
+# without a watchdog.
 #
-# Setup in YOUR deploy/ops repo (this template lives in the deploy repo):
-#   gh secret set SLOT_TRIGGER_URL   --repo <you>/<repo>  # https://<app>.fly.dev/internal/schedules/run
-#   gh secret set SLOT_TRIGGER_TOKEN --repo <you>/<repo>
+# Schedule ids are data-driven (no morning/evening hardcode): edit SCHEDULE_MAP
+# to bind each cron to YOUR PixivFlow schedule id (config `schedules[].id`).
+#
+# Setup in YOUR deploy/ops repo (this file is a template):
+#   gh secret set SCHEDULE_TRIGGER_URL   --repo <you>/<repo>  # base URL https://<app>.fly.dev
+#   gh secret set SCHEDULE_TRIGGER_TOKEN --repo <you>/<repo>  # == PixivFlow SCHEDULER_TRIGGER_TOKEN
 # then enable the workflow.
-name: slot-watchdog
+name: schedule-watchdog
 
 on:
   schedule:
-    - cron: "10 2 * * *"   # Beijing 10:10 — morning slot
-    - cron: "10 10 * * *"  # Beijing 18:10 — evening slot
+    - cron: "10 2 * * *"   # +10 min after the UTC 02:00 fire
+    - cron: "10 10 * * *"  # +10 min after the UTC 10:00 fire
   workflow_dispatch:
     inputs:
-      slot:
-        description: "Slot to trigger"
+      schedule_id:
+        description: "PixivFlow schedule id to trigger (manual)"
         required: false
         default: ""
+
+env:
+  # Bind each firing cron (exact match to the crons above) to a schedule id.
+  SCHEDULE_MAP: >-
+    {"10 2 * * *":"morning","10 10 * * *":"evening"}
 
 jobs:
   nudge:
     runs-on: ubuntu-latest
     steps:
-      - name: Resolve slot from hour
-        id: slot
+      - name: Resolve schedule id for this cron
+        id: sched
         run: |
-          if [ -n "${{ github.event.inputs.slot }}" ]; then
-            echo "slot=${{ github.event.inputs.slot }}" >> "$GITHUB_OUTPUT"
+          MANUAL="${{ github.event.inputs.schedule_id }}"
+          if [ -n "$MANUAL" ]; then
+            echo "id=$MANUAL" >> "$GITHUB_OUTPUT"
           else
-            HOUR=$(date -u +%H)
-            if [ "$HOUR" -lt 6 ]; then echo "slot=morning" >> "$GITHUB_OUTPUT"; else echo "slot=evening" >> "$GITHUB_OUTPUT"; fi
+            # GitHub sets the schedule cron that fired via github.event.schedule.
+            CRON="${{ github.event.schedule }}"
+            ID=$(printf '%s' "$SCHEDULE_MAP" | python3 -c \
+              'import sys,json; m=json.load(sys.stdin); print(m.get(sys.argv[1],""))' "$CRON")
+            if [ -z "$ID" ]; then
+              echo "No schedule id mapped for cron '$CRON'"; exit 1
+            fi
+            echo "id=$ID" >> "$GITHUB_OUTPUT"
           fi
-      - name: POST idempotent Slot trigger
+      - name: POST idempotent schedule trigger
         run: |
+          BASE="${SCHEDULE_TRIGGER_URL%/}"
           curl -sS --fail-with-body --max-time 500 \
-            -X POST "$SLOT_TRIGGER_URL" \
-            -H "Authorization: Bearer $SLOT_TRIGGER_TOKEN" \
+            -X POST "$BASE/internal/schedules/${{ steps.sched.outputs.id }}/run" \
+            -H "Authorization: Bearer $SCHEDULE_TRIGGER_TOKEN" \
             -H "Content-Type: application/json" \
-            -d "{\"slot\":\"${{ steps.slot.outputs.slot }}\"}"
+            -d '{}'
         env:
-          SLOT_TRIGGER_URL: ${{ secrets.SLOT_TRIGGER_URL }}
-          SLOT_TRIGGER_TOKEN: ${{ secrets.SLOT_TRIGGER_TOKEN }}
+          SCHEDULE_TRIGGER_URL: ${{ secrets.SCHEDULE_TRIGGER_URL }}
+          SCHEDULE_TRIGGER_TOKEN: ${{ secrets.SCHEDULE_TRIGGER_TOKEN }}

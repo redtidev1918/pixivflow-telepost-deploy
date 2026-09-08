@@ -1,43 +1,71 @@
 /**
- * Cloudflare Cron Trigger adapter for PixivFlow + TelePost (Fly autosleep).
+ * Generic Cloudflare Cron Trigger adapter for PixivFlow (external-clock mode).
  *
- * This Worker is a *dumb clock*. It holds no business state: it never talks to
- * Pixiv, never picks works, never stores anything. On its cron schedule it POSTs
- * the slot name ("morning" / "evening") to the PixivFlow authenticated Slot API,
- * which wakes the stopped Fly machine via the Fly proxy and runs that slot
- * synchronously. All real state lives in PixivFlow's Slot ledger, so duplicate
- * or retried fires are idempotent.
+ * This Worker is a *dumb clock*. It holds no PixivFlow business state: it never
+ * talks to Pixiv, never picks works, never hardcodes schedule names. On each
+ * cron fire it looks up the PixivFlow SCHEDULE ID bound to that cron (a simple
+ * data-driven mapping, so any number/shape of schedule works) and POSTs to that
+ * schedule's authenticated trigger URL. The woken PixivFlow process resolves the
+ * canonical occurrence itself from its OWN cron + timezone, so this worker needs
+ * no knowledge of slots, morning/evening, or dates — and duplicate/retry fires
+ * are idempotent (they converge on one durable occurrence).
  *
- * Secrets (set with `wrangler secret put`):
- *   SCHEDULE_TRIGGER_URL   e.g. https://<your-fly-app>.fly.dev/internal/schedules/run
- *   SCHEDULE_TRIGGER_TOKEN bearer token (must equal PixivFlow's SCHEDULER_TRIGGER_TOKEN)
+ * Replaceable: any reliable HTTP scheduler (cron-job.org, GitHub Actions, a host
+ * cron + curl) can take this Worker's place; PixivFlow Core never changes.
  *
- * Cron times are UTC. Beijing 10:00/18:00 == UTC 02:00/10:00.
+ * Configuration:
+ *   Secret SCHEDULE_TRIGGER_URL   base URL, e.g. https://<app>.fly.dev
+ *   Secret SCHEDULE_TRIGGER_TOKEN bearer token (== PixivFlow SCHEDULER_TRIGGER_TOKEN)
+ *   Var    SCHEDULES              JSON: { "<cron-expr>": "<scheduleId>", ... }
+ *
+ * The map keys must EXACTLY match the [triggers] crons below. Example (Beijing
+ * 10:00/18:00 == UTC 02:00/10:00) mapping to arbitrary schedule ids:
+ *   SCHEDULES = {"0 2 * * *":"morning","0 10 * * *":"evening"}
+ * Another deployment maps the same crons to different ids, e.g.
+ *   {"0 2 * * *":"daily-ranking","0 10 * * *":"evening-digest","0 */6 * * *":"artist-watch"}
  */
 
 export interface Env {
   SCHEDULE_TRIGGER_URL: string;
   SCHEDULE_TRIGGER_TOKEN: string;
+  /** JSON map: cron expression (matches [triggers]) -> PixivFlow schedule id. */
+  SCHEDULES?: string;
 }
 
-/** Cron fires at UTC 02:00 (Beijing 10:00) and 10:00 (Beijing 18:00). */
-function slotForUtcHour(hour: number): 'morning' | 'evening' {
-  return hour < 6 ? 'morning' : 'evening';
+/** Parse the SCHEDULES cron->scheduleId map; tolerate whitespace / bad JSON. */
+function scheduleMap(env: Env): Record<string, string> {
+  try {
+    const parsed = env.SCHEDULES ? JSON.parse(env.SCHEDULES) : {};
+    const out: Record<string, string> = {};
+    for (const [cron, id] of Object.entries(parsed)) {
+      if (typeof id === 'string' && id.trim()) out[cron] = id.trim();
+    }
+    return out;
+  } catch {
+    return {};
+  }
 }
 
-async function triggerSlot(env: Env, slot: 'morning' | 'evening'): Promise<{ ok: boolean; status: number; body: string }> {
+/** Trigger ONE schedule by id (idempotent). Returns the HTTP result. */
+async function triggerSchedule(
+  env: Env,
+  scheduleId: string,
+  label?: string,
+): Promise<{ ok: boolean; status: number; body: string }> {
+  const base = env.SCHEDULE_TRIGGER_URL.replace(/\/+$/, '');
+  const url = `${base}/internal/schedules/${encodeURIComponent(scheduleId)}/run`;
   const controller = new AbortController();
-  // Cold start + a 4-cell serial slot can take a few minutes. Cap generously;
-  // the slot ledger makes the next fire a safe resume if this times out.
+  // Cold start + a serial multi-target run can take a few minutes. Cap
+  // generously; the occurrence ledger makes the next fire a safe resume.
   const timer = setTimeout(() => controller.abort(), 8 * 60 * 1000);
   try {
-    const res = await fetch(env.SCHEDULE_TRIGGER_URL, {
+    const res = await fetch(url, {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${env.SCHEDULE_TRIGGER_TOKEN}`,
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ slot }),
+      body: JSON.stringify(label ? { label } : {}),
       signal: controller.signal,
     });
     const body = await res.text();
@@ -50,35 +78,45 @@ async function triggerSlot(env: Env, slot: 'morning' | 'evening'): Promise<{ ok:
 }
 
 export default {
-  async scheduled(event: ScheduledController, env: Env, ctx: ExecutionContext): Promise<void> {
-    const firedAt = new Date(event.scheduledTime);
-    const hour = firedAt.getUTCHours();
-    const slot = slotForUtcHour(hour);
-    const result = await triggerSlot(env, slot);
-    console.log(`slot trigger ${slot}: ok=${result.ok} status=${result.status} body=${result.body}`);
+  async scheduled(event: ScheduledController, env: Env, _ctx: ExecutionContext): Promise<void> {
+    // event.cron is the exact crontab line (from [triggers]) that fired.
+    const map = scheduleMap(env);
+    const scheduleId = map[event.cron];
+    if (!scheduleId) {
+      const known = Object.keys(map).join(', ') || '(none configured)';
+      throw new Error(`no schedule id mapped for cron "${event.cron}"; SCHEDULES keys: ${known}`);
+    }
+    const result = await triggerSchedule(env, scheduleId);
+    console.log(
+      `schedule trigger cron="${event.cron}" id=${scheduleId}: ok=${result.ok} status=${result.status} body=${result.body}`,
+    );
     if (!result.ok) {
-      // Throw so Cloudflare marks the invocation failed; its automatic retry and
-      // the optional GitHub watchdog both re-POST an idempotent trigger.
-      throw new Error(`slot ${slot} trigger failed: ${result.status} ${result.body}`);
+      // Throw so Cloudflare marks the invocation failed; automatic retry and
+      // the optional GitHub watchdog both re-POST the same idempotent trigger.
+      throw new Error(`schedule ${scheduleId} trigger failed: ${result.status} ${result.body}`);
     }
   },
 
-  // Manual smoke test: `curl https://<worker>.workers.dev/__sched?slot=morning`
-  // with the same bearer token (useful without touching the real schedule).
+  // Manual smoke test / ops trigger (same bearer token):
+  //   curl -X POST -H "Authorization: Bearer $TOKEN" \
+  //     "https://<worker>.workers.dev/__trigger/morning"
+  // Optional ?label=今日早班 to set a human provenance label.
   async fetch(req: Request, env: Env): Promise<Response> {
     const url = new URL(req.url);
-    if (url.pathname === '/__sched') {
-      const auth = req.headers.get('Authorization') ?? '';
-      if (auth !== `Bearer ${env.SCHEDULE_TRIGGER_TOKEN}`) {
+    const m = url.pathname.match(/^\/__trigger\/([^/]+)$/);
+    if (m) {
+      if (req.method !== 'POST') return new Response('use POST', { status: 405 });
+      if ((req.headers.get('Authorization') ?? '') !== `Bearer ${env.SCHEDULE_TRIGGER_TOKEN}`) {
         return new Response('unauthorized', { status: 401 });
       }
-      const slot = url.searchParams.get('slot') === 'evening' ? 'evening' : 'morning';
-      const result = await triggerSlot(env, slot);
-      return new Response(JSON.stringify({ slot, ...result }), {
+      const scheduleId = decodeURIComponent(m[1]);
+      const label = url.searchParams.get('label') ?? undefined;
+      const result = await triggerSchedule(env, scheduleId, label);
+      return new Response(JSON.stringify({ scheduleId, ...result }), {
         status: result.ok ? 200 : 502,
         headers: { 'Content-Type': 'application/json' },
       });
     }
-    return new Response('pixivflow slot clock', { status: 200 });
+    return new Response('pixivflow schedule clock', { status: 200 });
   },
 };
