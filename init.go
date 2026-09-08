@@ -30,10 +30,10 @@ var scaffold embed.FS
 
 // 与 docker-compose/.env 基线保持一致（发版时同步更新）。
 // 已知兼容版本：PixivFlow 2.12.0（durable occurrences + external clock +
-// generic provenance）与 TelePost 2.14.0（generic source_label/source_ref/
+// generic provenance）与 TelePost 2.15.0（generic source_label/source_ref/
 // scheduled_at 入参）。
 const (
-	telepostBaseline = "2.14.0"
+	telepostBaseline = "2.15.0"
 	pixivBaseline    = "2.12.0"
 )
 
