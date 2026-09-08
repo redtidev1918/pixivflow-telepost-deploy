@@ -156,12 +156,13 @@ jobs:
       - name: Build
         env:
           CGO_ENABLED: "0"
+          RELEASE_TAG: ${{ needs.release-please.outputs.tag_name || inputs.tag || github.ref_name }}
           GOOS: ${{ matrix.os }}
           GOARCH: ${{ matrix.arch }}
         run: |
           out="deploy-${{ matrix.os }}-${{ matrix.arch }}"
           if [ "${{ matrix.os }}" = "windows" ]; then out="$out.exe"; fi
-          go build -trimpath -ldflags "-s -w" -o "$out" .
+          go build -trimpath -ldflags "-s -w -X main.appVersion=${RELEASE_TAG#v}" -o "$out" .
           tar -czf "deploy-${{ matrix.os }}-${{ matrix.arch }}.tar.gz" "$out"
       - uses: actions/upload-artifact@v7
         with:

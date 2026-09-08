@@ -19,8 +19,11 @@ import (
 	"time"
 )
 
+// appVersion is a var (not const) so release builds can stamp the real version
+// via -ldflags "-X main.appVersion=X.Y.Z". Local/dev builds report "dev".
+var appVersion = "dev"
+
 const (
-	appVersion        = "1.10.0"
 	telepostRepo      = "ghcr.io/redtidev1918/telepost"
 	pixivflowRepo     = "ghcr.io/redtidev1918/pixivflow"
 	kitRepo           = "ghcr.io/redtidev1918/pixivflow-telepost-deploy"
