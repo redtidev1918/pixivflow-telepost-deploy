@@ -1,15 +1,19 @@
 # Optional watchdog for the external-clock (Fly autosleep) schedule trigger.
 #
-# This is NOT the primary clock — the Cloudflare Worker (or another HTTP
-# scheduler) is. It re-POSTs the same idempotent schedule trigger ~10 minutes
-# after each scheduled fire (Beijing 10:10 / 18:10 == UTC 02:10 / 10:10). If the
-# primary already succeeded, PixivFlow answers `already_completed` and nothing is
-# re-posted; if the primary failed or the machine never woke, this resumes the
-# SAME canonical occurrence. Safe to leave disabled — the system is correct
-# without a watchdog.
+# This is NOT the primary clock — the Cloudflare Worker is. It re-POSTs the same
+# idempotent schedule trigger ~20-30 minutes AFTER each scheduled fire, so a
+# missed/失败的 primary trigger is resumed while still inside PixivFlow's grace
+# window. If the primary already ran the occurrence, PixivFlow answers
+# `already_completed` and nothing is re-posted; if it failed or the machine never
+# woke, this resumes the SAME canonical occurrence. Safe to leave disabled — the
+# system is correct without a watchdog.
 #
-# Schedule ids are data-driven (no morning/evening hardcode): edit SCHEDULE_MAP
-# to bind each cron to YOUR PixivFlow schedule id (config `schedules[].id`).
+# Example (Asia/Shanghai), primary Cloudflare vs watchdog GitHub:
+#   bot1-daily  primary 10:00/18:00 -> watchdog 10:20/18:20
+#   bot2-daily  primary 10:10/18:10 -> watchdog 10:30/18:30
+# Cron is UTC (Beijing = UTC+8). Schedule ids are data-driven (no hardcoded ids):
+# edit SCHEDULE_MAP to bind each firing cron to YOUR PixivFlow schedule id
+# (config `schedules[].id`).
 #
 # Setup in YOUR deploy/ops repo (this file is a template):
 #   gh secret set SCHEDULE_TRIGGER_URL   --repo <you>/<repo>  # base URL https://<app>.fly.dev
@@ -19,8 +23,10 @@ name: schedule-watchdog
 
 on:
   schedule:
-    - cron: "10 2 * * *"   # +10 min after the UTC 02:00 fire
-    - cron: "10 10 * * *"  # +10 min after the UTC 10:00 fire
+    - cron: "20 2 * * *"    # bot1 watchdog 10:20 Beijing (primary 10:00)
+    - cron: "30 2 * * *"    # bot2 watchdog 10:30 Beijing (primary 10:10)
+    - cron: "20 10 * * *"   # bot1 watchdog 18:20 Beijing (primary 18:00)
+    - cron: "30 10 * * *"   # bot2 watchdog 18:30 Beijing (primary 18:10)
   workflow_dispatch:
     inputs:
       schedule_id:
@@ -31,7 +37,7 @@ on:
 env:
   # Bind each firing cron (exact match to the crons above) to a schedule id.
   SCHEDULE_MAP: >-
-    {"10 2 * * *":"morning","10 10 * * *":"evening"}
+    {"20 2 * * *":"bot1-daily","30 2 * * *":"bot2-daily","20 10 * * *":"bot1-daily","30 10 * * *":"bot2-daily"}
 
 jobs:
   nudge:
