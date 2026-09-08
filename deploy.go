@@ -20,7 +20,7 @@ import (
 )
 
 const (
-	appVersion        = "3.6.0"
+	appVersion        = "1.10.0"
 	telepostRepo      = "ghcr.io/redtidev1918/telepost"
 	pixivflowRepo     = "ghcr.io/redtidev1918/pixivflow"
 	kitRepo           = "ghcr.io/redtidev1918/pixivflow-telepost-deploy"
