@@ -1,12 +1,16 @@
 # Fly.io 自动休眠（auto-stop）成本优化
 
-> **这是可选的高级优化，不是默认部署方式。** 默认是常驻（always-on）：
-> `docker compose up -d` 或 `fly deploy` 之后，TelePost 与 PixivFlow 常驻、
-> PixivFlow 的 scheduler 到点自动执行，不依赖任何外部定时器/唤醒服务。
+> **✅ 2026 起推荐做法见 [SCHEDULING.md](SCHEDULING.md)。** 省钱停机的正确模型是
+> **external Slot 触发**：机器平时 stopped，外部时钟（Cloudflare Cron）在 10:00/18:00
+> 发受认证的 `POST /internal/schedules/run` 把机器叫醒、同步跑完一个 Slot。冷启动不补跑、
+> 重复触发幂等、重试不换作品。Fly 模板：`fly/deploy.fly-autosleep.toml`；时钟适配器：
+> `scheduler/cloudflare/`。
 >
-> 本文只说明「想要省钱、且能接受一个外部闹钟」时如何开 auto-stop。结论对流量
-> 画像高度敏感：先读「适用画像」，确认你的流量确实匹配，再动手。若不匹配，
-> 保持常驻更简单可靠。
+> **本文下方的「持续 ping /health 等内部 cron 恰好到点」属于 Legacy 方案**：它依赖机器被
+> 随便一个请求叫醒后，进程内 cron 自己发现到点——在新模型下不再推荐（机器醒了 cron 也可能
+> 没到点，且 daemon 冷启动 catch-up 会把停机误判成故障补历史任务）。保留仅为解释原理。
+>
+> 常驻（always-on / internal cron）仍是最省心的模式，见 SCHEDULING.md 的决策树。
 
 ---
 

@@ -11,6 +11,20 @@ NAT 主机、Mac/Linux 本机和 Fly.io。默认（Compose）以两个独立容�
 多 Bot supervisor 与 PixivFlow 调度器各自拉取 ghcr 镜像、经 HTTP 通信，适合
 512 MiB 小机器，不启动 WebUI；Fly 合一台可选走组合镜像（combined）。
 
+## 我该选哪种部署？
+
+- **不用 Fly**：有 Docker 用 **Docker Compose**；不想用 Docker 用 **systemd / 裸机**。
+  两者都用内部 cron（internal scheduler），进程常驻。
+- **用 Fly**：
+  - **低流量、想省钱、能接受冷启动几秒** → **Fly Autosleep**：1×512MB，平时完全停机，
+    Telegram webhook 或外部时钟（Cloudflare Cron）在 10:00/18:00 发受认证的 Slot HTTP 请求
+    把机器叫醒。见 [docs/SCHEDULING.md](docs/SCHEDULING.md)、`fly/deploy.fly-autosleep.toml`、`scheduler/cloudflare/`。
+  - **想最省心、不介意几美元/月** → **Fly Always-on**：1×512MB 常驻，内部 cron，无外部依赖。
+  - **要服务隔离 / 512MB 实测不够** → **Fly Split**：PixivFlow 256 常驻 + TelePost 512 休眠。
+
+> 定时投稿、省钱停机、Slot 幂等、重试不重复的完整原理与不变量：**[docs/SCHEDULING.md](docs/SCHEDULING.md)**。
+> Fly 自动休眠的历史方案与冷启动代价：[docs/AUTOSTOP.md](docs/AUTOSTOP.md)。
+
 ## 特性
 
 - **主题自动投稿**：按 Pixiv 主题（tag 空间推导）或日榜抓取「昨日最热门」作品，

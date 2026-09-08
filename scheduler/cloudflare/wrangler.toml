@@ -1,0 +1,17 @@
+name = "pixivflow-slot-clock"
+main = "src/index.ts"
+compatibility_date = "2025-09-01"
+
+# Beijing 10:00 = UTC 02:00 (morning); Beijing 18:00 = UTC 10:00 (evening).
+# Cloudflare cron is UTC. Adjust the minute to stagger if you run multiple apps.
+[triggers]
+crons = ["0 2 * * *", "0 10 * * *"]
+
+# Secrets (do NOT put real values here):
+#   wrangler secret put SCHEDULE_TRIGGER_URL    -> https://<your-fly-app>.fly.dev/internal/schedules/run
+#   wrangler secret put SCHEDULE_TRIGGER_TOKEN  -> the PixivFlow SCHEDULER_TRIGGER_TOKEN
+#
+# Deploy:
+#   npm i && npx wrangler deploy
+# Smoke test (idempotent, safe to repeat):
+#   curl -H "Authorization: Bearer $TOKEN" "https://<worker>.workers.dev/__sched?slot=morning"
