@@ -1,0 +1,48 @@
+# Optional watchdog for the Fly-autosleep Slot trigger.
+#
+# This is NOT the primary clock — the Cloudflare Worker is. It re-POSTs the
+# same idempotent Slot trigger 10 minutes after each scheduled slot (Beijing
+# 10:10 / 18:10 == UTC 02:10 / 10:10). If the Worker already succeeded, PixivFlow
+# answers `already_completed` and nothing is re-posted; if the Worker failed, this
+# resumes the slot. Safe to leave disabled.
+#
+# Setup in YOUR deploy/ops repo (this template lives in the deploy repo):
+#   gh secret set SLOT_TRIGGER_URL   --repo <you>/<repo>  # https://<app>.fly.dev/internal/schedules/run
+#   gh secret set SLOT_TRIGGER_TOKEN --repo <you>/<repo>
+# then enable the workflow.
+name: slot-watchdog
+
+on:
+  schedule:
+    - cron: "10 2 * * *"   # Beijing 10:10 — morning slot
+    - cron: "10 10 * * *"  # Beijing 18:10 — evening slot
+  workflow_dispatch:
+    inputs:
+      slot:
+        description: "Slot to trigger"
+        required: false
+        default: ""
+
+jobs:
+  nudge:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Resolve slot from hour
+        id: slot
+        run: |
+          if [ -n "${{ github.event.inputs.slot }}" ]; then
+            echo "slot=${{ github.event.inputs.slot }}" >> "$GITHUB_OUTPUT"
+          else
+            HOUR=$(date -u +%H)
+            if [ "$HOUR" -lt 6 ]; then echo "slot=morning" >> "$GITHUB_OUTPUT"; else echo "slot=evening" >> "$GITHUB_OUTPUT"; fi
+          fi
+      - name: POST idempotent Slot trigger
+        run: |
+          curl -sS --fail-with-body --max-time 500 \
+            -X POST "$SLOT_TRIGGER_URL" \
+            -H "Authorization: Bearer $SLOT_TRIGGER_TOKEN" \
+            -H "Content-Type: application/json" \
+            -d "{\"slot\":\"${{ steps.slot.outputs.slot }}\"}"
+        env:
+          SLOT_TRIGGER_URL: ${{ secrets.SLOT_TRIGGER_URL }}
+          SLOT_TRIGGER_TOKEN: ${{ secrets.SLOT_TRIGGER_TOKEN }}

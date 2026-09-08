@@ -1,0 +1,78 @@
+# Fly Autosleep（推荐：低流量个人双 Bot，最低闲置成本）
+#
+# 1 × 512MB 合一台：TelePost（双 bot）+ PixivFlow，平时完全停机省 RAM。
+# 唤醒源：
+#   1) Telegram webhook / 用户投稿 → 经 Fly Proxy 自动拉起；
+#   2) 外部 Slot 时钟（Cloudflare Worker / cron）→ POST
+#      https://<app>.fly.dev/internal/schedules/run （run.py 反代到容器内
+#      PixivFlow 的 trigger 端口 8090），同步跑完 morning/evening Slot。
+#
+# 关键不变量：
+#   - schedulerRuntime.mode = "external"（在 data/pixivflow/config.json）：
+#     内部 cron 关闭、冷启动不补跑；普通 Telegram 流量绝不触发定时投稿。
+#   - 外部触发幂等：Slot 账本（schedule_slots/slot_items）保证重复 trigger、
+#     重启、outbox 重放只恢复原任务，不造第二篇、不补历史。
+#
+# 部署步骤：
+#   fly apps create <your-app>
+#   fly volumes create data --size 1 -r iad
+#   fly secrets set -a <your-app> \
+#     BOT1_TOKEN=... BOT2_TOKEN=... \
+#     BOT1_CHANNEL_ID=... BOT2_CHANNEL_ID=... \
+#     PIXIV_REFRESH_TOKEN=... \
+#     TELEPOST_BOT1_SUBMIT_TOKEN=... TELEPOST_BOT2_SUBMIT_TOKEN=... \
+#     SCHEDULER_TRIGGER_TOKEN=<strong-random-secret>
+#   # 把 data/pixivflow/config.json 放入卷，schedulerRuntime.mode 设为 "external"
+#   fly deploy -c fly/deploy.fly-autosleep.toml
+#   # 然后配置 Cloudflare Worker（见 scheduler/cloudflare/）指向 /internal/schedules/run
+
+app = "your-app-name"
+primary_region = "iad"
+
+[build]
+  dockerfile = "../docker/combined.Dockerfile"
+
+[build.args]
+  TELEPOST_IMAGE = "ghcr.io/redtidev1918/telepost:2.12.0"
+  PIXIVFLOW_VERSION = "2.11.0"
+
+[env]
+  PYTHONUNBUFFERED = "1"
+  TZ = "Asia/Shanghai"
+  RUN_MODE = "WEBHOOK"
+  WEBHOOK_URL = "https://your-app.fly.dev"
+  # 合一台仍由 run.py 拉起 pixivflow，但它以 external 模式运行：
+  # 不跑内部 cron、不 catch-up，只提供受认证的 Slot 触发端点（8090）。
+  PIXIVFLOW_ENABLED = "true"
+  PIXIVFLOW_CONFIG = "/app/data/pixivflow/config.json"
+  TELEPOST_API_BASE_URL = "http://127.0.0.1:8080"
+  # PixivFlow trigger server 监听端口；run.py 把公网 /internal/* 反代到这里。
+  PIXIVFLOW_TRIGGER_PORT = "8090"
+  NODE_OPTIONS = "--max-old-space-size=96 --expose-gc"
+  MALLOC_ARENA_MAX = "2"
+  PIXIV_DB_CACHE_KB = "4096"
+  DB_CACHE_KB = "1024"
+
+[mounts]
+  source = "data"
+  destination = "/app/data"
+
+[http_service]
+  internal_port = 8080
+  # Flycast/私网 HTTP 不需要 force_https；公网 webhook 仍走 HTTPS。
+  force_https = false
+  auto_stop_machines = "stop"   # 空闲停机省 RAM（stopped 是健康省钱状态）
+  auto_start_machines = true    # webhook / Slot HTTP 到达时自动拉起
+  min_machines_running = 0
+
+  [[http_service.checks]]
+    grace_period = "120s"
+    interval = "60s"
+    method = "GET"
+    timeout = "30s"
+    path = "/health"
+
+[vm]
+  cpu_kind = "shared"
+  cpus = 1
+  memory_mb = 512
