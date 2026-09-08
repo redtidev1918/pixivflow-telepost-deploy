@@ -22,7 +22,7 @@
  * 10:00/18:00 == UTC 02:00/10:00) mapping to arbitrary schedule ids:
  *   SCHEDULES = {"0 2 * * *":"morning","0 10 * * *":"evening"}
  * Another deployment maps the same crons to different ids, e.g.
- *   {"0 2 * * *":"daily-ranking","0 10 * * *":"evening-digest","0 */6 * * *":"artist-watch"}
+ *   {"0 2 * * *":"daily-ranking","0 10 * * *":"evening-digest","0 0,6,12,18 * * *":"artist-watch"}
  */
 
 export interface Env {
