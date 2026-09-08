@@ -59,17 +59,30 @@ jobs:
             echo "-> schedule id: $ID"
           fi
       - name: POST idempotent schedule trigger (wakes autosleep machine)
+        env:
+          SCHEDULE_TRIGGER_URL: ${{ secrets.SCHEDULE_TRIGGER_URL }}
+          SCHEDULE_TRIGGER_TOKEN: ${{ secrets.SCHEDULE_TRIGGER_TOKEN }}
+          MANUAL: ${{ github.event.inputs.schedule_id }}
         run: |
           BASE="${SCHEDULE_TRIGGER_URL%/}"
           URL="$BASE/internal/schedules/${{ steps.sched.outputs.id }}/run"
           echo "POST $URL"
-          # The request stays open for the whole run — that connection IS the
-          # activity lease that keeps the autosleep machine awake. Long timeout.
-          curl -sS --fail-with-body --max-time 540 \
-            -X POST "$URL" \
-            -H "Authorization: Bearer $SCHEDULE_TRIGGER_TOKEN" \
-            -H "Content-Type: application/json" \
-            -d '{}'
-        env:
-          SCHEDULE_TRIGGER_URL: ${{ secrets.SCHEDULE_TRIGGER_URL }}
-          SCHEDULE_TRIGGER_TOKEN: ${{ secrets.SCHEDULE_TRIGGER_TOKEN }}
+          # Scheduled fires are authoritative: a non-2xx must fail the job so a
+          # broken clock is visible. Manual dispatches are smoke tests that may
+          # legitimately land outside the grace window (425/410); surface the body
+          # but don't fail, so ops can trigger anytime to confirm wake+auth.
+          if [ -n "$MANUAL" ]; then
+            curl -sS --max-time 540 -w "\nHTTP %{http_code}\n" \
+              -X POST "$URL" \
+              -H "Authorization: Bearer $SCHEDULE_TRIGGER_TOKEN" \
+              -H "Content-Type: application/json" \
+              -d '{}' || true
+          else
+            # The request stays open for the whole run — that connection IS the
+            # activity lease that keeps the autosleep machine awake.
+            curl -sS --fail-with-body --max-time 540 \
+              -X POST "$URL" \
+              -H "Authorization: Bearer $SCHEDULE_TRIGGER_TOKEN" \
+              -H "Content-Type: application/json" \
+              -d '{}'
+          fi
