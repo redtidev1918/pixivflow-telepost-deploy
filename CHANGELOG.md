@@ -3,6 +3,14 @@
 > 发布说明面向普通用户：写「对用户有什么改变」，不写内部实现细节（模块名、CI job、配置键）；
 > 技术细节放进代码注释或 `docs/`。每个 Release 的正文由本文件对应版本段自动生成。
 
+## [1.10.0](https://github.com/redtidev1918/pixivflow-telepost-deploy/compare/v1.9.3...v1.10.0) (2026-09-08)
+
+
+### Features
+
+* **scheduler:** external Slot clock adapters + Fly autosleep mode ([9f3fc53](https://github.com/redtidev1918/pixivflow-telepost-deploy/commit/9f3fc53ada74d35208ce503d77f8d0253e9fd965))
+* **scheduler:** generic per-schedule external clock + autosleep-aware CLI ([6284a0f](https://github.com/redtidev1918/pixivflow-telepost-deploy/commit/6284a0f7a02ae8da95a9c112e0ee449a0f74e08b))
+
 ## [1.9.3](https://github.com/redtidev1918/pixivflow-telepost-deploy/compare/v1.9.2...v1.9.3) (2026-09-07)
 
 
