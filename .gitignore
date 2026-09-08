@@ -54,3 +54,5 @@ telesubmit.fly.toml
 # deploy split 生成的实盘拆分配置（含真实 app 名）
 fly/telepost-split.toml
 fly/pixivflow-split.toml
+.wrangler/
+telesubmit.fly.toml.bak.*
