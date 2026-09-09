@@ -226,8 +226,11 @@ PixivFlow 的 delivery 模板把投稿转成 TelePost 的 caption 字段，模�
 - `spoiler` → `false`：默认不自动加 Telegram 剧透遮罩。`includeR18: true` 只决定是否
   收录 NSFW，不再隐式决定展示方式
 - `anonymous` → `true`，频道内不显示投稿人
-- `idempotency_key` → `pixiv:botN:{{type}}:{{pixivId}}`：同一作品重复投递直接幂等返回，
-  不会在审核群产生重复稿件
+- `idempotency_key` → `{{idempotencyKey}}`：PixivFlow 按 occurrence 生成
+  `pixivflow:<target>:<type>:<pixivId>:<slotId>:<targetId>`。同一次触发的 ACK 丢失重试
+  带同一个键 → TelePost 返回 `idempotent_replay`（不是新稿件）；新 occurrence 再投
+  同一作品则走 `duplicate_existing` 历史去重。不要用按作品固定的键，否则不同 occurrence
+  的合法重投无法与"ACK 丢失重试"区分。
 
 `spoiler` 是每个 delivery target 的显式策略，可按频道分别选择：
 

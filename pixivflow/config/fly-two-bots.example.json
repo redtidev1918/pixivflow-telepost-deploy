@@ -104,7 +104,7 @@
           "target_id": "{{targetId}}",
           "anonymous": true,
           "spoiler": false,
-          "idempotency_key": "pixiv:bot1:{{type}}:{{pixivId}}",
+          "idempotency_key": "{{idempotencyKey}}",
           "source_ref": "{{executionId}}",
           "scheduled_at": "{{occurrenceAt}}",
           "source_label": "PixivFlow · {{slotName}} · Bot1"
@@ -140,7 +140,7 @@
           "target_id": "{{targetId}}",
           "anonymous": true,
           "spoiler": false,
-          "idempotency_key": "pixiv:bot2:{{type}}:{{pixivId}}",
+          "idempotency_key": "{{idempotencyKey}}",
           "source_ref": "{{executionId}}",
           "scheduled_at": "{{occurrenceAt}}",
           "source_label": "PixivFlow · {{slotName}} · Bot2"
