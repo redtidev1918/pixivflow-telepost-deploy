@@ -19,7 +19,7 @@ primary_region = "iad"
   dockerfile = "../docker/telepost.Dockerfile"
 
 [build.args]
-  TELEPOST_IMAGE = "ghcr.io/redtidev1918/telepost:2.15.0"
+  TELEPOST_IMAGE = "ghcr.io/redtidev1918/telepost:2.16.0"
 
 [env]
   PYTHONUNBUFFERED = "1"
