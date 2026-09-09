@@ -83,7 +83,7 @@ fly deploy --strategy rolling   # 重启以让 supervisor 读到新 secret
           "note": "Pixiv ID: {{pixivId}}",
           "target_id": "{{targetId}}",
           "anonymous": true,
-          "idempotency_key": "pixiv:bot3:{{type}}:{{pixivId}}"
+          "idempotency_key": "{{idempotencyKey}}"
         },
         "success": { "statuses": [201], "jsonPath": "ok", "equals": true },
         "maxAttempts": 3,
