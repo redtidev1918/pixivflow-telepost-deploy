@@ -71,7 +71,7 @@ PY
 
 if [[ ${2:-} != "--no-restart" ]]; then
   cd "$repo_dir"
-  docker compose up -d --no-deps --force-recreate stack
+  docker compose up -d --no-deps --force-recreate telepost
   echo "TelePost policy applied; Bot processes restarted once and persisted data was preserved."
 else
   echo "TelePost policy staged in .env; restart the stack when ready."

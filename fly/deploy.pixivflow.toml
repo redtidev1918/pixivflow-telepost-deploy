@@ -26,7 +26,7 @@ primary_region = "iad"
   dockerfile = "../docker/pixivflow.Dockerfile"
 
 [build.args]
-  PIXIVFLOW_VERSION = "2.12.0"
+  PIXIVFLOW_VERSION = "2.12.3"
 
 [env]
   TZ = "Asia/Shanghai"

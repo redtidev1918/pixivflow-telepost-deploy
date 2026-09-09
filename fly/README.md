@@ -52,8 +52,11 @@ PixivFlow 配置原子热加载，不重启。日常修改单个 TelePost Bot �
 
 ## 自动休眠（auto-stop）省账单
 
-流量是「大部分时间没人 + 每天几个间断高峰」时，可开 `auto_stop_machines=true` 让
-机器无流量停机、释放 RAM 停止计费，来流量由 proxy 自动唤醒（首条消息付 5–15s 冷启动）。
-前提是 Webhook 模式（webhook 是唤醒信号）。完整机制、睡眠比例→账单换算、以及
+流量是「大部分时间没人 + 每天几个间断高峰」时，配置使用
+`auto_stop_machines = "suspend"`：无流量时机器挂起（不计 CPU，RAM 状态保留，
+唤醒只重放持久状态，比冷启动的 `"stop"` 明显更快），来流量由 proxy 自动唤醒。
+前提是 Webhook 模式（webhook 是唤醒信号）。健康检查打 `/ready`（所有 bot 子进程
+`initialize()+start()` 完成才 200，冷启动期间 503），`/live` 恒 200 仅表示进程存活、
+`/health` 是 auto-stop 唤醒入口。完整机制、睡眠比例→账单换算、以及
 「双 Bot 拆一台 256 + PixivFlow 拆自己机器」的拓扑与改动面，见
 [docs/AUTOSTOP.md](../docs/AUTOSTOP.md)。

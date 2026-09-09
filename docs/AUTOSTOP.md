@@ -31,18 +31,22 @@
 
 ## 关键机制（决定方案成不成立）
 
-### 1. 用 stop，不是 suspend
+### 1. stop 与 suspend 都不计费；本项目选 suspend
 
-- **`stop`** 释放 RAM、**停止计费**——睡多久省多久，这是省钱的来源。
-- **`suspend`**（暂停）保留内存、**照样计费**——不省钱，只是启动快一点。
+- **`stop`**：释放 RAM、不计 CPU/RAM；唤醒是完整冷启动（秒级到十几秒）。
+- **`suspend`**：Firecracker 快照（内存/寄存器/句柄）落持久存储；挂起期间同样
+  **不计 CPU/RAM**（Fly 官方明确 `stopped` 与 `suspended` 都不收费），唤醒是
+  快照恢复（**几百毫秒**），进程不重启、事件循环/连接状态保留。
 
-Fly 的 `auto_stop_machines` 走的是 **stop** 语义：机器停了就不再按 RAM 计费，
-只保留持久卷（和分配的静态 IP，若有）。所以选它才有账单收益。
+两种状态都只保留持久卷（和已分配的静态 IP）。本项目 auto-stop profile 统一用
+`auto_stop_machines = "suspend"`：账单收益与 stop 相同，而唤醒从「冷启动 5–15s」
+降到亚秒级快照恢复，对 webhook 唤醒体验明显更好。
 
 ### 2. Fly proxy 会排队唤醒请求，请求不丢
 
 机器停着时来流量，Fly 的 proxy **先把机器拉起、等它通过健康检查、再转发请求**。
-结果是：请求**不丢**，只是响应延迟 ≈ 冷启动时长（**5–15 秒**）。
+结果是：请求**不丢**，只是响应延迟 ≈ 唤醒时长（suspend 快照恢复通常几百毫秒；
+若选 stop 则是完整冷启动 **5–15 秒**）。
 
 因此不会出现「Telegram 回调超时、消息永久丢失」的灾难——Telegram 的 webhook 会重试，
 PixivFlow 的 outbox 也会重试。代价只是「第一次慢几秒」，不是「丢」。
@@ -52,8 +56,9 @@ PixivFlow 的 outbox 也会重试。代价只是「第一次慢几秒」，不�
 - **PixivFlow 定时投递**：机器睡着时到了 cron 时刻，PixivFlow 的投递请求会把机器
   唤醒；冷启动完成后，已有的 **delivery outbox + 重试机制**保证稿件最终送达
   （这套 outbox 本就是为「投递失败要重试」建的，天然兼容「冷启动延迟」）。
-- **用户消息 / 审核按钮**：每个安静空档的**第一条**消息付一次 ~10s 冷启动，之后
-  恢复正常；审核按钮同理——PTB 会话超时是 5 分钟，10s 唤醒**不会**打断会话。
+- **用户消息 / 审核按钮**：suspend 下每个安静空档的**第一条**消息只付亚秒级快照
+  恢复（stop 下才是 ~10s 冷启动）；审核按钮同理——PTB 会话超时是 5 分钟，
+  唤醒**不会**打断会话。
 
 也就是说，冷启动的代价被「第一条消息」吸收掉，之后体验与常驻无差。
 
@@ -83,10 +88,10 @@ PixivFlow  256MB  always-on（min_machines_running=1，auto_stop=false）
     │  投递走 Flycast：http://<telepost-app>.flycast（无端口，走 80 → proxy → 8080）
     │  （私网 + 经 Fly Proxy + 能 auto-start stopped 的 TelePost）
     ▼
-TelePost   512MB  auto-stop（min_machines_running=0，auto_stop="stop"）
+TelePost   512MB  auto-suspend（min_machines_running=0，auto_stop="suspend"）
     │  双 Bot；event-driven：webhook/用户投稿/PixivFlow 投递都是入站，来请求就醒
     ▼
-  idle → auto-stop（省 RAM），来请求 → Fly Proxy 自动拉起
+  idle → auto-suspend（不计 CPU/RAM），来请求 → Fly Proxy 亚秒级快照恢复
 ```
 
 | 半边 | 大小 | 常驻/休眠 | 原因 |
@@ -124,14 +129,16 @@ TelePost   512MB  auto-stop（min_machines_running=0，auto_stop="stop"）
 
 ```toml
 [http_service]
-  auto_stop_machines = "stop"   # 无流量时 stop：释放 RAM、停止计费（睡多久省多久）
-  auto_start_machines = true    # 来流量时 proxy 自动拉起
-  min_machines_running = 0      # 允许完全停机（0 台常驻）
+  auto_stop_machines = "suspend" # 无流量快照挂起：不计 CPU/RAM，恢复亚秒级
+  auto_start_machines = true     # 来流量时 proxy 自动快照恢复
+  min_machines_running = 0       # 允许完全挂起（0 台常驻）
 ```
 
-> `auto_stop_machines` 取值：`"stop"`（释放 RAM、停止计费）或 `"suspend"`
-> （保留内存、继续计费，只快一点唤醒）。**省钱必须用 `"stop"`**；`true` 等价于
-> `"stop"`。这是整个方案成立的前提。
+> `auto_stop_machines` 取值：`"suspend"`（Firecracker 快照，恢复几百毫秒）或
+> `"stop"`（释放 RAM，恢复是完整冷启动）。**两种状态都不计 CPU/RAM**（2025-08
+> 起官方文档明确 suspended 同样免费）；本项目默认 `"suspend"`，因为免费且唤醒快。
+> 健康检查打 `/ready`（冷启动未就绪时 503，proxy 会等它就绪再转发），不要 ping
+> `/health` 之外的业务接口。
 
 配合 **Webhook 模式**（`RUN_MODE=WEBHOOK`）使用：webhook 请求本身就是唤醒信号，
 Polling 模式没有入站请求可触发 proxy 唤醒，不适合 auto-stop。
@@ -158,7 +165,8 @@ ping 到投递窗口结束**，不能只 ping 一次。
 ### 方案 1：easycron（推荐，精确、非 GitHub）
 
 [easycron](https://www.easycron.com) 免费版即可。建 **2 个 HTTP GET 任务**，时区选
-`Asia/Shanghai`，URL 填 `https://<your-app>.fly.dev/health`：
+`Asia/Shanghai`，URL 填 `https://<your-app>.fly.dev/live`（路由进程存活即 200，ping 的目的只是保活/唤醒，
+不需要等 bot 就绪；请求经 proxy 即会唤醒挂起的机器）：
 
 ```
 任务 1：cron  */5 9-10 * * *    # 每天 09:00–10:59 每 5 分钟 ping 一次
@@ -188,9 +196,9 @@ TelePost 那半 auto-stop（webhook/用户消息/投递请求都能叫醒它）�
 ## 决策清单
 
 - [ ] 流量确属「间断高峰」画像（大部分时间没人）？
-- [ ] 能接受第一条消息 ~5–15s 冷启动？
+- [ ] 能接受第一条消息的唤醒延迟（suspend 亚秒级；stop 5–15s 冷启动）？
 - [ ] `RUN_MODE=WEBHOOK`（webhook 是唤醒信号）？
-- [ ] `auto_stop_machines="stop"` + `min_machines_running=0`？
+- [ ] `auto_stop_machines="suspend"` + `min_machines_running=0`？
 - [ ] 已配外部闹钟（easycron / Fly `--schedule daily` / PixivFlow 拆机常驻，三选一，
   覆盖 PixivFlow 投递窗口）？
 - [ ] 拆两台时，PixivFlow 投递 URL 已切 Fly 私网、卷已拆？

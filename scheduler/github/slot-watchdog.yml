@@ -4,9 +4,9 @@
 # idempotent schedule trigger ~20-30 minutes AFTER each scheduled fire, so a
 # missed/失败的 primary trigger is resumed while still inside PixivFlow's grace
 # window. If the primary already ran the occurrence, PixivFlow answers
-# `already_completed` and nothing is re-posted; if it failed or the machine never
-# woke, this resumes the SAME canonical occurrence. Safe to leave disabled — the
-# system is correct without a watchdog.
+# a terminal 409/425 and nothing is re-posted; if it failed or the machine never
+# woke, this resumes the SAME canonical occurrence inside the 90 min grace window.
+# Safe to leave disabled — the system is correct without a watchdog.
 #
 # Example (Asia/Shanghai), primary Cloudflare vs watchdog GitHub:
 #   bot1-daily  primary 10:00/18:00 -> watchdog 10:20/18:20
