@@ -3,6 +3,16 @@
 > 发布说明面向普通用户：写「对用户有什么改变」，不写内部实现细节（模块名、CI job、配置键）；
 > 技术细节放进代码注释或 `docs/`。每个 Release 的正文由本文件对应版本段自动生成。
 
+## [1.10.2](https://github.com/redtidev1918/pixivflow-telepost-deploy/compare/v1.10.1...v1.10.2) (2026-09-09)
+
+
+### Bug Fixes
+
+* **ci:** follow releasegraph rename ([f3d10ab](https://github.com/redtidev1918/pixivflow-telepost-deploy/commit/f3d10ab28dd87b77bc3e66792712a7ee281ecf48))
+* **ci:** replace deleted docker/* action SHAs with version tags ([7e65e54](https://github.com/redtidev1918/pixivflow-telepost-deploy/commit/7e65e5453a6cdd901aa01adf1bf879d9f82a2de0))
+* **ops:** query durable slots by occurrence date ([#11](https://github.com/redtidev1918/pixivflow-telepost-deploy/issues/11)) ([af5f330](https://github.com/redtidev1918/pixivflow-telepost-deploy/commit/af5f33027c6290fa657e27deec29803206b5cc88))
+* **telepost:** publish follow-up media in discussion ([309db6e](https://github.com/redtidev1918/pixivflow-telepost-deploy/commit/309db6ee2f196a461ba76d816d68340f0326b51e))
+
 ## [1.10.1](https://github.com/redtidev1918/pixivflow-telepost-deploy/compare/v1.10.0...v1.10.1) (2026-09-08)
 
 
