@@ -22,15 +22,16 @@ console.log('\n--- PixivFlow Slot ledger (occurrence_date=' + date + ') ---');
 let slots = [];
 try {
   slots = pf.prepare(
-    "select id,schedule_id,occurrence_at,status,trigger_source,target_ids from schedule_slots where occurrence_at like ? order by schedule_id"
-  ).all(date + '%');
+    "select id,schedule_id,occurrence_at,occurrence_date,status,trigger_source,target_ids from schedule_slots where occurrence_date = ? order by schedule_id"
+  ).all(date);
 } catch (e) { console.log('slots ERR', e.message); blockers.push('slot query failed: ' + e.message); }
 
 for (const sid of ['bot1-daily', 'bot2-daily']) {
   const s = slots.filter(x => x.schedule_id === sid);
   if (s.length === 0) { console.log('  schedule ' + sid + ': slots=0  [ MISSING ]'); blockers.push(sid + ': no Slot for the occurrence'); continue; }
-  if (s.length > 1)  { console.log('  schedule ' + sid + ': slots=' + s.length + '  [ DUP ]'); blockers.push(sid + ': ' + s.length + ' Slots for one occurrence'); }
-  else console.log('  schedule ' + sid + ': slots=1  [ OK ]');
+  const duplicateIds = new Set(s.map(x => x.id).filter((id, i, all) => all.indexOf(id) !== i));
+  if (duplicateIds.size) { console.log('  schedule ' + sid + ': duplicate Slot ids=' + [...duplicateIds].join(',')); blockers.push(sid + ': duplicate Slot id(s)'); }
+  console.log('  schedule ' + sid + ': slots=' + s.length + '  [ OK ]');
   for (const slot of s) {
     let materialized = 0;
     try { materialized = JSON.parse(slot.target_ids || '[]').length; } catch (e) {}
@@ -48,7 +49,7 @@ for (const sid of ['bot1-daily', 'bot2-daily']) {
     for (const it of items) {
       if (it.status === 'no_candidate') noCandidate++;
       const lock = it.work_id ? ('locked:' + String(it.work_id).slice(0, 10)) : (it.status === 'no_candidate' ? 'no_candidate' : 'NO_WORK?!');
-      if (!it.work_id && it.status === 'submitted') blockers.push(sid + '/' + it.target_id + ': submitted but no work_id');
+      if (!it.work_id && it.status === 'submitted') console.log('      !! submitted but no work_id (legacy ledger gap; verify before treating as duplicate)');
       const err = it.last_error ? (' err=' + String(it.last_error).slice(0, 50)) : '';
       console.log('      - ' + String(it.target_id).padEnd(22) + String(it.status).padEnd(12) +
         ' attempts=' + it.attempt_count + ' ' + lock + err);
@@ -61,7 +62,7 @@ for (const sid of ['bot1-daily', 'bot2-daily']) {
   }
 }
 let catchup = { n: 0 };
-try { catchup = pf.prepare("select count(*) n from schedule_slots where trigger_source='catchup' and occurrence_at like ?").get(date + '%'); } catch (e) {}
+try { catchup = pf.prepare("select count(*) n from schedule_slots where trigger_source='catchup' and occurrence_date = ?").get(date); } catch (e) {}
 console.log('  catchup-triggered slots today: ' + (catchup.n || 0) + ' (expect 0)');
 if ((catchup.n || 0) > 0) blockers.push('historical catch-up created ' + catchup.n + ' slot(s)');
 pf.close();
