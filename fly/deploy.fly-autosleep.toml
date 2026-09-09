@@ -56,6 +56,7 @@ primary_region = "iad"
   MALLOC_ARENA_MAX = "2"
   PIXIV_DB_CACHE_KB = "4096"
   DB_CACHE_KB = "1024"
+  SEARCH_ENABLED = "false"   # 省内存/冷启动更快；自动停机场景不依赖搜索
 
 [mounts]
   source = "data"
@@ -65,16 +66,21 @@ primary_region = "iad"
   internal_port = 8080
   # Flycast/私网 HTTP 不需要 force_https；公网 webhook 仍走 HTTPS。
   force_https = false
-  auto_stop_machines = "stop"   # 空闲停机省 RAM（stopped 是健康省钱状态）
+  # suspend：内存状态保留、唤醒远快于 stop（冷启动只重放持久状态），
+  # 对 512MB 单机 + webhook 唤醒的场景比 stop 更稳；空闲仍不计 CPU。
+  auto_stop_machines = "suspend"
   auto_start_machines = true    # webhook / Slot HTTP 到达时自动拉起
   min_machines_running = 0
 
+  # /health 保持唤醒入口恒 200（liveness/auto_stop 唤醒）；编排就绪探针走
+  # /ready（bot 未 initialize+start 完成时返回 503），避免冷启动期间把
+  # webhook 路由给尚未就绪的进程。
   [[http_service.checks]]
     grace_period = "120s"
-    interval = "60s"
+    interval = "30s"
     method = "GET"
-    timeout = "30s"
-    path = "/health"
+    timeout = "10s"
+    path = "/ready"
 
 [vm]
   cpu_kind = "shared"
