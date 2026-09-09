@@ -10,8 +10,8 @@ primary_region = "sin"
   dockerfile = "../docker/combined.Dockerfile"
 
 [build.args]
-  TELEPOST_IMAGE = "ghcr.io/redtidev1918/telepost:2.15.0"
-  PIXIVFLOW_VERSION = "2.12.0"
+  TELEPOST_IMAGE = "ghcr.io/redtidev1918/telepost:2.16.0"
+  PIXIVFLOW_VERSION = "2.12.3"
 
 [env]
   PYTHONUNBUFFERED = "1"
@@ -59,13 +59,13 @@ primary_region = "sin"
   min_machines_running = 1      # 至少一台常驻
 
   [[http_service.checks]]
-    # 512 MiB 机器在 PixivFlow 大批量下载/投递瞬间响应会变慢（仍在工作），
-    # 5s/30s 的组合太苛刻会把正常负载误判为 critical。放宽到 30s 超时 + 60s 间隔。
-    grace_period = "120s"
-    interval = "60s"
+    # /ready 聚合全部 bot 子进程就绪状态；冷启动子进程未完成 initialize+start
+    # 时返回 503。批量投递高峰可能短暂变慢，超时放宽到 10s。
+    grace_period = "60s"
+    interval = "30s"
     method = "GET"
-    timeout = "30s"
-    path = "/health"
+    timeout = "10s"
+    path = "/ready"
 
 [vm]
   cpu_kind = "shared"

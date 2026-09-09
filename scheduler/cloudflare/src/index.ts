@@ -90,9 +90,16 @@ export default {
     console.log(
       `schedule trigger cron="${event.cron}" id=${scheduleId}: ok=${result.ok} status=${result.status} body=${result.body}`,
     );
+    // Expected non-2xx outcomes are NOT failures: 425 = not due yet, 410 =
+    // occurrence expired, 409 = another worker owns it, 401 = auth config
+    // error. Retrying those just burns the idempotent trigger. Only
+    // transport/5xx/408/429 are retried by the platform/watchdog.
+    const terminal = new Set([400, 401, 403, 404, 409, 410, 425]);
+    if (!result.ok && terminal.has(result.status)) {
+      console.log(`schedule trigger id=${scheduleId} status=${result.status} is an expected terminal outcome; not retrying`);
+      return;
+    }
     if (!result.ok) {
-      // Throw so Cloudflare marks the invocation failed; automatic retry and
-      // the optional GitHub watchdog both re-POST the same idempotent trigger.
       throw new Error(`schedule ${scheduleId} trigger failed: ${result.status} ${result.body}`);
     }
   },
@@ -112,8 +119,9 @@ export default {
       const scheduleId = decodeURIComponent(m[1]);
       const label = url.searchParams.get('label') ?? undefined;
       const result = await triggerSchedule(env, scheduleId, label);
+      const expectedOk = result.ok || new Set([409, 410, 425]).has(result.status);
       return new Response(JSON.stringify({ scheduleId, ...result }), {
-        status: result.ok ? 200 : 502,
+        status: expectedOk ? 200 : 502,
         headers: { 'Content-Type': 'application/json' },
       });
     }

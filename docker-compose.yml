@@ -7,7 +7,7 @@ name: pixivflow-telepost
 
 services:
   telepost:
-    image: ${TELEPOST_IMAGE:-ghcr.io/redtidev1918/telepost:2.15.0}
+    image: ${TELEPOST_IMAGE:-ghcr.io/redtidev1918/telepost:2.16.0}
     restart: unless-stopped
     init: true
     environment:
@@ -60,12 +60,13 @@ services:
     mem_limit: ${TELEPOST_MEMORY_LIMIT:-320m}
     cpus: ${CPU_LIMIT:-1.0}
     pids_limit: 256
+    # /health is liveness; /ready gates depends_on until bot initialize()+start() done.
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/health', timeout=5).read()"]
-      interval: 30s
+      test: ["CMD", "python", "-c", "import urllib.request,sys; r=urllib.request.urlopen('http://127.0.0.1:8080/ready', timeout=5); sys.exit(0 if r.status==200 else 1)"]
+      interval: 15s
       timeout: 10s
-      retries: 3
-      start_period: 20s
+      retries: 5
+      start_period: 60s
     networks:
       - app
     logging: &default-logging
@@ -75,7 +76,7 @@ services:
         max-file: ${LOG_MAX_FILES:-3}
 
   pixivflow:
-    image: ${PIXIVFLOW_IMAGE:-ghcr.io/redtidev1918/pixivflow:2.12.0}
+    image: ${PIXIVFLOW_IMAGE:-ghcr.io/redtidev1918/pixivflow:2.12.3}
     restart: unless-stopped
     init: true
     environment:
@@ -87,6 +88,8 @@ services:
       TELEPOST_API_BASE_URL: ${TELEPOST_API_BASE_URL:-http://telepost:8080}
       TELEPOST_BOT1_SUBMIT_TOKEN: ${TELEPOST_BOT1_SUBMIT_TOKEN:-}
       TELEPOST_BOT2_SUBMIT_TOKEN: ${TELEPOST_BOT2_SUBMIT_TOKEN:-}
+      SCHEDULER_TRIGGER_TOKEN: ${SCHEDULER_TRIGGER_TOKEN:-}
+      SCHEDULER_TRIGGER_PORT: ${SCHEDULER_TRIGGER_PORT:-8090}
       NODE_OPTIONS: ${NODE_OPTIONS:---max-old-space-size=96 --expose-gc}
       MALLOC_ARENA_MAX: ${MALLOC_ARENA_MAX:-2}
       PIXIV_DB_CACHE_KB: ${PIXIV_DB_CACHE_KB:-4096}
@@ -103,12 +106,13 @@ services:
     mem_limit: ${PIXIVFLOW_MEMORY_LIMIT:-256m}
     cpus: ${CPU_LIMIT:-1.0}
     pids_limit: 256
+    # Probe the trigger HTTP server when a token is set; else gate on config file.
     healthcheck:
-      test: ["CMD", "node", "-e", "process.exit(require('fs').existsSync('/app/data/pixivflow/config.json') ? 0 : 1)"]
+      test: ["CMD", "sh", "-c", "if [ -n \"$$SCHEDULER_TRIGGER_TOKEN\" ]; then wget -q -O- http://127.0.0.1:${SCHEDULER_TRIGGER_PORT:-8090}/health >/dev/null 2>&1 || exit 1; else test -f /app/data/pixivflow/config.json; fi"]
       interval: 30s
       timeout: 10s
       retries: 3
-      start_period: 30s
+      start_period: 40s
     networks:
       - app
     logging: *default-logging
