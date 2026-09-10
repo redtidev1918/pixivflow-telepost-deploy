@@ -274,6 +274,59 @@ jobs:
             echo "::warning::result report failed after 3 attempts; reconciliation will treat this run as failed"
           fi
 
+      # A Pixiv refresh may return a NEW refresh token, and a runner is destroyed
+      # after the job. If that token is simply dropped, whoever was sharing the
+      # credential is left holding a dead one with no way back. This records what
+      # happened and keeps the new value as an artifact, so a rotation is never
+      # silent. It runs even when the batch failed: the refresh happens at boot.
+      - name: Record credential state
+        if: always()
+        run: |
+          python3 - <<'PY'
+          import glob, hashlib, json, os, pathlib
+
+          def digest(value: str) -> str:
+              return hashlib.sha256(value.encode()).hexdigest()[:12] if value else '-'
+
+          provided = os.environ.get('PIXIV_REFRESH_TOKEN', '').strip()
+          print(f"provided refresh token: sha256[:12]={digest(provided)}")
+
+          candidates = ['control-plane/config/pixivflow.production.json']
+          candidates += glob.glob('**/.pixiv-refresh-token', recursive=True)
+          candidates += glob.glob('**/.pixiv-refresh-token.backup', recursive=True)
+
+          rotated = ''
+          for name in candidates:
+              path = pathlib.Path(name)
+              if not path.exists():
+                  continue
+              try:
+                  if path.suffix == '.json':
+                      found = json.loads(path.read_text()).get('pixiv', {}).get('refreshToken', '')
+                  else:
+                      found = path.read_text().strip()
+              except Exception as error:  # noqa: BLE001 - report, never fail the job
+                  print(f"{name}: unreadable ({error})")
+                  continue
+              changed = bool(found) and found != provided
+              print(f"{name}: sha256[:12]={digest(found)} rotated={changed}")
+              if changed:
+                  rotated = found
+
+          if rotated:
+              pathlib.Path('rotated-token.txt').write_text(rotated)
+              print("::warning::the refresh token ROTATED during this run; the new value is in the rotated-credential artifact")
+          PY
+
+      - name: Keep the rotated credential when there was one
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: rotated-credential
+          path: rotated-token.txt
+          if-no-files-found: ignore
+          retention-days: 1
+
       - name: Fail the job when the batch did not succeed
         # Runs AFTER the report on purpose: the control plane must always receive
         # the real per-target outcome. Rules:
