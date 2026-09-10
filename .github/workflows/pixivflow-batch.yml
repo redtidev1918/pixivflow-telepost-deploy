@@ -102,16 +102,41 @@ jobs:
       PIXIV_CLIENT_ID: ${{ secrets.PIXIV_CLIENT_ID }}
       PIXIV_CLIENT_SECRET: ${{ secrets.PIXIV_CLIENT_SECRET }}
       PIXIV_DEVICE_TOKEN: ${{ secrets.PIXIV_DEVICE_TOKEN }}
-      PIXIV_REFRESH_TOKEN: ${{ secrets.PIXIV_REFRESH_TOKEN }}
-      # Read-only auth is the default on purpose: this workflow has no Pixiv
-      # credential of its own yet, and PixivAuth refreshes on every boot — a
-      # refresh can rotate the single production refresh token that Fly is using,
-      # and a running daemon never re-reads it from disk. Read-only refuses to
-      # refresh at all, so a credential-less run fails loudly instead of touching
-      # the token endpoint. Set the repo variable to 'false' once this workflow has
-      # its OWN credential.
+      # PIXIV_REFRESH_TOKEN is intentionally absent here: it is resolved at run
+      # time from the control plane (see "Resolve the Pixiv credential"), so the
+      # newest rotated value is always the one used and there is no second source
+      # of truth to disagree with.
       PIXIV_AUTH_READONLY: ${{ vars.PIXIV_AUTH_READONLY || 'true' }}
     steps:
+      # The control plane is the only durable thing in this architecture, so it
+      # holds the execution plane's Pixiv credential. Reading it here means a
+      # rotation written back by an earlier run is picked up by the next one, and
+      # the token never has to live in a long-lived GitHub secret.
+      - name: Resolve the Pixiv credential
+        env:
+          FALLBACK_TOKEN: ${{ secrets.PIXIV_REFRESH_TOKEN }}
+        run: |
+          set -euo pipefail
+          token=""
+          if response=$(curl -sS --max-time 20 -X POST \
+              -H "authorization: Bearer $CONTROL_SECRET" \
+              "${CALLBACK_URL%/}/credentials/pixiv-refresh-token/read" 2>/dev/null); then
+            token=$(printf '%s' "$response" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("value",""))' 2>/dev/null || true)
+          fi
+          source="control-plane"
+          if [ -z "$token" ]; then
+            token="$FALLBACK_TOKEN"
+            source="github-secret"
+          fi
+          if [ -z "$token" ]; then
+            echo "::error::no Pixiv credential available from the control plane or the fallback secret"
+            exit 1
+          fi
+          # Mask before it can reach any output; the value is never printed.
+          echo "::add-mask::$token"
+          printf 'PIXIV_REFRESH_TOKEN=%s\n' "$token" >> "$GITHUB_ENV"
+          echo "credential resolved from: $source"
+
       - name: Checkout control plane (for the versioned shadow config)
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -202,6 +227,86 @@ jobs:
           # the real per-target outcome instead of guessing.
           exit 0
 
+      # Pixiv may return a NEW refresh token from any refresh. The client already
+      # treats that as expected, and two refreshes that returned the same value do
+      # not prove it can never happen. A runner is destroyed when the job ends, so
+      # a rotation that is only held here is lost along with it, taking access to
+      # the account with it.
+      #
+      # This therefore runs BEFORE the result is reported: until the new value is
+      # durably stored, the execution must not be recorded as a success. If the
+      # store cannot be reached, the report is skipped, the job fails, and the
+      # credential is kept as an artifact as a last resort.
+      - name: Persist a rotated credential
+        id: credential
+        if: always()
+        run: |
+          set -uo pipefail
+          rotated=$(python3 - <<'PY'
+          import glob, json, os, pathlib
+
+          provided = os.environ.get('PIXIV_REFRESH_TOKEN', '').strip()
+          candidates = ['control-plane/config/pixivflow.production.json']
+          candidates += glob.glob('**/.pixiv-refresh-token', recursive=True)
+          candidates += glob.glob('**/.pixiv-refresh-token.backup', recursive=True)
+
+          for name in candidates:
+              path = pathlib.Path(name)
+              if not path.exists():
+                  continue
+              try:
+                  if path.suffix == '.json':
+                      found = json.loads(path.read_text()).get('pixiv', {}).get('refreshToken', '')
+                  else:
+                      found = path.read_text().strip()
+              except Exception:
+                  continue
+              # A placeholder is not a token: the versioned config keeps
+              # ${PIXIV_REFRESH_TOKEN} until a run resolves it.
+              if not found or (found.startswith('${') and found.endswith('}')):
+                  continue
+              if found != provided:
+                  print(found)
+                  break
+          PY
+          )
+          if [ -z "$rotated" ]; then
+            echo "credential: unchanged by this run"
+            exit 0
+          fi
+          echo "::warning::Pixiv returned a new refresh token; persisting it before reporting the result"
+          printf '%s' "$rotated" > "$RUNNER_TEMP/rotated.json.payload"
+          python3 -c "import json,sys; print(json.dumps({'value': open(sys.argv[1]).read()}))" \
+            "$RUNNER_TEMP/rotated.json.payload" > "$RUNNER_TEMP/rotated.body"
+          rm -f "$RUNNER_TEMP/rotated.json.payload"
+          for attempt in 1 2 3 4 5; do
+            code=$(curl -sS --max-time 20 -o "$RUNNER_TEMP/rotated.response" -w '%{http_code}' \
+              -X PUT -H "authorization: Bearer $CONTROL_SECRET" -H 'content-type: application/json' \
+              --data-binary "@$RUNNER_TEMP/rotated.body" \
+              "${CALLBACK_URL%/}/credentials/pixiv-refresh-token" || echo 000)
+            if [ "$code" = "200" ]; then
+              echo "credential: rotated value stored durably (attempt $attempt)"
+              rm -f "$RUNNER_TEMP/rotated.body" "$RUNNER_TEMP/rotated.response"
+              exit 0
+            fi
+            echo "credential: store attempt $attempt failed (HTTP $code)"
+            sleep $((attempt * 5))
+          done
+          # Not durable. Keep the value for an operator and refuse to report success.
+          printf '%s' "$rotated" > rotated-token.txt
+          rm -f "$RUNNER_TEMP/rotated.body" "$RUNNER_TEMP/rotated.response"
+          echo "::error::a rotated refresh token could NOT be stored durably; refusing to report this execution as complete"
+          exit 1
+
+      - name: Keep the rotated credential when persistence failed
+        if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: rotated-credential
+          path: rotated-token.txt
+          if-no-files-found: ignore
+          retention-days: 7
+
       - name: Report the result
         id: report
         # Reports whenever this job still has a shell. A job-level timeout kills
@@ -273,63 +378,6 @@ jobs:
             echo "report_failed=1" >> "$GITHUB_OUTPUT"
             echo "::warning::result report failed after 3 attempts; reconciliation will treat this run as failed"
           fi
-
-      # A Pixiv refresh may return a NEW refresh token, and a runner is destroyed
-      # after the job. If that token is simply dropped, whoever was sharing the
-      # credential is left holding a dead one with no way back. This records what
-      # happened and keeps the new value as an artifact, so a rotation is never
-      # silent. It runs even when the batch failed: the refresh happens at boot.
-      - name: Record credential state
-        if: always()
-        run: |
-          python3 - <<'PY'
-          import glob, hashlib, json, os, pathlib
-
-          def digest(value: str) -> str:
-              return hashlib.sha256(value.encode()).hexdigest()[:12] if value else '-'
-
-          provided = os.environ.get('PIXIV_REFRESH_TOKEN', '').strip()
-          print(f"provided refresh token: sha256[:12]={digest(provided)}")
-
-          candidates = ['control-plane/config/pixivflow.production.json']
-          candidates += glob.glob('**/.pixiv-refresh-token', recursive=True)
-          candidates += glob.glob('**/.pixiv-refresh-token.backup', recursive=True)
-
-          rotated = ''
-          for name in candidates:
-              path = pathlib.Path(name)
-              if not path.exists():
-                  continue
-              try:
-                  if path.suffix == '.json':
-                      found = json.loads(path.read_text()).get('pixiv', {}).get('refreshToken', '')
-                  else:
-                      found = path.read_text().strip()
-              except Exception as error:  # noqa: BLE001 - report, never fail the job
-                  print(f"{name}: unreadable ({error})")
-                  continue
-              # A placeholder is NOT a token: the versioned config keeps
-              # ${PIXIV_REFRESH_TOKEN} until a run resolves it, and comparing that
-              # string to the real value reported a rotation that never happened.
-              placeholder = found.startswith('${') and found.endswith('}')
-              changed = bool(found) and not placeholder and found != provided
-              print(f"{name}: sha256[:12]={digest(found)} rotated={changed}")
-              if changed:
-                  rotated = found
-
-          if rotated:
-              pathlib.Path('rotated-token.txt').write_text(rotated)
-              print("::warning::the refresh token ROTATED during this run; the new value is in the rotated-credential artifact")
-          PY
-
-      - name: Keep the rotated credential when there was one
-        if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
-        with:
-          name: rotated-credential
-          path: rotated-token.txt
-          if-no-files-found: ignore
-          retention-days: 1
 
       - name: Fail the job when the batch did not succeed
         # Runs AFTER the report on purpose: the control plane must always receive

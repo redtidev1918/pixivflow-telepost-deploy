@@ -253,13 +253,55 @@ export interface ObservabilityStore {
   listRecentReconciliations(limit: number): Promise<ReconciliationRunRow[]>;
 }
 
+/**
+ * Durable store for the execution plane's shared credential.
+ *
+ * The runner is disposable; a refresh token it rotates and then drops cannot be
+ * recovered from anywhere. This is the one place in the architecture that
+ * outlives a job, so a rotation lands here before the run may report success.
+ */
+export interface RunnerCredentialStore {
+  /** The current value, or null when nothing is stored yet. */
+  getRunnerCredential(name: string): Promise<RunnerCredentialRow | null>;
+  /**
+   * The stored value itself, for the one caller that has to present it to Pixiv.
+   *
+   * Separate from `getRunnerCredential` so the metadata read cannot leak the
+   * secret, and so a route that needs the value has to ask for it by name.
+   */
+  readRunnerCredentialSecret(name: string): Promise<RunnerCredentialSecret | null>;
+  /**
+   * Store a (possibly rotated) value. Idempotent: writing the same value again
+   * only refreshes `updatedAt` and does not count as a rotation.
+   */
+  putRunnerCredential(input: {
+    name: string;
+    value: string;
+    nowMs: number;
+  }): Promise<{ stored: true; changed: boolean; rotations: number }>;
+}
+
 /** Everything reconciliation and the callback routes need, in one port. */
 export interface ControlPlaneStore
   extends ControlStore,
     ExecutionStore,
     ReviewStore,
     ProcessedWorkStore,
-    ObservabilityStore {}
+    ObservabilityStore,
+    RunnerCredentialStore {}
+
+/** Metadata only: the value itself is never part of a read that leaves the store. */
+export interface RunnerCredentialRow {
+  name: string;
+  updatedAt: number;
+  previousHash: string | null;
+  rotations: number;
+}
+
+/** The stored value, for the one caller that has to present it to Pixiv. */
+export interface RunnerCredentialSecret extends RunnerCredentialRow {
+  value: string;
+}
 
 /**
  * Review states, ported from TelePost's production state machine

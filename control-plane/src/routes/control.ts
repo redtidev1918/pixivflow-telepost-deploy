@@ -11,6 +11,7 @@
  */
 
 import { applyExecutionResult, claimExecution } from '../execution';
+import { secretsMatch } from '../secrets';
 import { buildCallbackData } from '../reviews';
 import type { ControlPlaneStore, ExecutionStatus, ItemStatus } from '../store';
 import { SCHEDULES } from '../schedules';
@@ -47,22 +48,14 @@ function json(body: unknown, status = 200): Response {
 }
 
 /** Constant-time comparison so the secret cannot be probed byte by byte. */
-function secretsMatch(presented: string, expected: string): boolean {
-  const subtle = (crypto as { subtle?: { timingSafeEqual?: (a: BufferSource, b: BufferSource) => boolean } }).subtle;
-  const a = new TextEncoder().encode(presented);
-  const b = new TextEncoder().encode(expected);
-  if (a.byteLength !== b.byteLength) return false;
-  if (subtle?.timingSafeEqual) return subtle.timingSafeEqual(a, b);
-  let diff = 0;
-  for (let i = 0; i < a.byteLength; i += 1) diff |= (a[i] ?? 0) ^ (b[i] ?? 0);
-  return diff === 0;
-}
-
 function authorized(request: Request, secret: string | undefined): boolean {
   if (!secret) return false; // fail closed: no configured secret means no writes
   const header = request.headers.get('authorization') ?? '';
   const presented = header.startsWith('Bearer ') ? header.slice(7).trim() : '';
-  return presented.length > 0 && secretsMatch(presented, secret);
+  if (presented.length === 0) return false;
+  const subtle = (crypto as { subtle?: { timingSafeEqual?: (a: BufferSource, b: BufferSource) => boolean } })
+    .subtle;
+  return secretsMatch(presented, secret, subtle);
 }
 
 const CONTROL_PATTERN = /^\/control\/executions\/([^/]+)\/(claim|result|items)$/;
@@ -73,6 +66,83 @@ export async function handleControl(
   url: URL,
   callbackSecret: string | undefined
 ): Promise<Response | null> {
+  // ---- the execution plane's shared credential ------------------------------
+  //
+  // A runner is destroyed when the job ends, so a refresh token it rotates and
+  // drops is unrecoverable. Pixiv may return a new refresh token from any refresh,
+  // and nothing proves it will not, so a rotation is written here before the run is
+  // allowed to report success.
+  //
+  // The value never appears in a GET: metadata is one endpoint and reading the
+  // secret is an explicit POST, so a probe, a dashboard or a log line cannot leak
+  // it by accident.
+  const credentialPath = /^\/control\/credentials\/([^/]+)$/.exec(url.pathname);
+  if (credentialPath) {
+    const name = decodeURIComponent(credentialPath[1] ?? '');
+    if (!name) return json({ error: 'name is required' }, 400);
+    if (!authorized(request, callbackSecret)) return json({ error: 'unauthorized' }, 401);
+
+    if (request.method === 'GET') {
+      const row = await store.getRunnerCredential(name);
+      if (!row) return json({ ok: true, name, stored: false });
+      return json({
+        ok: true,
+        name,
+        stored: true,
+        updatedAt: row.updatedAt,
+        previousHash: row.previousHash,
+        rotations: row.rotations,
+      });
+    }
+
+    if (request.method === 'PUT') {
+      let body: { value?: string };
+      try {
+        body = (await request.json()) as typeof body;
+      } catch {
+        return json({ error: 'invalid json body' }, 400);
+      }
+      const value = typeof body.value === 'string' ? body.value.trim() : '';
+      // Refuse anything that is not plausibly a token: a placeholder or an empty
+      // string written over a real credential would silently break every later run.
+      if (value.length < 16 || value.startsWith('${')) {
+        return json({ error: 'value does not look like a credential' }, 400);
+      }
+      const before = await store.getRunnerCredential(name);
+      const result = await store.putRunnerCredential({ name, value, nowMs: Date.now() });
+      // Durable evidence of the rotation, without the value: who changed it, and
+      // what it replaced, is enough to audit this.
+      if (result.changed) {
+        await store.logEvents([
+          {
+            ts: Date.now(),
+            event: 'runner_credential_rotated',
+            detail: JSON.stringify({
+              name,
+              rotations: result.rotations,
+              previousUpdatedAt: before?.updatedAt ?? null,
+            }),
+          },
+        ]);
+      }
+      return json({ ok: true, name, stored: true, changed: result.changed, rotations: result.rotations });
+    }
+
+    return json({ error: 'method not allowed' }, 405);
+  }
+
+  // Reading the secret is deliberately its own POST: a GET could be cached, logged
+  // by an intermediary, or captured in a URL, and this value is the whole account.
+  const credentialRead = /^\/control\/credentials\/([^/]+)\/read$/.exec(url.pathname);
+  if (credentialRead) {
+    if (!authorized(request, callbackSecret)) return json({ error: 'unauthorized' }, 401);
+    if (request.method !== 'POST') return json({ error: 'method not allowed' }, 405);
+    const name = decodeURIComponent(credentialRead[1] ?? '');
+    const secret = await store.readRunnerCredentialSecret(name);
+    if (!secret) return json({ error: 'no credential stored' }, 404);
+    return json({ ok: true, name, value: secret.value, updatedAt: secret.updatedAt, rotations: secret.rotations });
+  }
+
   // Durable duplicate history for a runner that starts with an empty local
   // database: the list of works this bot has already handled.
   if (url.pathname === '/control/processed-works') {

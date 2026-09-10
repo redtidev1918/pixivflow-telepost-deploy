@@ -15,6 +15,8 @@ import type {
   OccurrenceRow,
   ReconciliationRunRow,
   ReconciliationSummary,
+  RunnerCredentialRow,
+  RunnerCredentialSecret,
   ReviewRecord,
   ReviewStatus,
   SlotItemInput,
@@ -26,6 +28,7 @@ import {
   RESETTABLE_REVIEW_STATUSES,
   TERMINAL_ITEM_STATUSES,
 } from './store';
+import { hashSecret } from './secrets';
 
 /**
  * The subset of the D1 API this worker uses, declared structurally so the store
@@ -321,6 +324,94 @@ export class D1ControlStore implements ControlPlaneStore {
         errors: row.errors ? (JSON.parse(row.errors) as string[]) : [],
       },
     }));
+  }
+
+  // ---- runner credentials ---------------------------------------------------
+
+  async getRunnerCredential(name: string): Promise<RunnerCredentialRow | null> {
+    const row = await this.db
+      .prepare(
+        `SELECT name, updated_at, previous_hash, rotations FROM runner_credentials WHERE name = ?`
+      )
+      .bind(name)
+      .first<{ name: string; updated_at: number; previous_hash: string | null; rotations: number }>();
+    if (!row) return null;
+    return {
+      name: row.name,
+      updatedAt: row.updated_at,
+      previousHash: row.previous_hash,
+      rotations: row.rotations,
+    };
+  }
+
+  /**
+   * The value is part of the return type only for the internal caller that hands it
+   * to Pixiv; no HTTP response ever includes it.
+   */
+  async readRunnerCredentialSecret(name: string): Promise<RunnerCredentialSecret | null> {
+    const row = await this.db
+      .prepare(
+        `SELECT name, value, updated_at, previous_hash, rotations FROM runner_credentials WHERE name = ?`
+      )
+      .bind(name)
+      .first<{
+        name: string;
+        value: string;
+        updated_at: number;
+        previous_hash: string | null;
+        rotations: number;
+      }>();
+    if (!row) return null;
+    return {
+      name: row.name,
+      value: row.value,
+      updatedAt: row.updated_at,
+      previousHash: row.previous_hash,
+      rotations: row.rotations,
+    };
+  }
+
+  async putRunnerCredential(input: {
+    name: string;
+    value: string;
+    nowMs: number;
+  }): Promise<{ stored: true; changed: boolean; rotations: number }> {
+    const existing = (await this.db
+      .prepare(`SELECT value, previous_hash, rotations FROM runner_credentials WHERE name = ?`)
+      .bind(input.name)
+      .first<{ value: string; previous_hash: string | null; rotations: number }>()) ?? null;
+
+    // Writing the same value again is a no-op: a runner that reports the token it
+    // was given must not look like a rotation in the audit trail.
+    const changed = existing !== null && existing.value !== input.value;
+    const rotations = existing === null ? 0 : existing.rotations + (changed ? 1 : 0);
+
+    if (existing === null) {
+      await this.db
+        .prepare(
+          `INSERT INTO runner_credentials (name, value, updated_at, previous_hash, rotations)
+           VALUES (?, ?, ?, NULL, 0)`
+        )
+        .bind(input.name, input.value, input.nowMs)
+        .run();
+      return { stored: true, changed: false, rotations: 0 };
+    }
+
+    await this.db
+      .prepare(
+        `UPDATE runner_credentials
+            SET value = ?, updated_at = ?, previous_hash = ?, rotations = ?
+          WHERE name = ?`
+      )
+      .bind(
+        input.value,
+        input.nowMs,
+        changed ? await hashSecret(existing.value) : existing.previous_hash,
+        rotations,
+        input.name
+      )
+      .run();
+    return { stored: true, changed, rotations };
   }
 
   async countReviewsByStatus(): Promise<Record<string, number>> {

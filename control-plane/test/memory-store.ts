@@ -7,6 +7,7 @@
  */
 
 import type { Occurrence } from '../src/occurrences';
+import { hashSecret } from '../src/secrets';
 import type {
   DispatchRequest,
   DispatchResult,
@@ -30,6 +31,8 @@ import {
   type ReconciliationSummary,
   type ReviewRecord,
   type ReviewStatus,
+  type RunnerCredentialRow,
+  type RunnerCredentialSecret,
   type SlotItemInput,
   type SlotItemRow,
   type SlotStatus,
@@ -466,6 +469,51 @@ export class MemoryControlStore implements ControlPlaneStore {
     if (input.actor != null) review.decidedBy = input.actor;
     review.updatedAt = input.nowMs;
     return true;
+  }
+
+  // ---- runner credentials ---------------------------------------------------
+
+  readonly credentials = new Map<
+    string,
+    { value: string; updatedAt: number; previousHash: string | null; rotations: number }
+  >();
+
+  async getRunnerCredential(name: string): Promise<RunnerCredentialRow | null> {
+    const row = this.credentials.get(name);
+    if (!row) return null;
+    return {
+      name,
+      updatedAt: row.updatedAt,
+      previousHash: row.previousHash,
+      rotations: row.rotations,
+    };
+  }
+
+  async readRunnerCredentialSecret(name: string): Promise<RunnerCredentialSecret | null> {
+    const row = this.credentials.get(name);
+    if (!row) return null;
+    return { name, ...row };
+  }
+
+  async putRunnerCredential(input: {
+    name: string;
+    value: string;
+    nowMs: number;
+  }): Promise<{ stored: true; changed: boolean; rotations: number }> {
+    const existing = this.credentials.get(input.name);
+    // Same value again is not a rotation: a runner echoing what it was given must
+    // not appear as one in the audit trail.
+    const changed = existing !== undefined && existing.value !== input.value;
+    const rotations = existing === undefined ? 0 : existing.rotations + (changed ? 1 : 0);
+    this.credentials.set(input.name, {
+      value: input.value,
+      updatedAt: input.nowMs,
+      // Real digest, same as D1: a fake that roughly approximates the store has
+      // already hidden one real bug in this suite.
+      previousHash: changed ? await hashSecret(existing!.value) : (existing?.previousHash ?? null),
+      rotations,
+    });
+    return { stored: true, changed, rotations };
   }
 
   // ---- processed works ------------------------------------------------------
