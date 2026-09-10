@@ -14,14 +14,23 @@ export interface FakeBot extends BotApiClient {
 
 export function fakeBot(botId = 'bot1'): FakeBot {
   const calls: FakeBot['calls'] = [];
-  const bot = {
+  // Explicitly typed: the object refers to itself through `record`, and inference
+  // through that cycle would make `bot` implicitly any.
+  const bot: FakeBot = {
     botId,
     calls,
     script: undefined as ((method: string) => TelegramResult | undefined) | undefined,
     getMe: async () => record('getMe', {}),
     answerCallbackQuery: async (id: string, text?: string) => record('answerCallbackQuery', { id, text }),
     copyMessage: async (input: Parameters<BotApiClient['copyMessage']>[0]) => record('copyMessage', input),
-    copyMessages: async (input: Parameters<BotApiClient['copyMessages']>[0]) => record('copyMessages', input),
+    // Telegram answers copyMessages with a bare ARRAY of MessageId objects; the fake
+    // answering {message_id} is what hid a missing published id for album approvals.
+    copyMessages: async (input: Parameters<BotApiClient['copyMessages']>[0]) => {
+      calls.push({ method: 'copyMessages', payload: input });
+      const scripted = bot.script?.('copyMessages');
+      if (scripted) return scripted;
+      return { ok: true, result: input.messageIds.map((messageId) => ({ message_id: 1000 + messageId })) };
+    },
     editMessageReplyMarkup: async (input: Parameters<BotApiClient['editMessageReplyMarkup']>[0]) =>
       record('editMessageReplyMarkup', input),
     sendMessage: async (input: Parameters<BotApiClient['sendMessage']>[0]) => record('sendMessage', input),

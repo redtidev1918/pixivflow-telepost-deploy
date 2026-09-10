@@ -126,13 +126,14 @@ interface ReviewRowDb {
   decided_at: number | null;
   decided_by: string | null;
   published_message_id: number | null;
+  published_caption_message_id: number | null;
   last_error: string | null;
 }
 
 const REVIEW_COLUMNS = `id, bot_id, slot_id, target_id, work_id, chat_id, message_id, message_ids,
   media_group_id, media_message_ids, caption_message_id, control_message_id,
   file_ids, caption, publish_chat_id, publish_thread_id, status, created_at, updated_at,
-  decided_at, decided_by, published_message_id, last_error`;
+  decided_at, decided_by, published_message_id, published_caption_message_id, last_error`;
 
 function parseNumberArray(raw: string | null): number[] | null {
   if (!raw) return null;
@@ -180,6 +181,7 @@ function toReview(row: ReviewRowDb): ReviewRecord {
     decidedAt: row.decided_at,
     decidedBy: row.decided_by,
     publishedMessageId: row.published_message_id,
+    publishedCaptionMessageId: row.published_caption_message_id,
     lastError: row.last_error,
   };
 }
@@ -914,18 +916,21 @@ export class D1ControlStore implements ControlPlaneStore {
   async markReviewPublished(input: {
     reviewId: string;
     publishedMessageId: number | null;
+    publishedCaptionMessageId?: number | null;
     nowMs: number;
     actor?: string | null;
   }): Promise<boolean> {
     const result = (await this.db
       .prepare(
         `UPDATE reviews
-            SET status = 'published', published_message_id = ?, updated_at = ?,
-                decided_at = ?, decided_by = COALESCE(?, decided_by)
+            SET status = 'published', published_message_id = ?,
+                published_caption_message_id = COALESCE(?, published_caption_message_id),
+                updated_at = ?, decided_at = ?, decided_by = COALESCE(?, decided_by)
           WHERE id = ? AND status = 'publishing'`
       )
       .bind(
         input.publishedMessageId,
+        input.publishedCaptionMessageId ?? null,
         input.nowMs,
         input.nowMs,
         input.actor ?? null,

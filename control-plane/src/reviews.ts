@@ -215,7 +215,8 @@ export async function decideReview(
   }
 
   const thread = review.publishThreadId !== null ? { messageThreadId: review.publishThreadId } : {};
-  // copyMessages keeps album grouping; copyMessage would split it into loose files.
+  // copyMessages keeps album grouping — and the caption, which lives ON the last media
+  // item, so the text arrives with the group instead of as a separate bubble.
   const copyResult = media.length > 1
     ? await bot.copyMessages({ fromChatId: review.chatId, messageIds: media, toChatId: review.publishChatId, ...thread })
     : await bot.copyMessage({
@@ -229,8 +230,10 @@ export async function decideReview(
         ...(review.caption && review.captionMessageId === null ? { caption: review.caption } : {}),
       });
 
-  // The text, after all media. An album cannot carry a caption per message without it
-  // appearing to belong to the first file, which is exactly the layout being replaced.
+  // Legacy only: rows written before the text became a caption ON the media item have a
+  // separate caption message, so it is still copied for them. A new review never has
+  // one, because its text travels inside the album.
+  let publishedCaptionId: number | null = null;
   if (copyResult.ok && review.captionMessageId !== null) {
     const captionCopy = await bot.copyMessage({
       fromChatId: review.chatId,
@@ -238,6 +241,7 @@ export async function decideReview(
       toChatId: review.publishChatId,
       ...thread,
     });
+    publishedCaptionId = extractMessageId(captionCopy.result);
     if (!captionCopy.ok) {
       // The media IS in the channel but the text is not. That is a partial publish and
       // must never be recorded as a clean success.
@@ -265,6 +269,7 @@ export async function decideReview(
     const marked = await store.markReviewPublished({
       reviewId: review.id,
       publishedMessageId: publishedId,
+      publishedCaptionMessageId: publishedCaptionId,
       nowMs,
       actor: input.actor ?? null,
     });
@@ -376,17 +381,40 @@ export async function reapStalePublishing(
   return { published, uncertain };
 }
 
-function extractMessageId(result: Record<string, unknown> | undefined): number | null {
+function readMessageId(value: unknown): number | null {
+  if (typeof value === 'number') return value;
+  if (value && typeof value === 'object' && typeof (value as { message_id?: unknown }).message_id === 'number') {
+    return (value as { message_id: number }).message_id;
+  }
+  return null;
+}
+
+/**
+ * The id Telegram created, whatever shape it answered with.
+ *
+ * `copyMessages` returns a bare ARRAY of MessageId objects, `copyMessage` returns one
+ * object, and an older/defensive shape nests them under `message_ids`. Only handling
+ * the last of those is how an album publish ended up recording nothing: the fake in the
+ * tests answered with `{message_id}` while Telegram answers with `[{message_id}]`, so
+ * the ledger silently lost the id on every album approval.
+ */
+function extractMessageId(result: unknown): number | null {
   if (!result) return null;
-  const direct = result.message_id;
-  if (typeof direct === 'number') return direct;
-  // copyMessages returns an array of MessageId objects.
-  const ids = result.message_ids;
-  if (Array.isArray(ids) && ids.length > 0) {
-    const first = ids[0];
-    if (typeof first === 'number') return first;
-    if (first && typeof first === 'object' && typeof (first as { message_id?: unknown }).message_id === 'number') {
-      return (first as { message_id: number }).message_id;
+  if (Array.isArray(result)) {
+    for (const item of result) {
+      const id = readMessageId(item);
+      if (id !== null) return id;
+    }
+    return null;
+  }
+  const record = result as Record<string, unknown>;
+  const direct = readMessageId(record.message_id);
+  if (direct !== null) return direct;
+  const nested = record.message_ids;
+  if (Array.isArray(nested)) {
+    for (const item of nested) {
+      const id = readMessageId(item);
+      if (id !== null) return id;
     }
   }
   return null;

@@ -369,3 +369,90 @@ describe('account-level admission', () => {
     expect(summary.held).toBe(1);
   });
 });
+
+/**
+ * The cutover needs a real pause, not "nothing happens to be due": a webhook must not
+ * move while a runner can start, and reconciliation must keep running meanwhile or the
+ * ledger freezes at exactly the moment it matters most.
+ */
+describe('dispatch pause', () => {
+  const NOW = Date.parse('2026-09-11T11:00:00Z');
+  const SCHEDULES_UNDER_TEST = [
+    {
+      id: 'bot1-daily',
+      botId: 'bot1',
+      times: ['23:00'],
+      timezone: 'Asia/Shanghai',
+      targets: [{ id: 'bot1-illust', workType: 'illustration' }],
+      credential: PIXIV_CREDENTIAL,
+      dispatchDeadlineHours: 6,
+      maxAttempts: 3,
+    },
+  ];
+
+  it('holds everything due and says so, instead of dispatching', async () => {
+    const store = new MemoryControlStore();
+    await store.insertOccurrenceIfAbsent(
+      {
+        slotId: 'bot1-daily@2026-09-11T1000',
+        scheduleId: 'bot1-daily',
+        botId: 'bot1',
+        occurrenceAt: NOW - 60_000,
+        dispatchDeadline: NOW + 3_600_000,
+      } as never,
+      NOW
+    );
+    const provider = new FakeProvider();
+
+    const summary = await reconcileAll(
+      {
+        store,
+        provider,
+        schedules: SCHEDULES_UNDER_TEST,
+        mode: 'shadow',
+        callbackUrl: 'https://cp.test/control',
+        pixivflowRef: 'master',
+        credentialKey: 'pixiv-main',
+        dispatchPaused: true,
+      } as never,
+      NOW
+    );
+
+    expect(summary.dispatched).toBe(0);
+    expect(summary.held).toBe(1);
+    expect(provider.dispatches).toHaveLength(0);
+    expect(store.events.some((event) => event.event === 'dispatch_paused')).toBe(true);
+    // Still pending: a pause postpones, it does not fail anything.
+    expect(store.slots.get('bot1-daily@2026-09-11T1000')!.status).toBe('pending');
+  });
+
+  it('dispatches once the pause is lifted', async () => {
+    const store = new MemoryControlStore();
+    await store.insertOccurrenceIfAbsent(
+      {
+        slotId: 'bot1-daily@2026-09-11T1000',
+        scheduleId: 'bot1-daily',
+        botId: 'bot1',
+        occurrenceAt: NOW - 60_000,
+        dispatchDeadline: NOW + 3_600_000,
+      } as never,
+      NOW
+    );
+
+    const summary = await reconcileAll(
+      {
+        store,
+        provider: new FakeProvider(),
+        schedules: SCHEDULES_UNDER_TEST,
+        mode: 'shadow',
+        callbackUrl: 'https://cp.test/control',
+        pixivflowRef: 'master',
+        credentialKey: 'pixiv-main',
+        dispatchPaused: false,
+      } as never,
+      NOW
+    );
+
+    expect(summary.dispatched).toBe(1);
+  });
+});

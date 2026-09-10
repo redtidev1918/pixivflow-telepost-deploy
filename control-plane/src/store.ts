@@ -420,6 +420,8 @@ export interface ReviewRecord {
   decidedAt: number | null;
   decidedBy: string | null;
   publishedMessageId: number | null;
+  /** The published text message, so `media -> text` is auditable from state. */
+  publishedCaptionMessageId: number | null;
   lastError: string | null;
 }
 
@@ -499,6 +501,7 @@ export interface ReviewStore {
   markReviewPublished(input: {
     reviewId: string;
     publishedMessageId: number | null;
+    publishedCaptionMessageId?: number | null;
     nowMs: number;
     actor?: string | null;
   }): Promise<boolean>;

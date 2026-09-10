@@ -177,6 +177,8 @@ export interface ReconcileDeps {
   provider: ExecutionProvider;
   schedules: readonly ScheduleDefinition[];
   mode: 'live' | 'shadow' | 'dry-run';
+  /** Cutover control: create/expire/reconcile, but open no new attempts. */
+  dispatchPaused?: boolean;
   /** Where a runner reports claim/result (the Worker's own public URL). */
   callbackUrl: string;
   /** PixivFlow ref the runners must execute (deployment configuration). */
@@ -270,6 +272,31 @@ export async function reconcileAll(
   // A held occurrence is NOT an error and NOT a retry: it simply stays pending and
   // a later sweep dispatches it. That is why this runs before any attempt is open.
   const held = admissionHolds(due, scheduleById, busyByCredential);
+
+  if (deps.dispatchPaused === true) {
+    // Deliberately NOT an error: a paused sweep is a normal operating state during a
+    // cutover, and it is reported so "why did nothing dispatch" is answerable.
+    if (due.length > 0) {
+      summary.held += due.length;
+      await store.logEvents(
+        due.map((slot) => ({
+          ts: nowMs,
+          event: 'dispatch_paused',
+          slotId: slot.id,
+          scheduleId: slot.scheduleId,
+          botId: slot.botId,
+          detail: 'dispatch is paused for cutover',
+        }))
+      );
+    }
+    await store.recordReconciliation({
+      id: deps.runId ?? newRunId(nowMs),
+      startedAt: nowMs,
+      finishedAt: nowMs,
+      summary,
+    });
+    return summary;
+  }
 
   if (provider.ready === false) {
     // Not configured yet: record the situation and leave the occurrences pending

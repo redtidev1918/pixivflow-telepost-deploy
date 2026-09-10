@@ -21,8 +21,15 @@ export interface TelegramResult {
   ok: boolean;
   /** Telegram's own error description, when it reports one. */
   description?: string;
-  /** The `result` object of a successful call (message ids, etc.). */
-  result?: Record<string, unknown>;
+  /**
+   * Telegram's `result`, whose shape depends on the method.
+   *
+   * `copyMessage` answers with one MessageId object, `copyMessages` answers with a bare
+   * ARRAY of them, and `getMe` answers with a User. Typing this as an object made the
+   * array case unrepresentable, which is exactly how an album approval silently
+   * recorded no published message id.
+   */
+  result?: unknown;
 }
 
 export interface BotApiClient {

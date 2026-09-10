@@ -376,6 +376,7 @@ export class MemoryControlStore implements ControlPlaneStore {
       existing.decidedAt = null;
       existing.decidedBy = null;
       existing.publishedMessageId = null;
+      existing.publishedCaptionMessageId = null;
       existing.lastError = null;
       return { record: { ...existing }, created: false };
     }
@@ -403,6 +404,7 @@ export class MemoryControlStore implements ControlPlaneStore {
       decidedAt: null,
       decidedBy: null,
       publishedMessageId: null,
+      publishedCaptionMessageId: null,
       lastError: input.error ?? null,
     };
     this.reviews.set(record.id, record);
@@ -484,6 +486,7 @@ export class MemoryControlStore implements ControlPlaneStore {
   async markReviewPublished(input: {
     reviewId: string;
     publishedMessageId: number | null;
+    publishedCaptionMessageId?: number | null;
     nowMs: number;
     actor?: string | null;
   }): Promise<boolean> {
@@ -492,6 +495,9 @@ export class MemoryControlStore implements ControlPlaneStore {
     if (!review || review.status !== 'publishing') return false;
     review.status = 'published';
     review.publishedMessageId = input.publishedMessageId;
+    if (input.publishedCaptionMessageId != null) {
+      review.publishedCaptionMessageId = input.publishedCaptionMessageId;
+    }
     review.decidedAt = input.nowMs;
     if (input.actor != null) review.decidedBy = input.actor;
     review.updatedAt = input.nowMs;

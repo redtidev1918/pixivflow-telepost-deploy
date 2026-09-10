@@ -425,7 +425,25 @@ describe('runner-side review endpoints', () => {
  * and the control card is review UI, not content, so it is never published.
  */
 describe('publishing keeps the media and the text apart', () => {
-  it('copies the album with copyMessages, then the caption as its own message', async () => {
+  it('copies ONLY the album when the text is a caption on the media (new shape)', async () => {
+    const store = new MemoryControlStore();
+    const bot = fakeBot();
+    await seedReview(store, {
+      id: 'rv_new_shape',
+      mediaMessageIds: [100, 101],
+      controlMessageId: 103,
+      caption: '正文',
+    });
+
+    await decideReview({ store, getBot: () => bot }, { reviewId: 'rv_new_shape', action: 'approve' }, NOW + 1);
+
+    const copies = bot.calls.filter((call) => call.method.startsWith('copy'));
+    // One call, and it carries the group: the caption rides along on the last item.
+    expect(copies.map((call) => call.method)).toEqual(['copyMessages']);
+    expect(copies[0]!.payload).toMatchObject({ messageIds: [100, 101] });
+  });
+
+  it('still copies a separate caption for a legacy row that has one', async () => {
     const store = new MemoryControlStore();
     const bot = fakeBot();
     await seedReview(store, {
@@ -527,5 +545,40 @@ describe('publishing keeps the media and the text apart', () => {
     expect(outcome.status).toBe('failed');
     expect((await store.getReview('rv_partial'))!.status).toBe('failed');
     expect(copy).toBe(1);
+  });
+});
+
+/**
+ * The published post is two messages, and the ledger has to record both or the layout
+ * cannot be audited from state.
+ *
+ * Telegram answers `copyMessages` with a bare ARRAY of MessageId objects while
+ * `copyMessage` answers with one object. The code only read the object shape and the
+ * fake in these tests answered with `{message_id}`, so every album approval recorded NO
+ * published id at all — found live, on the first real approval through the webhook.
+ */
+describe('the published structure is recorded', () => {
+  it('records both the media copy and the caption copy for an album', async () => {
+    const store = new MemoryControlStore();
+    const bot = fakeBot();
+    await seedReview(store, {
+      id: 'rv_pub_album',
+      mediaMessageIds: [100, 101],
+      captionMessageId: 102,
+      controlMessageId: 103,
+    });
+
+    const outcome = await decideReview(
+      { store, getBot: () => bot },
+      { reviewId: 'rv_pub_album', action: 'approve' },
+      NOW + 1
+    );
+
+    expect(outcome).toMatchObject({ status: 'published', published: true });
+    const review = (await store.getReview('rv_pub_album'))!;
+    // The fake mirrors Telegram: copyMessages -> [{message_id}], copyMessage -> {message_id}.
+    expect(review.publishedMessageId).toBe(1100);
+    expect(review.publishedCaptionMessageId).toBe(555);
+    expect(review.publishedCaptionMessageId).not.toBe(review.publishedMessageId);
   });
 });

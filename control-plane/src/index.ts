@@ -44,6 +44,15 @@ export interface Env {
   GITHUB_DISPATCH_TOKEN?: string;
   /** base64 of 32 bytes; encrypts stored credentials at rest. */
   CREDENTIAL_MASTER_KEY?: string;
+  /**
+   * `true` stops NEW dispatches while leaving reconciliation running.
+   *
+   * The cutover needs this: occurrences must keep being created and expired, provider
+   * state must keep being reconciled, but no new runner may start while a webhook is
+   * moving. A pause that also stopped reconciliation would leave the ledger frozen at
+   * exactly the moment it matters most.
+   */
+  DISPATCH_PAUSED?: string;
   /** Bearer the runner uses for the claim/result callbacks. */
   CALLBACK_SECRET?: string;
   /**
@@ -170,6 +179,7 @@ async function sweep(
       provider: buildProvider(env),
       schedules: SCHEDULES,
       mode: executionMode(env),
+      dispatchPaused: env.DISPATCH_PAUSED === 'true',
       callbackUrl: `${(env.CONTROL_PLANE_URL ?? '').replace(/\/+$/, '')}/control`,
       pixivflowRef: env.PIXIVFLOW_REF ?? 'master',
     },
