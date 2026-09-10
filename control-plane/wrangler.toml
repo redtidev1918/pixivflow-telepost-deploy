@@ -16,7 +16,10 @@ database_name = "pixivflow-control"
 database_id = "1fa00cbc-6dcc-4a89-ba8f-30cf79cc286b"
 
 [vars]
-# Shadow until cutover: dispatch is planned and recorded but never executed.
+# Live: dispatch runs a real GitHub job that publishes to Telegram. Shadow mode
+# (planned and recorded but never executed) is what the migration validated
+# first; flipping this back to "shadow" is the fastest way to stop publishing
+# without touching webhooks.
 EXECUTION_MODE = "live"
 RECONCILIATION_LOOKBACK_HOURS = "24"
 # This Worker's public base URL (a cron trigger has no request URL, so the runner

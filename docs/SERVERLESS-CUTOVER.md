@@ -1,7 +1,11 @@
 # 无服务器控制平面：迁移与上线手册
 
-> 状态：**未上线**。Fly 生产（`telesubmit-multi-bot`，TelePost 2.17.2 / PixivFlow，+ watchdog）保持原样运行。
-> 本文记录目标架构、上线前置条件、上线步骤、回滚，以及**两个已证实的硬约束**。
+> 状态：**已上线**。Cloudflare Worker + D1 自 2026-09-10 起承担本部署的生产控制平面，bot1/bot2
+> 的 webhook 均已归 Worker（`getWebhookInfo` 实测，`EXPECT_OWNER=worker` 闸门 exit 0）。Fly 生产
+> （`telesubmit-multi-bot`，TelePost 2.17.2 / PixivFlow，+ watchdog）**仍在运行且未改动**，作为回滚材料
+> 保留到 §8 停机。
+> 本文记录目标架构、上线前置条件、上线步骤、回滚，以及**两个已证实的硬约束**。文中"现在 / 迁移期"
+> 的叙述保留为历史；**当前事实以 §2 为准**。
 
 ## 1. 目标架构
 
@@ -37,12 +41,22 @@
 ## 2. 现状（已实测，非推断）
 
 ```
-Cloudflare Worker   pixivflow-control-plane.redtidev1918.workers.dev   EXECUTION_MODE=shadow
+Cloudflare Worker   pixivflow-control-plane.redtidev1918.workers.dev   EXECUTION_MODE=live
+                    时钟：cron */10（唯一时钟）· /api/status 的 clock.state=ok
 D1                  pixivflow-control                1fa00cbc-6dcc-4a89-ba8f-30cf79cc286b (APAC)
+                    migrations 0001–0010 已全部应用到远端 · open executions=0
 GitHub              redtidev1918/pixivflow-telepost-deploy · workflow pixivflow-batch.yml
-                    ref feat/serverless-control-plane · PIXIVFLOW_REF=feat/execute-slot
-Fly 生产            telesubmit-multi-bot · machine 683032ec6617e8 · 未改动
+                    ref main · PIXIVFLOW_REF=master
+调度                 bot1 10:00 / 18:00 · bot2 10:10 / 18:10  (Asia/Shanghai)
+凭据 alias           pixiv-main（D1 内可读，43 字符）
+webhook 归属         bot1 -> Worker · bot2 -> Worker（TelePost 已不持有）
+Fly 生产            telesubmit-multi-bot · machine 683032ec6617e8 · started · /ready 200
+                    volume vol_4y5e58mylle1nnjr 保留；**未改动，等待 §8 停机**
 ```
+
+> 生产周期状态：首个真实周期尚未跑完（判据见 §9）。在 §9 全部满足之前**不动 Fly**。
+> 真实 occurrence 不接受任何人工构造的"验收"：它必须由 cron 发放、由 GitHub job 执行、
+> 由人在审核群真实点击按钮。
 
 免费层：仅 Workers Free + D1 Free。未使用 R2 / Containers / Queues / Durable Objects。
 
@@ -55,8 +69,8 @@ Fly 生产            telesubmit-multi-bot · machine 683032ec6617e8 · 未改�
 | `CALLBACK_SECRET` | runner → 控制平面 的 bearer | 已生成并部署 |
 | `TELEGRAM_WEBHOOK_SECRET` | Telegram → Worker 的 fail-closed 校验 | 已生成并部署 |
 | `GITHUB_DISPATCH_TOKEN` | Worker 触发 workflow | 已配置（临时迁移用 PAT） |
-| `TELEGRAM_BOT1_TOKEN` / `TELEGRAM_BOT2_TOKEN` | runner 上传媒体、Worker 发布 | **待配置为 GitHub secret** |
-| **独立 Pixiv shadow 凭据** | shadow 实跑 | **缺失 —— 见 §4.2** |
+| `TELEGRAM_BOT1_TOKEN` / `TELEGRAM_BOT2_TOKEN` | runner 上传媒体、Worker 发布 | 已配置（GitHub secret + Worker secret 两处） |
+| 独立 Pixiv shadow 凭据 | shadow 实跑 | **已作废**：不引入独立凭据，直接用生产凭据（`credential_key=pixiv-main`）验证真实路径 |
 
 ### 3.2 配置
 
@@ -88,7 +102,11 @@ shadow 全部通过 -> 一次 cutover -> 正式 bot1/bot2 webhook -> Worker
 
 **审核语义不从零设计**：状态机、不变量、重复检测与恢复语义均提取自 TelePost 生产代码（`services/review_service.py`、`telepost/storage/sqlite/reviews.py`、`telepost/application/review_queue.py`、`telepost/domain/review.py`）。移植与有意偏离见 §4.1.1。
 
-**实测**（`getWebhookInfo`）：截至本文，bot1/bot2 的 webhook 仍归 TelePost（`telesubmit-multi-bot.fly.dev/webhook/botN`）。**在 cutover 之前不得对 bot1/bot2 调用 `setWebhook` 指向 Worker**，否则会静默切断现网审核流程。Worker 那条路由保持 fail-closed。
+**实测**（`getWebhookInfo`）：bot1/bot2 的 webhook **均已归 Worker**。上段"现在 / 迁移期"的叙述是
+迁移前的状态记录，已不适用于当前部署；`scripts/cutover-preflight.sh` 以 `EXPECT_OWNER=worker` 断言这一点。
+
+回滚路径未失效，且是同一个命令：把 webhook 指回 `https://telesubmit-multi-bot.fly.dev/webhook/<bot>`
+即可恢复 TelePost（见 §6）。Worker 那条路由始终 fail-closed。
 
 #### 4.1.1 从 TelePost 移植了什么，以及有意偏离的部分
 
@@ -174,20 +192,24 @@ runner 收到 rotated refresh token
 
 **结论**：shadow 实跑需要**一套独立的 Pixiv shadow 凭据**。这是唯一的人工 blocker。
 
-## 5. 上线步骤（凭据齐备后）
+## 5. 上线步骤（迁移计划与执行记录）
 
 **每一步之前先跑门禁**（只读，绝不改 webhook）：
 
 ```bash
-# 切换前：正式 bot 必须仍归 TelePost
+# 切换前（或回滚后确认已退回）：正式 bot 必须仍归 TelePost，模式必须是 shadow
 TELEGRAM_BOT1_TOKEN=... TELEGRAM_BOT2_TOKEN=... scripts/cutover-preflight.sh
 # 或直接从 Fly 机器读 token：scripts/cutover-preflight.sh --from-fly
 
-# 切换后（含回滚后复原确认）：正式 bot 必须归 Worker
+# 切换后（当前生产）：正式 bot 必须归 Worker，模式必须是 live
 EXPECT_OWNER=worker scripts/cutover-preflight.sh
 ```
 
-它检查：Worker 健康、`EXECUTION_MODE=shadow`、**时钟是否还在走**（`clock.state`）、**是否存在 `uncertain` 审核**（有则逐条列出 id，必须人工对着频道确认）、provider 是否配置、以及每个 bot 的 webhook 归属与积压。任一项不满足即非零退出。
+它检查：Worker `/api/status` 是否作答、**执行模式是否与阶段相符**（`EXPECT_OWNER=worker` 要求 `live`，
+否则要求 `shadow`；`EXPECT_MODE` 可覆盖）、**时钟是否还在走**（`clock.state`）、**是否存在 `uncertain`
+审核**（有则逐条列出 id，必须人工对着频道确认）、provider 是否配置、凭据 alias 是否可读、以及每个 bot
+的 webhook 归属与积压。任一项不满足即非零退出 —— 包括在**正确的**控制面上因为**过时的期望**而失败，
+所以模式那道闸门是按阶段推导的，不是硬编码的。
 
 1. 配 GitHub secrets：`TELEGRAM_BOT1_TOKEN`、`TELEGRAM_BOT2_TOKEN`、`CALLBACK_SECRET`、`CONTROL_PLANE_URL`
 2. Shadow 实跑一次完整 occurrence（`--mode shadow`，`EXECUTION_MODE=shadow`）：验证选题、去重、下载、上报、`processed_works` 落库，且**不发布任何内容**
@@ -222,7 +244,26 @@ EXPECT_OWNER=worker scripts/cutover-preflight.sh
 
 测试痕迹已全部清除（群内 2 条消息、私聊副本、D1 合成行），群恢复原状。
 
-**仍未验证：Telegram 是否真的把按键投递到 Worker 的 URL。** 一个 bot 只能有一个 webhook，bot1/bot2 现在归 TelePost，所以按键送到的是 TelePost 而不是 Worker。这一步只能靠：① 独立 shadow bot，或 ② 第 5 步 cutover 时正式翻转 webhook。**不会为了测试去动正式 webhook。**
+**已验证：Telegram 真的把按键投递到了 Worker。** 上段的"仍未验证"是 cutover **之前**的状态记录。切换 webhook 之后，对**正式 bot1 与 bot2** 各在各自审核群**真实点击**了一次按钮（不是构造的回调），两次都经由
+`https://pixivflow-control-plane.redtidev1918.workers.dev/telegram/webhook/<bot>` 进入 Worker：
+
+| 验证项 | 结果 |
+| --- | --- |
+| 真实按键 -> Worker | ✅ bot1、bot2 的审核群内真实点击，均落到 Worker 路由 |
+| approve -> 发布 | ✅ `published`，且恰好 **1 次 `copyMessages`** |
+| 审核卡处理 | ✅ 就地 `editMessageText` 更新为已发布链接，**未被复制进频道** |
+| 重放同一回调 | ✅ `decided:false`，`published_message_id` 未变，无第二个副本 |
+| 跨 bot 回调 | ✅ 403 |
+
+`review_callback_received` 审计事件记录每次按键的到达时间与结果，用来区分"用户没点"与"按键没送到"。
+该审计是**先于结论**加上的：早期有两次点击被记成 `reject`（用户以为按的是 approve），所以先证明
+"按键确实到了、值是什么"，再把 `approve` 当作已确认的事实，而不是反过来解释。
+
+**媒体布局（已实测，且与最初设计不同）**：`sendMediaGroup` 无法承载 group 级 `reply_markup`，
+而 caption 属于**媒体项本身**（`InputMediaDocument.caption`）。最终形状是
+`[文件1 + 文件2 + 文件3] → 正文（组内最后一项的 caption）→ 审核控制卡`，
+**不存在单独的正文文本气泡**。发布走 `copyMessages`，相册与正文一起过去，控制卡永不发布。
+（早期 README 曾断言 `sendMediaGroup` 不能携带 caption —— 那是错的，只有 group 级键盘不行。）
 
 **串行验收已通过（判据见下）**
 
@@ -237,7 +278,9 @@ EXPECT_OWNER=worker scripts/cutover-preflight.sh
 
 串行下 0 次 429，反证此前 30 分钟阻塞纯属同一账号并发限流。四条串行意味着任何时刻只有一个 execution 持有凭据。
 
-**仍需独立 Pixiv shadow 凭据**：真正的选题→下载→上传送审只能等有了独立凭据（或一份未过期的 access token）才能验证。
+**凭据取舍（已裁定）**：不引入独立 shadow 凭据，直接用生产 token 验证真实路径。因此"真正的选题 →
+下载 → 上传送审"由 §9 的**首个真实生产周期**覆盖，而不是由一次单独的 shadow 运行覆盖 —— 它必须由
+cron 发放、由 GitHub job 执行、由人在审核群真实点击，不接受人工构造的验收。
 3. 故障注入：job 超时、上报丢失、重复 dispatch、D1 写失败、runner 崩溃 —— 每次都要证明恰好一个 terminal 状态，且没有第二次执行
 
    **已在真实基础设施上验证**（无需凭据）：
@@ -252,7 +295,7 @@ EXPECT_OWNER=worker scripts/cutover-preflight.sh
 4. 按 §4.1 的裁定完成审核域接线
 5. 一个完整调度周期内双跑（Fly 生产 + 无服务器平面），比较两边的 slot 结果
 6. 切换：Cloudflare cron 接管发放，Fly watchdog 先降为 observer，再停用
-7. 观察一个完整周期后，才考虑删除 Fly 常驻
+7. 按 §8 停机并做隔离验证，通过后才考虑删除 Fly 常驻
 
 ## 6. 回滚
 
@@ -294,21 +337,25 @@ TELEGRAM_BOT1_TOKEN=... scripts/cutover-preflight.sh   # 确认已复原
         ↓
 停止 Fly machine（flyctl machine stop，可逆）
         ↓
-确认没有任何 webhook / scheduler / review 依赖 Fly
+隔离验证：停机后至少一次真实调度 occurrence 端到端跑通，
+          且确认没有任何 webhook / scheduler / review 依赖 Fly
         ↓
 保留旧 volume + SQLite 快照 + 配置作为回滚材料
         ↓
-再观察一个完整周期，确认不再需要回滚
-        ↓
 才删除 Fly machine
 ```
+
+> **删除的前置是"停机后确实跑通过"，不是"再等一个完整周期"。** 停机本身可逆，所以不必用时间
+> 换取信心；真正不可逆的是删除，因此删除前必须有一次**停机状态下**的真实运行作为证据 —— 如果
+> 控制平面还偷偷依赖 Fly，那次 occurrence 就会失败。任何在此基础上加回"必须再等一个完整周期"
+> 的说法都不是本文的要求。
 
 ```bash
 # 1. 停（可逆）
 flyctl machine stop 683032ec6617e8 -a telesubmit-multi-bot
 # 2. 确认真的没人依赖它：
 #    - bot1/bot2 的 getWebhookInfo 指向 Worker
-#    - 一个完整周期内 Fly 日志无新请求
+#    - 停机后 Fly 日志无新请求（观察窗口至少覆盖一次调度 occurrence）
 #    - 无 pending TelePost review
 # 3. 确认无回滚需求后，才删机器
 flyctl machine destroy 683032ec6617e8 -a telesubmit-multi-bot
