@@ -1,0 +1,154 @@
+{
+  "logLevel": "info",
+  "pixiv": {
+    "clientId": "${PIXIV_CLIENT_ID}",
+    "clientSecret": "${PIXIV_CLIENT_SECRET}",
+    "deviceToken": "${PIXIV_DEVICE_TOKEN}",
+    "refreshToken": "${PIXIV_REFRESH_TOKEN}",
+    "userAgent": "PixivAndroidApp/5.0.234 (Android 11; Pixel 6)"
+  },
+  "network": {
+    "timeoutMs": 30000,
+    "retries": 3,
+    "retryDelay": 2000
+  },
+  "storage": {
+    "databasePath": "./data/pixivflow.db",
+    "downloadDirectory": "./data/cache",
+    "illustrationDirectory": "./data/cache/illustrations",
+    "novelDirectory": "./data/cache/novels",
+    "cacheRetentionDays": 7,
+    "cacheMaxSizeMB": 384
+  },
+  "scheduler": {
+    "enabled": false,
+    "cron": "0 3 * * *",
+    "timezone": "Asia/Shanghai"
+  },
+  "schedules": [
+    {
+      "id": "bot1-daily",
+      "name": "Bot1 每日 10:00 & 18:00 ボテ腹 非AI插画 + 中文小说 (NSFW)",
+      "enabled": true,
+      "cron": "0 10,18 * * *",
+      "timezone": "Asia/Shanghai",
+      "targetIds": [
+        "bot1-illust-botefuku",
+        "bot1-novel-botefuku"
+      ],
+      "timeout": 1800000,
+      "maxConsecutiveFailures": 5,
+      "failureRetryDelay": 30000
+    },
+    {
+      "id": "bot2-daily",
+      "name": "Bot2 每日 10:10 & 18:10 丸呑み 非AI插画 + 中文小说 (NSFW)",
+      "enabled": true,
+      "cron": "10 10,18 * * *",
+      "timezone": "Asia/Shanghai",
+      "targetIds": [
+        "bot2-illust-marunomi",
+        "bot2-novel-marunomi"
+      ],
+      "timeout": 1800000,
+      "maxConsecutiveFailures": 5,
+      "failureRetryDelay": 30000
+    }
+  ],
+  "schedulerRuntime": {
+    "mode": "external",
+    "catchUpMissedRuns": false,
+    "watchConfig": false,
+    "reloadDebounceMs": 500,
+    "queueLimit": 2
+  },
+  "download": {
+    "concurrency": 1,
+    "requestDelay": 1000,
+    "dynamicConcurrency": false,
+    "minConcurrency": 1,
+    "maxRetries": 3,
+    "retryDelay": 3000,
+    "timeout": 90000
+  },
+  "delivery": {},
+  "targets": [
+    {
+      "id": "bot1-illust-botefuku",
+      "type": "illustration",
+      "mode": "topic",
+      "limit": 1,
+      "storageMode": "cache",
+      "topic": "ボテ腹",
+      "date": "YESTERDAY",
+      "topicDiscovery": {
+        "includeR18": true
+      },
+      "excludeAI": true,
+      "aiMetadataCheck": true,
+      "maxPageCount": 30,
+      "noMatchPolicy": {
+        "lookbackDays": 3,
+        "notify": true
+      }
+    },
+    {
+      "id": "bot1-novel-botefuku",
+      "type": "novel",
+      "mode": "topic",
+      "limit": 1,
+      "storageMode": "cache",
+      "topic": "ボテ腹",
+      "date": "YESTERDAY",
+      "topicDiscovery": {
+        "includeR18": true
+      },
+      "languageFilter": "chinese",
+      "languageCandidateLimit": 20,
+      "strictLanguageFilter": true,
+      "noMatchPolicy": {
+        "lookbackDays": 3,
+        "notify": true
+      }
+    },
+    {
+      "id": "bot2-illust-marunomi",
+      "type": "illustration",
+      "mode": "topic",
+      "limit": 1,
+      "storageMode": "cache",
+      "topic": "丸呑み",
+      "date": "YESTERDAY",
+      "topicDiscovery": {
+        "includeR18": true
+      },
+      "excludeAI": true,
+      "aiMetadataCheck": true,
+      "maxPageCount": 30,
+      "noMatchPolicy": {
+        "lookbackDays": 3,
+        "notify": true
+      }
+    },
+    {
+      "id": "bot2-novel-marunomi",
+      "type": "novel",
+      "mode": "topic",
+      "limit": 1,
+      "storageMode": "cache",
+      "topic": "丸呑み",
+      "date": "YESTERDAY",
+      "topicDiscovery": {
+        "includeR18": true
+      },
+      "languageFilter": "chinese",
+      "languageCandidateLimit": 20,
+      "strictLanguageFilter": true,
+      "noMatchPolicy": {
+        "lookbackDays": 3,
+        "notify": true
+      }
+    }
+  ],
+  "initialDelay": 0
+}
