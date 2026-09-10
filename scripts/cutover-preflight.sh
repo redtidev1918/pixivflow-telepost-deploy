@@ -9,6 +9,11 @@
 #   scripts/cutover-preflight.sh                     # expect TelePost to own the webhooks
 #   EXPECT_OWNER=worker scripts/cutover-preflight.sh  # after the cutover (or after a rollback)
 #
+# The phase decides which execution mode is correct, so the mode gate follows
+# EXPECT_OWNER: TelePost owning the webhooks means runners must not publish
+# (shadow), and the Worker owning them means they must (live). Override with
+# EXPECT_MODE when checking a deliberate intermediate state.
+#
 # Tokens and secrets come from the environment, never from disk:
 #   TELEGRAM_BOT1_TOKEN / TELEGRAM_BOT2_TOKEN   (or --from-fly to read them off Fly)
 #   CONTROL_PLANE_TOKEN                          (the control plane's bearer)
@@ -20,6 +25,11 @@ set -uo pipefail
 
 WORKER=${WORKER:-https://pixivflow-control-plane.redtidev1918.workers.dev}
 EXPECT_OWNER=${EXPECT_OWNER:-telepost}
+if [ "$EXPECT_OWNER" = "worker" ]; then
+  EXPECT_MODE=${EXPECT_MODE:-live}
+else
+  EXPECT_MODE=${EXPECT_MODE:-shadow}
+fi
 TELEPOST_WEBHOOK_BASE=${TELEPOST_WEBHOOK_BASE:-https://telesubmit-multi-bot.fly.dev/webhook}
 FLY_APP=${FLY_APP:-telesubmit-multi-bot}
 CREDENTIAL_ALIAS=${CREDENTIAL_ALIAS:-pixiv-main}
@@ -51,7 +61,11 @@ if [ -z "$status" ] || [ "$(printf '%s' "$status" | jq -r '.now // empty' 2>/dev
 fi
 
 mode=$(printf '%s' "$status" | jq -r '.executionMode // "?"' 2>/dev/null)
-if [ "$mode" = "shadow" ]; then ok mode "shadow: runners publish nothing"; else bad mode "expected shadow before cutover, got '$mode'"; fi
+if [ "$mode" = "$EXPECT_MODE" ]; then
+  ok mode "$mode (EXPECT_OWNER=$EXPECT_OWNER)"
+else
+  bad mode "expected '$EXPECT_MODE' for EXPECT_OWNER=$EXPECT_OWNER, got '$mode'"
+fi
 
 clock=$(printf '%s' "$status" | jq -r '.clock.state // "unknown"' 2>/dev/null)
 age=$(printf '%s' "$status" | jq -r '.clock.ageMinutes // "?"' 2>/dev/null)
