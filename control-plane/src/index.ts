@@ -51,13 +51,31 @@ export interface Env {
   CONTROL_PLANE_URL?: string;
   /** Telegram webhook verification (per-webhook secret_token). */
   TELEGRAM_WEBHOOK_SECRET?: string;
-  /** Each bot has its own token: a bot1 callback can never act with bot2's token. */
+  /**
+   * Each bot has its own token: a bot1 callback can never act with bot2's token.
+   * Any `TELEGRAM_<ID>_TOKEN` is picked up, so adding a bot (the shadow/test bot
+   * the migration needs) is a secret, not a code change.
+   */
   TELEGRAM_BOT1_TOKEN?: string;
   TELEGRAM_BOT2_TOKEN?: string;
+  [key: string]: unknown;
 }
 
-function botTokens(env: Env): Record<string, string | undefined> {
-  return { bot1: env.TELEGRAM_BOT1_TOKEN, bot2: env.TELEGRAM_BOT2_TOKEN };
+/**
+ * Discovers bots from the environment instead of listing them here.
+ *
+ * `TELEGRAM_BOT1_TOKEN` yields the bot id `bot1`, so the shadow bot needs one
+ * secret and no deploy. A hardcoded list makes every new bot a code change,
+ * which is the coupling this rewrite exists to remove.
+ */
+export function botTokens(env: Env): Record<string, string | undefined> {
+  const tokens: Record<string, string | undefined> = {};
+  for (const [key, value] of Object.entries(env)) {
+    const match = /^TELEGRAM_(.+)_TOKEN$/.exec(key);
+    if (!match) continue;
+    if (typeof value === 'string' && value.length > 0) tokens[match[1]!.toLowerCase()] = value;
+  }
+  return tokens;
 }
 
 function lookbackHours(env: Env): number {
@@ -254,7 +272,7 @@ export default {
         recentReconciliations: recentSweeps,
         executionMode: executionMode(env),
         providerConfigured: Boolean(env.GITHUB_REPO && env.GITHUB_DISPATCH_TOKEN),
-        telegramConfigured: Boolean(env.TELEGRAM_WEBHOOK_SECRET && (env.TELEGRAM_BOT1_TOKEN || env.TELEGRAM_BOT2_TOKEN)),
+        telegramConfigured: Boolean(env.TELEGRAM_WEBHOOK_SECRET && Object.keys(botTokens(env)).length > 0),
         lookbackHours: lookbackHours(env),
         nextOccurrence: nextOccurrence(SCHEDULES, now),
         schedules: SCHEDULES.map((schedule) => ({

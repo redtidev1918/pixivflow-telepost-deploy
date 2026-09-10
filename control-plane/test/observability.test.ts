@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
-import { clockHealth } from '../src/index';
+import { botTokens, clockHealth } from '../src/index';
 import {
   SWEEP_INTERVAL_MINUTES,
   SWEEP_LATE_MINUTES,
@@ -74,5 +74,35 @@ describe('the declared sweep interval matches the deployed cron', () => {
     const step = cron.match(/^\*\/(\d+) \* \* \* \*$/);
     expect(step, `expected a */N * * * * cron, got "${cron}"`).not.toBeNull();
     expect(Number(step?.[1])).toBe(SWEEP_INTERVAL_MINUTES);
+  });
+});
+
+/**
+ * The migration's shadow phase needs a bot the Worker owns exclusively, while
+ * bot1/bot2 keep pointing at TelePost. That must cost one secret, not a code
+ * change plus a deploy — otherwise the manual step is not "create a bot".
+ */
+describe('bot discovery', () => {
+  it('derives bot ids from the environment', () => {
+    expect(
+      botTokens({ TELEGRAM_BOT1_TOKEN: 'a', TELEGRAM_BOT2_TOKEN: 'b' } as never)
+    ).toEqual({ bot1: 'a', bot2: 'b' });
+  });
+
+  it('picks up a shadow bot with no code change', () => {
+    expect(
+      botTokens({ TELEGRAM_BOT1_TOKEN: 'a', TELEGRAM_SHADOWBOT_TOKEN: 'c' } as never)
+    ).toEqual({ bot1: 'a', shadowbot: 'c' });
+  });
+
+  it('ignores empty tokens and unrelated variables', () => {
+    expect(
+      botTokens({
+        TELEGRAM_BOT1_TOKEN: '',
+        TELEGRAM_WEBHOOK_SECRET: 'secret',
+        TELEGRAM_TOKEN: undefined,
+        PATH: '/usr/bin',
+      } as never)
+    ).toEqual({});
   });
 });
