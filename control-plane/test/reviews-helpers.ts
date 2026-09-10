@@ -18,6 +18,7 @@ export function fakeBot(botId = 'bot1'): FakeBot {
     botId,
     calls,
     script: undefined as ((method: string) => TelegramResult | undefined) | undefined,
+    getMe: async () => record('getMe', {}),
     answerCallbackQuery: async (id: string, text?: string) => record('answerCallbackQuery', { id, text }),
     copyMessage: async (input: Parameters<BotApiClient['copyMessage']>[0]) => record('copyMessage', input),
     copyMessages: async (input: Parameters<BotApiClient['copyMessages']>[0]) => record('copyMessages', input),

@@ -27,6 +27,12 @@ export interface TelegramResult {
 
 export interface BotApiClient {
   readonly botId: string;
+  /**
+   * Who this token belongs to. The cutover gate needs to prove the Worker holds a
+   * USABLE token for each bot before the webhook moves, and "a secret is set" is not
+   * the same as "Telegram accepts it".
+   */
+  getMe(): Promise<TelegramResult>;
   /** Human-visible acknowledgement of a button press. */
   answerCallbackQuery(callbackQueryId: string, text?: string): Promise<TelegramResult>;
   /** Server-side copy of ONE review message into the channel. */
@@ -96,6 +102,11 @@ export class TelegramBotApi implements BotApiClient {
         ? { result: envelope.result as Record<string, unknown> }
         : {}),
     };
+  }
+
+  /** Proves the token works, and names the bot it belongs to. */
+  getMe(): Promise<TelegramResult> {
+    return this.call('getMe', {});
   }
 
   answerCallbackQuery(callbackQueryId: string, text?: string): Promise<TelegramResult> {

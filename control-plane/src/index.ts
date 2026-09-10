@@ -278,6 +278,29 @@ export default {
       return json({ ok: true, result, now: nowMs, slot: row });
     }
 
+    // Cutover gate: "a secret is configured" is not "Telegram accepts it". Each bot is
+    // asked who it is, and only the answer is reported — never the token.
+    if (url.pathname === '/api/bots') {
+      if (!env.CALLBACK_SECRET) return json({ error: 'no callback secret configured' }, 503);
+      if (request.headers.get('authorization') !== `Bearer ${env.CALLBACK_SECRET}`) {
+        return json({ error: 'unauthorized' }, 401);
+      }
+      const registry = new BotRegistry(botTokens(env));
+      const botIds = Object.keys(botTokens(env));
+      const bots = await Promise.all(
+        botIds.map(async (botId) => {
+          const bot = registry.get(botId);
+          if (!bot) return { botId, ok: false, description: 'no token configured' };
+          const result = await bot.getMe();
+          const me = (result.result ?? {}) as { username?: string; id?: number };
+          return result.ok
+            ? { botId, ok: true, username: me.username ?? null, id: me.id ?? null }
+            : { botId, ok: false, description: result.description ?? 'getMe failed' };
+        })
+      );
+      return json({ ok: bots.every((bot) => bot.ok), count: bots.length, bots });
+    }
+
     if (url.pathname === '/api/status') {
       const now = Date.now();
       const [counts, recent] = await Promise.all([

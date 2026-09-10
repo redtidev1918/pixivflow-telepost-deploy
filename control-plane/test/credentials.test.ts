@@ -165,7 +165,7 @@ describe('the collection and removal', () => {
     await store.putRunnerCredential({ name: 'pixiv-alt', value: 'c'.repeat(43), nowMs: 1 });
 
     const removed = await request(store, 'DELETE', '/control/credentials/pixiv-alt');
-    expect((await removed!.json()).removed).toBe(true);
+    expect(((await removed!.json()) as { removed: boolean }).removed).toBe(true);
     expect(store.events.some((e) => e.event === 'runner_credential_removed')).toBe(true);
 
     expect((await request(store, 'DELETE', '/control/credentials/pixiv-alt'))!.status).toBe(404);
