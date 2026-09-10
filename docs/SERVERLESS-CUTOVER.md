@@ -69,27 +69,37 @@ Fly 生产            telesubmit-multi-bot · machine 683032ec6617e8 · 未改�
 
 ## 4. 两个硬约束
 
-### 4.1 一个 bot 只能有一个 webhook —— 审核域归属尚未裁定
+### 4.1 审核域归属：已裁定
 
-**实测**（`getWebhookInfo`）：
+**终态 = 控制平面接管本部署的 Telegram 审核域**；**迁移期 = 正式 bot 不动，shadow 用独立 bot**。
 
 ```
-bot1 -> https://telesubmit-multi-bot.fly.dev/webhook/bot1   (allowed_updates 含 callback_query)
-bot2 -> https://telesubmit-multi-bot.fly.dev/webhook/bot2   (allowed_updates 含 callback_query)
+现在     正式 bot1/bot2 webhook -> TelePost/Fly
+         shadow 测试 bot        -> Cloudflare Worker -> D1 -> 测试审核群
+shadow 全部通过 -> 一次 cutover -> 正式 bot1/bot2 webhook -> Worker
+                -> 观察完整周期 -> 关闭 Fly
 ```
 
-TelePost 现在**独占**这两个 bot 的 webhook，并且已经实现了完整的审核域：媒体暂存、行内键盘、批准 → 发布到频道、驳回、过期、崩溃恢复（`publishing` 僵尸回收）、重复检测、幂等键（`handlers/review.py`）。
+- TelePost **项目本身保留**，继续作为独立产品演进；退役的只是"这套 PixivFlow 自动投稿部署不再需要常驻 TelePost daemon"。
+- 不选"TelePost 保留审核域"作为终态：那会让生产继续依赖常驻服务，Fly 永远关不掉。
+- Shadow bot 只用于迁移验证，**不进入最终架构**。生产代码里不存在"双 Telegram 后端"：bot 从环境变量发现（任意 `TELEGRAM_<ID>_TOKEN`），加一个 bot 是加一个 secret，不是改代码。
 
-Telegram 不支持一个 bot 挂两个 webhook。因此：
+**审核语义不从零设计**：状态机、不变量、重复检测与恢复语义均提取自 TelePost 生产代码（`services/review_service.py`、`telepost/storage/sqlite/reviews.py`、`telepost/application/review_queue.py`、`telepost/domain/review.py`）。移植与有意偏离见 §4.1.1。
 
-- **在裁定之前，绝不可对 bot1/bot2 调用 `setWebhook` 指向 Worker** —— 那会在无人察觉的情况下切断 Fly 上正在使用的审核流程。
-- 控制平面的 `/telegram/webhook/<botId>` 保持 fail-closed 且不接收任何更新；这条路由存在但不生效。
+**实测**（`getWebhookInfo`）：截至本文，bot1/bot2 的 webhook 仍归 TelePost（`telesubmit-multi-bot.fly.dev/webhook/botN`）。**在 cutover 之前不得对 bot1/bot2 调用 `setWebhook` 指向 Worker**，否则会静默切断现网审核流程。Worker 那条路由保持 fail-closed。
 
-三个可选方向（需要拍板）：
+#### 4.1.1 从 TelePost 移植了什么，以及有意偏离的部分
 
-1. **TelePost 保留审核域**（与目标架构表述一致）。控制平面不再处理 Telegram 回调与发布，只通过 TelePost 的回调/查询获知 `submitted / decided / published`。需要 TelePost 增加「按引用提交」（传 message ids 而非文件）与「决策通知控制平面」两个端点。
-2. **控制平面接管审核域**，cutover 时把 webhook 切到 Worker，TelePost 的审核流程退役。影响面大，且会退役一套已被生产验证的实现。
-3. 保留 TelePost 的批准/发布，仅去掉媒体中转：runner 直传审核群，再把引用交给 TelePost。
+移植：状态机 `pending -> publishing -> published`（另有可重认领的 `failed`、终态 `rejected/expired/uncertain`）；**单条条件 UPDATE** 式的认领（`status IN ('pending','failed') OR (status='publishing' AND now-updated_at > stale)`）——这条 WHERE 就是双击 / Telegram 重放 / 重试 webhook 的全部 at-most-once 机制；终态写入带 `AND status='publishing'` 守卫，迟到写入者不能覆盖已被他人解决的记录；**先记录 message id，再做终态转换**的顺序不变量。
+
+有意偏离（各一条，均有理由）：
+
+| 偏离 | TelePost | 本实现 | 理由 |
+| --- | --- | --- | --- |
+| 僵尸认领 | 300s 后重认领并**重跑发布** | 有 message id（证明已发出）→ 自动判定 `published`；无证据 → `uncertain` | TelePost 自己的审计承认：发送成功但 ledger 未写入时，重认领会**二次发布**。有证据才自动恢复，其余交人。 |
+| 回调来源 | 仅靠 per-bot webhook 路径 + 每 bot 独立 DB | 额外校验 `chat_id` 必须等于该 review 的 chat | 现在共用一个 D1，per-bot DB 的隐含隔离不复存在。实测越权回调返回 403。 |
+| 作品级去重 | published 的 7 天窗口 | 一个作品**永远只有一个** review | 同一作品存在两个可审核稿，正是"同一媒体被批准两次"的成因；runner 侧已有永久去重历史，窗口只会多给一次重复发布的机会。 |
+| 审核过期 | 默认**关闭**（`PENDING_REVIEW_RETENTION_DAYS=0`） | 30 天 | 过期是可见状态（`expired` + 事件），不会静默消失。若希望与现网完全一致，把 TTL 调大即可。 |
 
 ### 4.2 生产 Pixiv refresh token 不可并行复用
 
