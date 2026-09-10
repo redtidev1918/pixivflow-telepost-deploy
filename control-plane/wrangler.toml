@@ -17,14 +17,14 @@ database_id = "1fa00cbc-6dcc-4a89-ba8f-30cf79cc286b"
 
 [vars]
 # Shadow until cutover: dispatch is planned and recorded but never executed.
-EXECUTION_MODE = "shadow"
+EXECUTION_MODE = "live"
 RECONCILIATION_LOOKBACK_HOURS = "24"
 # This Worker's public base URL (a cron trigger has no request URL, so the runner
 # would otherwise have nowhere to report back).
 CONTROL_PLANE_URL = "https://pixivflow-control-plane.redtidev1918.workers.dev"
 GITHUB_REPO = "redtidev1918/pixivflow-telepost-deploy"
 GITHUB_WORKFLOW = "pixivflow-batch.yml"
-GITHUB_REF = "feat/serverless-control-plane"
+GITHUB_REF = "main"
 # Which PixivFlow ref runners execute. Pin a released tag once PixivFlow ships
 # the batch command; until then the feature branch under test.
 PIXIVFLOW_REF = "master"
