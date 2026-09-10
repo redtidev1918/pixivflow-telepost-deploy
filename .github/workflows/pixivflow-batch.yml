@@ -308,7 +308,11 @@ jobs:
               except Exception as error:  # noqa: BLE001 - report, never fail the job
                   print(f"{name}: unreadable ({error})")
                   continue
-              changed = bool(found) and found != provided
+              # A placeholder is NOT a token: the versioned config keeps
+              # ${PIXIV_REFRESH_TOKEN} until a run resolves it, and comparing that
+              # string to the real value reported a rotation that never happened.
+              placeholder = found.startswith('${') and found.endswith('}')
+              changed = bool(found) and not placeholder and found != provided
               print(f"{name}: sha256[:12]={digest(found)} rotated={changed}")
               if changed:
                   rotated = found
