@@ -282,6 +282,8 @@ export class FakeProvider implements ExecutionProvider {
   recent: ProviderRun[] = [];
   acceptDispatch = true;
   dispatchError: string | undefined;
+  /** Simulate a provider whose dispatch throws (network failure, runtime bug). */
+  throwOnDispatch: string | undefined;
   cancelCalls: string[] = [];
   /**
    * Clock used to stamp provider runs. Tests set this to their fixed "now" so
@@ -293,6 +295,7 @@ export class FakeProvider implements ExecutionProvider {
 
   async dispatch(request: DispatchRequest): Promise<DispatchResult> {
     this.dispatched.push({ slotId: request.slotId, attempt: request.attempt });
+    if (this.throwOnDispatch) throw new Error(this.throwOnDispatch);
     if (!this.acceptDispatch) {
       return { accepted: false, ...(this.dispatchError ? { detail: this.dispatchError } : {}) };
     }

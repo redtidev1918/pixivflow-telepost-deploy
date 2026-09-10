@@ -250,8 +250,11 @@ export async function reconcileAll(
       );
       if (result.dispatched) {
         summary.dispatched += 1;
-      } else {
-        summary.retried += 1;
+        // A new attempt for an occurrence that already had one IS a retry; a
+        // provider rejection is an error, not a retry (it must stay visible).
+        if (slot.attemptCount > 0) summary.retried += 1;
+      } else if (result.detail) {
+        summary.errors.push(`dispatch ${slot.id}: ${result.detail}`);
       }
     } catch (error) {
       summary.errors.push(

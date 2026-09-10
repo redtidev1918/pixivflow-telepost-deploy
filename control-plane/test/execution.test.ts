@@ -89,6 +89,31 @@ describe('dispatch is at-most-once per attempt', () => {
     expect(store.createdExecutionCount).toBe(1);
   });
 
+  it('records a THROWN dispatch as a failed attempt instead of leaving it dispatching', async () => {
+    // A provider that throws (network failure, runtime bug such as a detached
+    // fetch) must not silently consume one of the occurrence's attempts while the
+    // execution sits in `dispatching` until the unclaimed-run grace expires.
+    const store = new MemoryControlStore();
+    const provider = new FakeProvider();
+    provider.throwOnDispatch = 'Illegal invocation: function called with incorrect `this` reference';
+    const slot = await seedDueSlot(store, NOW);
+
+    const result = await startAttempt(
+      store,
+      provider,
+      { slot, scheduleId: schedule.id, botId: schedule.botId, attempt: 1, targets: [], callbackUrl: CALLBACK, mode: 'shadow' },
+      NOW
+    );
+
+    expect(result.dispatched).toBe(false);
+    const execution = (await store.getExecution(result.executionId))!;
+    expect(execution.status).toBe('failed');
+    expect(execution.errorClass).toBe('provider_error');
+    expect(execution.error).toContain('dispatch threw');
+    expect((await store.getOccurrence(slot.id))!.status).toBe('pending');
+    expect(store.eventsNamed('dispatch_failed')).toHaveLength(1);
+  });
+
   it('returns the slot to pending when the provider refuses the dispatch', async () => {
     const store = new MemoryControlStore();
     const provider = new FakeProvider();

@@ -39,6 +39,15 @@ interface GitHubRunPayload {
 
 const DEFAULT_API_BASE = 'https://api.github.com';
 
+/**
+ * Wrapper rather than a bare reference: `fetch` must be called with the global
+ * object as its receiver. Storing it as a property and calling `this.fetch(...)`
+ * is rejected at runtime by Cloudflare Workers ("Illegal invocation: function
+ * called with incorrect `this` reference") — a bug that only shows up against the
+ * real runtime, which is why the dispatch path is exercised in shadow.
+ */
+const defaultFetch: typeof fetch = (input, init) => globalThis.fetch(input, init);
+
 function stateFromStatus(status: string | undefined): ProviderRunState {
   switch (status) {
     case 'queued':
@@ -88,8 +97,8 @@ export class GitHubActionsExecutionProvider implements ExecutionProvider {
 
   constructor(
     private readonly config: GitHubProviderConfig,
-    /** Injectable for tests; defaults to global fetch. */
-    private readonly fetchImpl: typeof fetch = fetch
+    /** Injectable for tests; defaults to a this-safe wrapper around global fetch. */
+    private readonly fetchImpl: typeof fetch = defaultFetch
   ) {}
 
   private headers(): Record<string, string> {

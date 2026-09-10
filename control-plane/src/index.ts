@@ -10,7 +10,7 @@
 
 import { D1ControlStore, type D1Like } from './d1-store';
 import { GitHubActionsExecutionProvider } from './github-provider';
-import { nextOccurrence } from './occurrences';
+import { instantToLocal, nextOccurrence, occurrenceFor } from './occurrences';
 import type { DispatchRequest, DispatchResult, ExecutionProvider, ProviderRun } from './provider';
 import { reconcileAll } from './reconciliation';
 import { RECONCILIATION_LOOKBACK_HOURS, SCHEDULES, validateSchedules } from './schedules';
@@ -141,6 +141,45 @@ export default {
         nowMs
       );
       return json({ ok: true, now: nowMs, summary });
+    }
+
+    // Ops: create (idempotently) the slot for a canonical occurrence. Shadow
+    // validation and the fault-injection suite need to act on a KNOWN slot
+    // instead of waiting for the clock to produce one.
+    if (url.pathname === '/api/slots') {
+      if (request.method !== 'POST') return json({ error: 'method not allowed' }, 405);
+      if (!env.CALLBACK_SECRET) return json({ error: 'no callback secret configured' }, 503);
+      if (request.headers.get('authorization') !== `Bearer ${env.CALLBACK_SECRET}`) {
+        return json({ error: 'unauthorized' }, 401);
+      }
+      let body: { schedule_id?: string; occurrence_at?: number; local_date?: string; local_time?: string };
+      try {
+        body = (await request.json()) as typeof body;
+      } catch {
+        return json({ error: 'invalid json body' }, 400);
+      }
+      const schedule = SCHEDULES.find((candidate) => candidate.id === body.schedule_id);
+      if (!schedule) return json({ error: 'unknown schedule_id' }, 400);
+
+      // The caller may give the canonical instant directly, or a wall clock that
+      // is converted through the schedule's own timezone (never the Worker's).
+      let occurrence;
+      if (typeof body.occurrence_at === 'number' && Number.isFinite(body.occurrence_at)) {
+        const local = instantToLocal(body.occurrence_at, schedule.timezone);
+        occurrence = occurrenceFor(schedule, local.date, local.time);
+      } else if (body.local_date && body.local_time) {
+        occurrence = occurrenceFor(schedule, body.local_date, body.local_time);
+      } else {
+        return json({ error: 'provide occurrence_at or local_date+local_time' }, 400);
+      }
+
+      const nowMs = Date.now();
+      const result =
+        occurrence.occurrenceAt > nowMs
+          ? 'future'
+          : await store.insertOccurrenceIfAbsent(occurrence, nowMs);
+      const row = await store.getOccurrence(occurrence.slotId);
+      return json({ ok: true, result, now: nowMs, slot: row });
     }
 
     if (url.pathname === '/api/status') {

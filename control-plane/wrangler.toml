@@ -24,7 +24,7 @@ RECONCILIATION_LOOKBACK_HOURS = "24"
 CONTROL_PLANE_URL = "https://pixivflow-control-plane.redtidev1918.workers.dev"
 GITHUB_REPO = "redtidev1918/pixivflow-telepost-deploy"
 GITHUB_WORKFLOW = "pixivflow-batch.yml"
-GITHUB_REF = "main"
+GITHUB_REF = "feat/serverless-control-plane"
 
 # Secrets (set with `wrangler secret put`, never committed):
 #   GITHUB_DISPATCH_TOKEN  TEMPORARY MIGRATION AUTH (replace with a GitHub App)

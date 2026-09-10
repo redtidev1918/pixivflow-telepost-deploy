@@ -97,29 +97,41 @@ export async function startAttempt(
     },
   ]);
 
-  const result = await provider.dispatch({
-    slotId: input.slot.id,
-    scheduleId: input.scheduleId,
-    botId: input.botId,
-    occurrenceAt: input.slot.occurrenceAt,
-    attempt: input.attempt,
-    targets: input.targets,
-    callbackUrl: input.callbackUrl,
-    mode: input.mode,
-  });
+  let dispatchResult;
+  try {
+    dispatchResult = await provider.dispatch({
+      slotId: input.slot.id,
+      scheduleId: input.scheduleId,
+      botId: input.botId,
+      occurrenceAt: input.slot.occurrenceAt,
+      attempt: input.attempt,
+      targets: input.targets,
+      callbackUrl: input.callbackUrl,
+      mode: input.mode,
+    });
+  } catch (error) {
+    // A thrown dispatch (network failure, provider bug, bad credentials) must be
+    // recorded as a failed attempt right away: leaving it in `dispatching` would
+    // silently consume one of the occurrence's attempts until the unclaimed-run
+    // grace expires.
+    dispatchResult = {
+      accepted: false,
+      detail: `dispatch threw: ${error instanceof Error ? error.message : String(error)}`,
+    };
+  }
 
-  if (!result.accepted) {
+  if (!dispatchResult.accepted) {
     // A refused dispatch did not start a runner, so the attempt is over and the
     // slot returns to the dispatchable state while attempts remain.
     await store.markExecutionTerminal({
       executionId,
       status: 'failed',
       nowMs,
-      error: result.detail ?? 'dispatch rejected',
+      error: dispatchResult.detail ?? 'dispatch rejected',
       errorClass: 'provider_error',
     });
     await store.setSlotStatus(input.slot.id, 'pending', nowMs, {
-      error: result.detail ?? 'dispatch rejected',
+      error: dispatchResult.detail ?? 'dispatch rejected',
       currentExecutionId: null,
     });
     await store.logEvents([
@@ -131,10 +143,10 @@ export async function startAttempt(
         executionId,
         attempt: input.attempt,
         botId: input.botId,
-        detail: result.detail ?? 'dispatch rejected',
+        detail: dispatchResult.detail ?? 'dispatch rejected',
       },
     ]);
-    return { executionId, dispatched: false, detail: result.detail };
+    return { executionId, dispatched: false, detail: dispatchResult.detail };
   }
 
   await store.logEvents([
