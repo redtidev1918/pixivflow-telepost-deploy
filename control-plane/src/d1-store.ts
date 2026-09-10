@@ -13,6 +13,7 @@ import type {
   ExecutionStatus,
   ItemStatus,
   OccurrenceRow,
+  ReconciliationRunRow,
   ReconciliationSummary,
   ReviewRecord,
   ReviewStatus,
@@ -279,6 +280,52 @@ export class D1ControlStore implements ControlPlaneStore {
         summary.errors.length > 0 ? JSON.stringify(summary.errors) : null
       )
       .run();
+  }
+
+  async listRecentReconciliations(limit: number): Promise<ReconciliationRunRow[]> {
+    const { results } = await this.db
+      .prepare(
+        `SELECT id, started_at, finished_at, created_slots, dispatched, reconciled,
+                retried, expired, errors
+           FROM reconciliation_runs
+          ORDER BY started_at DESC
+          LIMIT ?`
+      )
+      .bind(limit)
+      .all<{
+        id: string;
+        started_at: number;
+        finished_at: number;
+        created_slots: number;
+        dispatched: number;
+        reconciled: number;
+        retried: number;
+        expired: number;
+        errors: string | null;
+      }>();
+
+    return (results ?? []).map((row) => ({
+      id: row.id,
+      startedAt: row.started_at,
+      finishedAt: row.finished_at,
+      summary: {
+        created: row.created_slots,
+        dispatched: row.dispatched,
+        reconciled: row.reconciled,
+        retried: row.retried,
+        expired: row.expired,
+        errors: row.errors ? (JSON.parse(row.errors) as string[]) : [],
+      },
+    }));
+  }
+
+  async countReviewsByStatus(): Promise<Record<string, number>> {
+    const { results } = await this.db
+      .prepare(`SELECT status, COUNT(*) AS n FROM reviews GROUP BY status`)
+      .all<{ status: string; n: number }>();
+    const counts: Record<string, number> = {};
+    for (const row of results ?? []) counts[row.status] = row.n;
+    return counts;
   }
 
   async logEvents(events: EventRecord[]): Promise<void> {

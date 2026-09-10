@@ -42,6 +42,20 @@ export const RECONCILIATION_LOOKBACK_HOURS = 24;
 /** Attempts are not retried endlessly: a failing provider must be visible. */
 export const DEFAULT_MAX_ATTEMPTS = 3;
 
+/**
+ * The sweep interval, as configured by the cron trigger in `wrangler.toml`.
+ *
+ * The cron is the only clock in this architecture, so a lost tick must be
+ * visible rather than silent. Declaring the interval here (beside the schedules)
+ * lets `/api/status` report how stale the last sweep is; a test asserts it still
+ * matches `wrangler.toml` so the two cannot drift apart.
+ */
+export const SWEEP_INTERVAL_MINUTES = 10;
+
+/** Sweeps older than this are late; older than `SWEEP_STALLED_MINUTES`, stalled. */
+export const SWEEP_LATE_MINUTES = SWEEP_INTERVAL_MINUTES * 1.5;
+export const SWEEP_STALLED_MINUTES = SWEEP_INTERVAL_MINUTES * 6;
+
 export const SCHEDULES: ScheduleDefinition[] = [
   {
     id: 'bot1-daily',

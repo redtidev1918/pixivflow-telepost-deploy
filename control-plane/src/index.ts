@@ -12,9 +12,16 @@ import { D1ControlStore, type D1Like } from './d1-store';
 import { GitHubActionsExecutionProvider } from './github-provider';
 import { instantToLocal, nextOccurrence, occurrenceFor } from './occurrences';
 import type { DispatchRequest, DispatchResult, ExecutionProvider, ProviderRun } from './provider';
+import type { ReconciliationRunRow } from './store';
 import { reconcileAll } from './reconciliation';
 import { expirePendingReviews } from './reviews';
-import { RECONCILIATION_LOOKBACK_HOURS, SCHEDULES, validateSchedules } from './schedules';
+import {
+  RECONCILIATION_LOOKBACK_HOURS,
+  SCHEDULES,
+  SWEEP_LATE_MINUTES,
+  SWEEP_STALLED_MINUTES,
+  validateSchedules,
+} from './schedules';
 import { handleControl } from './routes/control';
 import { handleTelegramWebhook } from './routes/telegram';
 import { BotRegistry } from './telegram/client';
@@ -104,6 +111,24 @@ function buildProvider(env: Env): ExecutionProvider {
     token: env.GITHUB_DISPATCH_TOKEN,
     ref: env.GITHUB_REF ?? 'main',
   });
+}
+
+/**
+ * Answers "did the clock run?" from durable state.
+ *
+ * `unknown` until the first sweep: a freshly deployed worker has not proven its
+ * cron yet, and reporting `ok` there would be a lie.
+ */
+export function clockHealth(
+  sweeps: ReconciliationRunRow[],
+  nowMs: number
+): { lastSweepAt: number | null; ageMinutes: number | null; state: 'ok' | 'late' | 'stalled' | 'unknown' } {
+  const last = sweeps[0];
+  if (!last) return { lastSweepAt: null, ageMinutes: null, state: 'unknown' };
+  const ageMinutes = (nowMs - last.startedAt) / 60_000;
+  const state: 'ok' | 'late' | 'stalled' =
+    ageMinutes > SWEEP_STALLED_MINUTES ? 'stalled' : ageMinutes > SWEEP_LATE_MINUTES ? 'late' : 'ok';
+  return { lastSweepAt: last.startedAt, ageMinutes: Math.round(ageMinutes * 10) / 10, state };
 }
 
 export default {
@@ -218,8 +243,15 @@ export default {
       ]);
       const recentExecutions = await store.listOpenExecutions(10);
       const pendingReviews = await store.listPendingReviews(10);
+      const recentSweeps = await store.listRecentReconciliations(10);
+      const reviewsByStatus = await store.countReviewsByStatus();
       return json({
         now,
+        // The cron is the only clock, so its liveness is the single most important
+        // thing to see. A stalled sweep means occurrences will simply not appear.
+        clock: clockHealth(recentSweeps, now),
+        reviewsByStatus,
+        recentReconciliations: recentSweeps,
         executionMode: executionMode(env),
         providerConfigured: Boolean(env.GITHUB_REPO && env.GITHUB_DISPATCH_TOKEN),
         telegramConfigured: Boolean(env.TELEGRAM_WEBHOOK_SECRET && (env.TELEGRAM_BOT1_TOKEN || env.TELEGRAM_BOT2_TOKEN)),

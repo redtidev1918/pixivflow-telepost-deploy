@@ -24,6 +24,7 @@ import {
   type ExecutionStatus,
   type ItemStatus,
   type OccurrenceRow,
+  type ReconciliationRunRow,
   type ReconciliationSummary,
   type ReviewRecord,
   type ReviewStatus,
@@ -49,7 +50,7 @@ export class MemoryControlStore implements ControlPlaneStore {
   readonly executions = new Map<string, ExecutionRow>();
   readonly items = new Map<string, SlotItemRow>();
   readonly events: EventRecord[] = [];
-  readonly runs: ReconciliationSummary[] = [];
+  readonly runs: ReconciliationRunRow[] = [];
 
   private createdSlots = 0;
   private createdExecutions = 0;
@@ -108,8 +109,35 @@ export class MemoryControlStore implements ControlPlaneStore {
     row.lastError = reason;
   }
 
-  async recordReconciliation(input: { summary: ReconciliationSummary }): Promise<void> {
-    this.runs.push(input.summary);
+  async recordReconciliation(input: {
+    id: string;
+    startedAt: number;
+    finishedAt: number;
+    summary: ReconciliationSummary;
+  }): Promise<void> {
+    // D1 returns rows, so the fake must too: a fake that hands back live objects
+    // has already hidden one real bug in this suite.
+    this.runs.push({
+      id: input.id,
+      startedAt: input.startedAt,
+      finishedAt: input.finishedAt,
+      summary: { ...input.summary, errors: [...input.summary.errors] },
+    });
+  }
+
+  async listRecentReconciliations(limit: number): Promise<ReconciliationRunRow[]> {
+    return [...this.runs]
+      .sort((a, b) => b.startedAt - a.startedAt)
+      .slice(0, limit)
+      .map((run) => ({ ...run, summary: { ...run.summary, errors: [...run.summary.errors] } }));
+  }
+
+  async countReviewsByStatus(): Promise<Record<string, number>> {
+    const counts: Record<string, number> = {};
+    for (const review of this.reviews.values()) {
+      counts[review.status] = (counts[review.status] ?? 0) + 1;
+    }
+    return counts;
   }
 
   async logEvents(events: EventRecord[]): Promise<void> {

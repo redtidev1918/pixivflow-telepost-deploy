@@ -94,6 +94,13 @@ export interface ControlStore {
   logEvents(events: EventRecord[]): Promise<void>;
 }
 
+export interface ReconciliationRunRow {
+  id: string;
+  startedAt: number;
+  finishedAt: number;
+  summary: ReconciliationSummary;
+}
+
 export type ExecutionStatus =
   | 'dispatching'
   | 'dispatched'
@@ -234,8 +241,25 @@ export interface SlotItemRow {
   completedAt: number | null;
 }
 
+/**
+ * Read side of the sweep ledger.
+ *
+ * The architecture rests on the cron being the only clock, so "did the clock
+ * run?" has to be answerable from state: without it a lost cron looks exactly
+ * like a quiet day until an occurrence is missing hours later. Kept out of
+ * ControlStore so a test that only exercises the state machine need not fake it.
+ */
+export interface ObservabilityStore {
+  listRecentReconciliations(limit: number): Promise<ReconciliationRunRow[]>;
+}
+
 /** Everything reconciliation and the callback routes need, in one port. */
-export interface ControlPlaneStore extends ControlStore, ExecutionStore, ReviewStore, ProcessedWorkStore {}
+export interface ControlPlaneStore
+  extends ControlStore,
+    ExecutionStore,
+    ReviewStore,
+    ProcessedWorkStore,
+    ObservabilityStore {}
 
 export type ReviewStatus = 'pending' | 'approved' | 'rejected' | 'expired' | 'uncertain';
 
@@ -266,6 +290,8 @@ export interface ReviewRecord {
 }
 
 export interface ReviewStore {
+  /** Counts by status: an `uncertain` review exists to be seen by a human. */
+  countReviewsByStatus(): Promise<Record<string, number>>;
   /** Idempotent on (bot_id, target_id, work_id): a replayed create returns the row. */
   createReview(input: {
     id: string;
