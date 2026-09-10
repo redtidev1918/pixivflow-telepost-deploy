@@ -2,27 +2,51 @@
  * Cloudflare Worker entry point: the durable control plane.
  *
  *  - `scheduled` runs one reconciliation sweep. It is NOT "run the task": it
- *    recomputes which occurrences should exist, reconciles the ledger and (see
- *    reconciliation.ts) converges execution state.
- *  - `fetch` is read-only observability plus the callback surface the disposable
- *    runners and Telegram use. Media never passes through here.
+ *    recomputes which occurrences should exist, adopts the execution provider's
+ *    verdict for anything in flight, then starts only the attempts that are due.
+ *  - `fetch` serves read-only observability (`/api/status`) and the idempotent
+ *    runner callbacks (`/control/executions/:id/...`). Media never passes here.
  */
 
 import { D1ControlStore, type D1Like } from './d1-store';
+import { GitHubActionsExecutionProvider } from './github-provider';
 import { nextOccurrence } from './occurrences';
-import { reconcile } from './reconciliation';
+import type { DispatchRequest, DispatchResult, ExecutionProvider, ProviderRun } from './provider';
+import { reconcileAll } from './reconciliation';
 import { RECONCILIATION_LOOKBACK_HOURS, SCHEDULES, validateSchedules } from './schedules';
+import { handleControl } from './routes/control';
 
 export interface Env {
   CONTROL_DB: D1Like;
-  /** `shadow` records intended dispatches without executing them. */
+  /** `live` publishes; `shadow`/`dry-run` must not touch the real channel. */
   EXECUTION_MODE?: string;
   RECONCILIATION_LOOKBACK_HOURS?: string;
+  /** `owner/repo` hosting the batch workflow. */
+  GITHUB_REPO?: string;
+  GITHUB_WORKFLOW?: string;
+  GITHUB_REF?: string;
+  /**
+   * TEMPORARY MIGRATION AUTH: a PAT stands in until a GitHub App is wired up
+   * (see the control-plane README). Never logged.
+   */
+  GITHUB_DISPATCH_TOKEN?: string;
+  /** Bearer the runner uses for the claim/result callbacks. */
+  CALLBACK_SECRET?: string;
+  /**
+   * This Worker's own public base URL. A cron trigger has no request URL, so the
+   * runner cannot be told where to call back without it.
+   */
+  CONTROL_PLANE_URL?: string;
 }
 
 function lookbackHours(env: Env): number {
   const parsed = Number(env.RECONCILIATION_LOOKBACK_HOURS);
   return Number.isFinite(parsed) && parsed > 0 ? parsed : RECONCILIATION_LOOKBACK_HOURS;
+}
+
+function executionMode(env: Env): 'live' | 'shadow' | 'dry-run' {
+  const mode = (env.EXECUTION_MODE ?? 'shadow').trim();
+  return mode === 'live' || mode === 'dry-run' ? mode : 'shadow';
 }
 
 function json(body: unknown, status = 200): Response {
@@ -32,19 +56,91 @@ function json(body: unknown, status = 200): Response {
   });
 }
 
+/**
+ * A disabled provider keeps the sweep working (occurrences are still recorded,
+ * the failure is visible in the execution row) instead of crashing the cron when
+ * the deployment is not configured yet.
+ */
+class UnconfiguredProvider implements ExecutionProvider {
+  readonly name = 'unconfigured';
+  readonly ready = false;
+  constructor(private readonly reason: string) {}
+  async dispatch(_request: DispatchRequest): Promise<DispatchResult> {
+    return { accepted: false, detail: this.reason };
+  }
+  async getRun(_runId: string): Promise<ProviderRun> {
+    throw new Error(this.reason);
+  }
+  async cancel(): Promise<void> {}
+  async listRecentRuns(): Promise<ProviderRun[]> {
+    return [];
+  }
+}
+
+function buildProvider(env: Env): ExecutionProvider {
+  if (!env.GITHUB_REPO || !env.GITHUB_DISPATCH_TOKEN) {
+    return new UnconfiguredProvider('execution provider not configured: GITHUB_REPO/GITHUB_DISPATCH_TOKEN missing');
+  }
+  if (!env.CONTROL_PLANE_URL) {
+    return new UnconfiguredProvider('CONTROL_PLANE_URL missing: runners would have nowhere to report back');
+  }
+  return new GitHubActionsExecutionProvider({
+    repo: env.GITHUB_REPO,
+    workflowFile: env.GITHUB_WORKFLOW ?? 'pixivflow-batch.yml',
+    token: env.GITHUB_DISPATCH_TOKEN,
+    ref: env.GITHUB_REF ?? 'main',
+  });
+}
+
 export default {
   async scheduled(_event: ScheduledController, env: Env): Promise<void> {
     validateSchedules(SCHEDULES);
     const store = new D1ControlStore(env.CONTROL_DB);
-    await reconcile(store, SCHEDULES, Date.now(), { lookbackHours: lookbackHours(env) });
+    const nowMs = Date.now();
+    await reconcileAll(
+      {
+        store,
+        provider: buildProvider(env),
+        schedules: SCHEDULES,
+        mode: executionMode(env),
+        callbackUrl: `${(env.CONTROL_PLANE_URL ?? '').replace(/\/+$/, '')}/control`,
+      },
+      nowMs
+    );
   },
 
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
     const store = new D1ControlStore(env.CONTROL_DB);
 
+    const controlResponse = await handleControl(request, store, url, env.CALLBACK_SECRET);
+    if (controlResponse) return controlResponse;
+
     if (url.pathname === '/health') {
       return json({ status: 'ok', service: 'pixivflow-control-plane' });
+    }
+
+    // Ops trigger for one sweep. The cron is the clock; this exists so shadow
+    // validation and cutover can be verified deterministically instead of waiting
+    // for the next 10-minute tick. Same secret as the runner callbacks.
+    if (url.pathname === '/api/reconcile') {
+      if (request.method !== 'POST') return json({ error: 'method not allowed' }, 405);
+      if (!env.CALLBACK_SECRET) return json({ error: 'no callback secret configured' }, 503);
+      const header = request.headers.get('authorization') ?? '';
+      if (header !== `Bearer ${env.CALLBACK_SECRET}`) return json({ error: 'unauthorized' }, 401);
+      validateSchedules(SCHEDULES);
+      const nowMs = Date.now();
+      const summary = await reconcileAll(
+        {
+          store,
+          provider: buildProvider(env),
+          schedules: SCHEDULES,
+          mode: executionMode(env),
+          callbackUrl: `${(env.CONTROL_PLANE_URL ?? '').replace(/\/+$/, '')}/control`,
+        },
+        nowMs
+      );
+      return json({ ok: true, now: nowMs, summary });
     }
 
     if (url.pathname === '/api/status') {
@@ -53,9 +149,11 @@ export default {
         store.countByStatus(),
         store.listRecentOccurrences(10),
       ]);
+      const recentExecutions = await store.listOpenExecutions(10);
       return json({
         now,
-        executionMode: env.EXECUTION_MODE ?? 'shadow',
+        executionMode: executionMode(env),
+        providerConfigured: Boolean(env.GITHUB_REPO && env.GITHUB_DISPATCH_TOKEN),
         lookbackHours: lookbackHours(env),
         nextOccurrence: nextOccurrence(SCHEDULES, now),
         schedules: SCHEDULES.map((schedule) => ({
@@ -69,6 +167,13 @@ export default {
         })),
         countsByStatus: counts,
         recentOccurrences: recent,
+        recentExecutions: recentExecutions.map((execution) => ({
+          id: execution.id,
+          slotId: execution.slotId,
+          attempt: execution.attempt,
+          status: execution.status,
+          providerRunId: execution.providerRunId,
+        })),
       });
     }
 

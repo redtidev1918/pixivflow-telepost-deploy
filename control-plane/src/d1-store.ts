@@ -7,12 +7,18 @@
 
 import type { Occurrence } from './occurrences';
 import type {
-  ControlStore,
+  ControlPlaneStore,
   EventRecord,
+  ExecutionRow,
+  ExecutionStatus,
+  ItemStatus,
   OccurrenceRow,
   ReconciliationSummary,
+  SlotItemInput,
+  SlotItemRow,
   SlotStatus,
 } from './store';
+import { isTerminalExecution, TERMINAL_ITEM_STATUSES } from './store';
 
 /**
  * The subset of the D1 API this worker uses, declared structurally so the store
@@ -66,7 +72,44 @@ function toRow(row: SlotRowDb): OccurrenceRow {
 const SLOT_COLUMNS = `id, schedule_id, bot_id, occurrence_at, status, attempt_count,
   dispatch_deadline, current_execution_id, dispatched_at, started_at, completed_at, last_error`;
 
-export class D1ControlStore implements ControlStore {
+interface ExecutionRowDb {
+  id: string;
+  slot_id: string;
+  attempt: number;
+  provider: string;
+  provider_run_id: string | null;
+  status: string;
+  created_at: number;
+  dispatched_at: number | null;
+  started_at: number | null;
+  completed_at: number | null;
+  error: string | null;
+  error_class: string | null;
+  result: string | null;
+}
+
+const EXECUTION_COLUMNS = `id, slot_id, attempt, provider, provider_run_id, status, created_at,
+  dispatched_at, started_at, completed_at, error, error_class, result`;
+
+function toExecution(row: ExecutionRowDb): ExecutionRow {
+  return {
+    id: row.id,
+    slotId: row.slot_id,
+    attempt: row.attempt,
+    provider: row.provider,
+    providerRunId: row.provider_run_id,
+    status: row.status as ExecutionStatus,
+    createdAt: row.created_at,
+    dispatchedAt: row.dispatched_at,
+    startedAt: row.started_at,
+    completedAt: row.completed_at,
+    error: row.error,
+    errorClass: row.error_class,
+    result: row.result,
+  };
+}
+
+export class D1ControlStore implements ControlPlaneStore {
   constructor(private readonly db: D1Like) {}
 
   async insertOccurrenceIfAbsent(occurrence: Occurrence, nowMs: number): Promise<'created' | 'exists'> {
@@ -187,5 +230,279 @@ export class D1ControlStore implements ControlStore {
           )
       )
     );
+  }
+
+  // ---- executions -----------------------------------------------------------
+
+  async openExecution(input: {
+    id: string;
+    slotId: string;
+    attempt: number;
+    provider: string;
+    nowMs: number;
+  }): Promise<'created' | 'exists'> {
+    // Unique (slot_id, attempt) is the anti-duplicate-dispatch layer: two
+    // concurrent sweeps, a retried request or a replayed clock all converge on
+    // one execution row instead of opening a second runner for the same attempt.
+    const result = (await this.db
+      .prepare(
+        `INSERT OR IGNORE INTO executions (id, slot_id, attempt, provider, status, created_at)
+         VALUES (?, ?, ?, ?, 'dispatching', ?)`
+      )
+      .bind(input.id, input.slotId, input.attempt, input.provider, input.nowMs)
+      .run()) as { meta?: { changes?: number } } | undefined;
+    return (result?.meta?.changes ?? 0) > 0 ? 'created' : 'exists';
+  }
+
+  async getExecution(executionId: string): Promise<ExecutionRow | null> {
+    const row = await this.db
+      .prepare(`SELECT ${EXECUTION_COLUMNS} FROM executions WHERE id = ?`)
+      .bind(executionId)
+      .first<ExecutionRowDb>();
+    return row ? toExecution(row) : null;
+  }
+
+  async latestExecutionForSlot(slotId: string): Promise<ExecutionRow | null> {
+    const row = await this.db
+      .prepare(
+        `SELECT ${EXECUTION_COLUMNS} FROM executions WHERE slot_id = ? ORDER BY attempt DESC LIMIT 1`
+      )
+      .bind(slotId)
+      .first<ExecutionRowDb>();
+    return row ? toExecution(row) : null;
+  }
+
+  async listOpenExecutions(limit: number): Promise<ExecutionRow[]> {
+    const { results } = await this.db
+      .prepare(
+        `SELECT ${EXECUTION_COLUMNS} FROM executions
+          WHERE status IN ('dispatching','dispatched','running')
+          ORDER BY created_at ASC LIMIT ?`
+      )
+      .bind(limit)
+      .all<ExecutionRowDb>();
+    return (results ?? []).map(toExecution);
+  }
+
+  async listUnclaimedExecutions(olderThanMs: number, limit: number): Promise<ExecutionRow[]> {
+    const { results } = await this.db
+      .prepare(
+        `SELECT ${EXECUTION_COLUMNS} FROM executions
+          WHERE status = 'dispatched' AND provider_run_id IS NULL AND created_at <= ?
+          ORDER BY created_at ASC LIMIT ?`
+      )
+      .bind(olderThanMs, limit)
+      .all<ExecutionRowDb>();
+    return (results ?? []).map(toExecution);
+  }
+
+  async attachProviderRun(executionId: string, providerRunId: string, nowMs: number): Promise<void> {
+    await this.db
+      .prepare(
+        `UPDATE executions SET provider_run_id = ?, status = 'dispatched', dispatched_at = ?
+          WHERE id = ? AND status = 'dispatching'`
+      )
+      .bind(providerRunId, nowMs, executionId)
+      .run();
+  }
+
+  async markExecutionRunning(executionId: string, providerRunId: string | null, nowMs: number): Promise<void> {
+    await this.db
+      .prepare(
+        `UPDATE executions
+            SET status = 'running',
+                started_at = COALESCE(started_at, ?),
+                provider_run_id = COALESCE(?, provider_run_id)
+          WHERE id = ? AND status IN ('dispatching','dispatched','running')`
+      )
+      .bind(nowMs, providerRunId, executionId)
+      .run();
+  }
+
+  async markExecutionTerminal(input: {
+    executionId: string;
+    status: ExecutionStatus;
+    nowMs: number;
+    error?: string;
+    errorClass?: string;
+    result?: string;
+  }): Promise<void> {
+    // Write-once: a replayed/duplicate callback must not overwrite a terminal
+    // row (that is what makes approve/result callbacks idempotent).
+    await this.db
+      .prepare(
+        `UPDATE executions
+            SET status = ?, completed_at = ?, error = ?, error_class = ?, result = ?
+          WHERE id = ?
+            AND status NOT IN ('success','partial','failed','cancelled','timeout','uncertain')`
+      )
+      .bind(
+        input.status,
+        input.nowMs,
+        input.error ?? null,
+        input.errorClass ?? null,
+        input.result ?? null,
+        input.executionId
+      )
+      .run();
+  }
+
+  async setSlotStatus(
+    slotId: string,
+    status: SlotStatus,
+    nowMs: number,
+    options: { error?: string; currentExecutionId?: string | null; startedAt?: number; completedAt?: number } = {}
+  ): Promise<void> {
+    await this.db
+      .prepare(
+        `UPDATE slot_occurrences
+            SET status = ?,
+                current_execution_id = COALESCE(?, current_execution_id),
+                last_error = COALESCE(?, last_error),
+                started_at = COALESCE(?, started_at),
+                completed_at = COALESCE(?, completed_at),
+                dispatched_at = CASE WHEN ? = 'dispatched' THEN COALESCE(dispatched_at, ?) ELSE dispatched_at END,
+                attempt_count = CASE WHEN ? = 'dispatched' THEN attempt_count + 1 ELSE attempt_count END
+          WHERE id = ?`
+      )
+      .bind(
+        status,
+        options.currentExecutionId ?? null,
+        options.error ?? null,
+        options.startedAt ?? null,
+        options.completedAt ?? null,
+        status,
+        nowMs,
+        status,
+        slotId
+      )
+      .run();
+  }
+
+  async getOccurrence(slotId: string): Promise<OccurrenceRow | null> {
+    const row = await this.db
+      .prepare(`SELECT ${SLOT_COLUMNS} FROM slot_occurrences WHERE id = ?`)
+      .bind(slotId)
+      .first<SlotRowDb>();
+    return row ? toRow(row) : null;
+  }
+
+  async countExecutionsForSlot(slotId: string): Promise<number> {
+    const row = await this.db
+      .prepare(`SELECT COUNT(*) AS n FROM executions WHERE slot_id = ?`)
+      .bind(slotId)
+      .first<{ n: number }>();
+    return row?.n ?? 0;
+  }
+
+  /** True when the execution is already terminal (used by idempotent callbacks). */
+  static isTerminal(status: ExecutionStatus): boolean {
+    return isTerminalExecution(status);
+  }
+
+  // ---- slot items -----------------------------------------------------------
+
+  async upsertSlotItem(input: {
+    slotId: string;
+    botId: string;
+    item: SlotItemInput;
+    nowMs: number;
+  }): Promise<'created' | 'updated' | 'skipped-terminal'> {
+    const existing = await this.db
+      .prepare(`SELECT status, work_type, work_id, attempt_count, created_at FROM slot_items WHERE slot_id = ? AND target_id = ?`)
+      .bind(input.slotId, input.item.targetId)
+      .first<{ status: string; work_type: string; work_id: string | null; attempt_count: number; created_at: number }>();
+
+    const terminal = existing ? TERMINAL_ITEM_STATUSES.includes(existing.status as ItemStatus) : false;
+    if (terminal) {
+      // Never overwrite a target that already reached a terminal state: a retry
+      // of the sibling target, or a later execution attempt, must not erase it.
+      return 'skipped-terminal';
+    }
+
+    const completedAt = existing && TERMINAL_ITEM_STATUSES.includes(input.item.status) ? input.nowMs : null;
+
+    if (!existing) {
+      await this.db
+        .prepare(
+          `INSERT INTO slot_items
+             (slot_id, target_id, bot_id, work_type, work_id, status, attempt_count, last_error, error_class,
+              created_at, updated_at, completed_at)
+           VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?)`
+        )
+        .bind(
+          input.slotId,
+          input.item.targetId,
+          input.botId,
+          input.item.workType ?? 'unknown',
+          input.item.workId ?? null,
+          input.item.status,
+          input.item.error ?? null,
+          input.item.errorClass ?? null,
+          input.nowMs,
+          input.nowMs,
+          completedAt
+        )
+        .run();
+      return 'created';
+    }
+
+    await this.db
+      .prepare(
+        `UPDATE slot_items
+            SET status = ?, work_id = COALESCE(?, work_id), attempt_count = attempt_count + 1,
+                last_error = ?, error_class = ?, updated_at = ?, completed_at = COALESCE(?, completed_at)
+          WHERE slot_id = ? AND target_id = ?`
+      )
+      .bind(
+        input.item.status,
+        input.item.workId ?? null,
+        input.item.error ?? null,
+        input.item.errorClass ?? null,
+        input.nowMs,
+        completedAt,
+        input.slotId,
+        input.item.targetId
+      )
+      .run();
+    return 'updated';
+  }
+
+  async listSlotItems(slotId: string): Promise<SlotItemRow[]> {
+    const { results } = await this.db
+      .prepare(
+        `SELECT slot_id, target_id, bot_id, work_type, work_id, status, attempt_count, last_error, error_class,
+                created_at, updated_at, completed_at
+           FROM slot_items WHERE slot_id = ? ORDER BY target_id ASC`
+      )
+      .bind(slotId)
+      .all<{
+        slot_id: string;
+        target_id: string;
+        bot_id: string;
+        work_type: string;
+        work_id: string | null;
+        status: string;
+        attempt_count: number;
+        last_error: string | null;
+        error_class: string | null;
+        created_at: number;
+        updated_at: number;
+        completed_at: number | null;
+      }>();
+    return (results ?? []).map((row) => ({
+      slotId: row.slot_id,
+      targetId: row.target_id,
+      botId: row.bot_id,
+      workType: row.work_type,
+      workId: row.work_id,
+      status: row.status as ItemStatus,
+      attemptCount: row.attempt_count,
+      lastError: row.last_error,
+      errorClass: row.error_class,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+      completedAt: row.completed_at,
+    }));
   }
 }

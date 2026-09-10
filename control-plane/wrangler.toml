@@ -19,9 +19,14 @@ database_id = "1fa00cbc-6dcc-4a89-ba8f-30cf79cc286b"
 # Shadow until cutover: dispatch is planned and recorded but never executed.
 EXECUTION_MODE = "shadow"
 RECONCILIATION_LOOKBACK_HOURS = "24"
+# This Worker's public base URL (a cron trigger has no request URL, so the runner
+# would otherwise have nowhere to report back).
+CONTROL_PLANE_URL = "https://pixivflow-control-plane.redtidev1918.workers.dev"
+GITHUB_REPO = "redtidev1918/pixivflow-telepost-deploy"
+GITHUB_WORKFLOW = "pixivflow-batch.yml"
+GITHUB_REF = "main"
 
 # Secrets (set with `wrangler secret put`, never committed):
 #   GITHUB_DISPATCH_TOKEN  TEMPORARY MIGRATION AUTH (replace with a GitHub App)
-#   GITHUB_REPO            owner/repo that hosts the batch workflow
-#   CALLBACK_SECRET        bearer the GitHub job uses to report its result
+#   CALLBACK_SECRET        bearer the GitHub job uses to report claim/result
 #   TELEGRAM_WEBHOOK_SECRET
