@@ -11,7 +11,34 @@ NAT 主机、Mac/Linux 本机和 Fly.io。默认（Compose）以两个独立容�
 多 Bot supervisor 与 PixivFlow 调度器各自拉取 ghcr 镜像、经 HTTP 通信，适合
 512 MiB 小机器，不启动 WebUI；Fly 合一台可选走组合镜像（combined）。
 
-## 我该选哪种部署？
+## 生产架构（当前）
+
+生产运行的是**无服务器控制平面**：Cloudflare Worker + D1 作为唯一状态与唯一的时钟，
+GitHub Actions 作为一次性执行平面，Telegram 提供耐久媒体与人工审核。
+
+```
+Cloudflare Worker + D1  (cron */10 = 唯一的时钟；账本、admission、审核状态)
+        │  workflow_dispatch
+        ▼
+GitHub Actions          (一次性 runner：一次 occurrence，跑完即销毁)
+        │  HTTPS claim / result
+        ▼
+Telegram                (媒体只上传一次；发布是服务器端 copyMessage)
+```
+
+**为什么换**：机器休眠、HTTP 中转超时、常驻调度进程、崩溃后残留的 lease、丢一次
+cron 丢整天、两个时钟重复投稿 —— 这些是**结构问题**，重试再好也修不掉。新架构让每
+一类都**由构造消除**，而不是"处理得更好"。
+
+- 架构与不变量（含每一条旧失败模式为何不可能再发生）：**[docs/SERVERLESS-ARCHITECTURE.md](docs/SERVERLESS-ARCHITECTURE.md)**
+- 部署、迁移、凭据与账号管理、执行平面契约、可观测性、runbook：**[docs/SERVERLESS-OPERATIONS.md](docs/SERVERLESS-OPERATIONS.md)**
+- 上线步骤、回滚、验收判据、Fly 退役：**[docs/SERVERLESS-CUTOVER.md](docs/SERVERLESS-CUTOVER.md)**
+- 上线门禁（只读）：`scripts/cutover-preflight.sh`
+
+> 下面「我该选哪种部署？」里的 **Fly / Compose / systemd** 是**旧的常驻架构**，保留作为
+> 回滚目标与本地/自托管用途，直到 cutover 验收完成。生产不再走它们。
+
+## 我该选哪种部署？（旧的常驻架构）
 
 - **不用 Fly**：有 Docker 用 **Docker Compose**；不想用 Docker 用 **systemd / 裸机**。
   两者都用内部 cron（internal scheduler），进程常驻。

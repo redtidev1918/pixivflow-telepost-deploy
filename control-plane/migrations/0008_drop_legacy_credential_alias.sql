@@ -1,0 +1,12 @@
+-- Drop the legacy credential alias, now that nothing references it.
+--
+-- 0007 copied `pixiv-refresh-token` -> `pixiv-main` and deliberately left the old row
+-- so the switch could be verified against a value still known to work. It has been:
+-- the runner resolved its credential through the new alias, the schedule, admission,
+-- the concurrency key and the credential endpoints all name `pixiv-main`, and no code
+-- or workflow mentions the old name any more.
+--
+-- Only the credential row is removed. `event_log` keeps its historical mentions on
+-- purpose: an audit log records what happened, and rewriting it to match today's
+-- naming would destroy the evidence rather than tidy it.
+DELETE FROM runner_credentials WHERE name = 'pixiv-refresh-token';

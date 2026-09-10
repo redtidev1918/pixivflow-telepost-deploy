@@ -58,12 +58,47 @@ on:
         required: false
         type: string
         default: 'master'
+      # The shared external resource this execution consumes. The control plane
+      # sends its `schedule.credential`, so the concurrency group below keys on the
+      # SAME identity the D1 admission uses. Hardcoding a global constant would
+      # serialise two unrelated accounts the day a second one exists.
+      credential_key:
+        description: 'Shared credential this execution consumes (concurrency group)'
+        required: true
+        default: 'pixiv-main'
+        type: string
+      job_timeout_minutes:
+        description: 'Hard job bound. 1 is for validating the timeout path only.'
+        required: false
+        type: choice
+        default: '90'
+        options:
+          - '1'
+          - '30'
+          - '60'
+          - '90'
+          - '120'
 
-# Layer 2 of exactly-once: one concurrency group per canonical slot. A duplicate
-# dispatch queues behind the running one instead of racing it. Layer 1 is D1:
-# UNIQUE(schedule_id, occurrence_at) plus the (slot_id, attempt) execution key.
+# Layer 2 of exactly-once, and the second line of defence for a shared account.
+#
+# The group is the CREDENTIAL, not the slot. Every schedule here consumes the same
+# Pixiv account and Pixiv rate-limits per account, so two different slots running
+# together is the failure that matters — and a per-slot group cannot see that.
+# Account-level grouping is strictly stronger: it also serialises a duplicate
+# dispatch of the same slot.
+#
+# Layer 1 is D1: UNIQUE(schedule_id, occurrence_at), UNIQUE(slot_id, attempt), and
+# account-level admission in the reconciliation sweep, which is what actually keeps
+# a due occurrence pending instead of spending a runner. This group only stops a
+# duplicate dispatch from racing.
+#
+# `queue: max` is deliberately NOT set: GitHub's default replaces a waiting pending
+# run, which would matter if GitHub were the queue. It is not — the control plane
+# owns admission, so a replaced pending run is simply dispatched again by the next
+# sweep. An unrecognised key here risks the whole workflow failing to parse, which is
+# a far worse trade for a backstop that is not load-bearing.
 concurrency:
-  group: pixivflow-${{ inputs.slot_id }}
+  group: pixivflow-${{ inputs.credential_key }}
   cancel-in-progress: false
 
 permissions:
@@ -73,13 +108,20 @@ jobs:
   execute:
     runs-on: ubuntu-latest
     # Hard bound. A wedged Pixiv call cannot run forever: the runner dies here and
-    # the control plane converges the occurrence from provider state.
-    timeout-minutes: 90
+    # the control plane converges the occurrence from provider state. It is a
+    # constrained choice rather than a free number, so the execution plane can never
+    # be turned into an unbounded one (and the timeout path can still be exercised
+    # deliberately with the 1-minute option).
+    timeout-minutes: ${{ fromJSON(inputs.job_timeout_minutes || '90') }}
     env:
       SLOT_ID: ${{ inputs.slot_id }}
       SCHEDULE_ID: ${{ inputs.schedule_id }}
       ATTEMPT: ${{ inputs.attempt }}
       BOT_ID: ${{ inputs.bot_id }}
+      # The credential this execution consumes, as the control plane named it. Both
+      # the concurrency group and the credential endpoints key on it, so a second
+      # Pixiv account is a new value rather than a code change.
+      CREDENTIAL_KEY: ${{ inputs.credential_key }}
       TARGETS: ${{ inputs.targets }}
       MODE: ${{ inputs.mode }}
       OCCURRENCE_AT: ${{ inputs.occurrence_at }}
@@ -88,8 +130,41 @@ jobs:
       PIXIV_CLIENT_ID: ${{ secrets.PIXIV_CLIENT_ID }}
       PIXIV_CLIENT_SECRET: ${{ secrets.PIXIV_CLIENT_SECRET }}
       PIXIV_DEVICE_TOKEN: ${{ secrets.PIXIV_DEVICE_TOKEN }}
-      PIXIV_REFRESH_TOKEN: ${{ secrets.PIXIV_REFRESH_TOKEN }}
+      # PIXIV_REFRESH_TOKEN is intentionally absent here: it is resolved at run
+      # time from the control plane (see "Resolve the Pixiv credential"), so the
+      # newest rotated value is always the one used and there is no second source
+      # of truth to disagree with.
+      PIXIV_AUTH_READONLY: ${{ vars.PIXIV_AUTH_READONLY || 'true' }}
     steps:
+      # The control plane is the only durable thing in this architecture, so it
+      # holds the execution plane's Pixiv credential. Reading it here means a
+      # rotation written back by an earlier run is picked up by the next one, and
+      # the token never has to live in a long-lived GitHub secret.
+      - name: Resolve the Pixiv credential
+        env:
+          FALLBACK_TOKEN: ${{ secrets.PIXIV_REFRESH_TOKEN }}
+        run: |
+          set -euo pipefail
+          token=""
+          if response=$(curl -sS --max-time 20 -X POST \
+              -H "authorization: Bearer $CONTROL_SECRET" \
+              "${CALLBACK_URL%/}/credentials/${CREDENTIAL_KEY}/read" 2>/dev/null); then
+            token=$(printf '%s' "$response" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("value",""))' 2>/dev/null || true)
+          fi
+          source="control-plane"
+          if [ -z "$token" ]; then
+            token="$FALLBACK_TOKEN"
+            source="github-secret"
+          fi
+          if [ -z "$token" ]; then
+            echo "::error::no Pixiv credential available from the control plane or the fallback secret"
+            exit 1
+          fi
+          # Mask before it can reach any output; the value is never printed.
+          echo "::add-mask::$token"
+          printf 'PIXIV_REFRESH_TOKEN=%s\n' "$token" >> "$GITHUB_ENV"
+          echo "credential resolved from: $source"
+
       - name: Checkout control plane (for the versioned shadow config)
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -139,14 +214,35 @@ jobs:
           npm ci --no-audit --no-fund
           npm run build
 
+      - name: Fetch durable duplicate history
+        # A disposable runner starts with an empty local database, so it cannot know
+        # which works this bot already handled. The control plane owns that history;
+        # without it the run re-selects old works and silently produces nothing new.
+        # Best effort: a lookup failure must not stop the run.
+        run: |
+          set +e
+          code=$(curl -sS -o "$GITHUB_WORKSPACE/processed-works.json" -w '%{http_code}' --max-time 30 \
+            "$CALLBACK_URL/processed-works?bot_id=${BOT_ID:-bot1}&limit=1000" \
+            -H "Authorization: Bearer $CONTROL_SECRET" || echo 000)
+          echo "processed-works -> HTTP $code"
+          if [ "$code" != "200" ]; then
+            echo '{"illustration":[],"novel":[]}' > "$GITHUB_WORKSPACE/processed-works.json"
+            echo "::warning::duplicate history unavailable; continuing without it"
+          fi
+
       - name: Execute the slot
         id: execute
         working-directory: pixivflow-src
         run: |
-          set -uo pipefail
+          # The runner starts this script with `bash -e`, which would abort the
+          # step on a non-zero batch exit before the code could be recorded. A
+          # non-zero exit here is DATA (partial/failed/uncertain), not a step
+          # failure, so -e must be turned off explicitly.
+          set +e
           CONFIG="$GITHUB_WORKSPACE/control-plane/config/pixivflow.shadow.json"
           ARGS=(--config "$CONFIG" --schedule-id "$SCHEDULE_ID" --slot-id "$SLOT_ID"
-                --attempt "$ATTEMPT" --mode "$MODE" --result-file "$GITHUB_WORKSPACE/slot-result.json")
+                --attempt "$ATTEMPT" --mode "$MODE" --result-file "$GITHUB_WORKSPACE/slot-result.json"
+                --exclude-work-ids "$GITHUB_WORKSPACE/processed-works.json")
           [ -n "$BOT_ID" ] && ARGS+=(--bot-id "$BOT_ID")
           [ -n "$TARGETS" ] && ARGS+=(--targets "$TARGETS")
           [ -n "$OCCURRENCE_AT" ] && ARGS+=(--occurrence-at "$OCCURRENCE_AT")
@@ -159,7 +255,92 @@ jobs:
           # the real per-target outcome instead of guessing.
           exit 0
 
+      # Pixiv may return a NEW refresh token from any refresh. The client already
+      # treats that as expected, and two refreshes that returned the same value do
+      # not prove it can never happen. A runner is destroyed when the job ends, so
+      # a rotation that is only held here is lost along with it, taking access to
+      # the account with it.
+      #
+      # This therefore runs BEFORE the result is reported: until the new value is
+      # durably stored, the execution must not be recorded as a success. If the
+      # store cannot be reached, the report is skipped, the job fails, and the
+      # credential is kept as an artifact as a last resort.
+      - name: Persist a rotated credential
+        id: credential
+        if: always()
+        run: |
+          set -uo pipefail
+          rotated=$(python3 - <<'PY'
+          import glob, json, os, pathlib
+
+          provided = os.environ.get('PIXIV_REFRESH_TOKEN', '').strip()
+          candidates = ['control-plane/config/pixivflow.production.json']
+          # PixivFlow's OWN storage filenames, which are a library detail and must
+          # not be derived from the credential alias: the alias names the account,
+          # the file is wherever the tool happens to keep its token. Coupling them
+          # meant renaming an account silently stopped rotation detection.
+          candidates += glob.glob('**/.pixiv-refresh-token', recursive=True)
+          candidates += glob.glob('**/.pixiv-refresh-token.backup', recursive=True)
+
+          for name in candidates:
+              path = pathlib.Path(name)
+              if not path.exists():
+                  continue
+              try:
+                  if path.suffix == '.json':
+                      found = json.loads(path.read_text()).get('pixiv', {}).get('refreshToken', '')
+                  else:
+                      found = path.read_text().strip()
+              except Exception:
+                  continue
+              # A placeholder is not a token: the versioned config keeps
+              # ${PIXIV_REFRESH_TOKEN} until a run resolves it.
+              if not found or (found.startswith('${') and found.endswith('}')):
+                  continue
+              if found != provided:
+                  print(found)
+                  break
+          PY
+          )
+          if [ -z "$rotated" ]; then
+            echo "credential: unchanged by this run"
+            exit 0
+          fi
+          echo "::warning::Pixiv returned a new refresh token; persisting it before reporting the result"
+          printf '%s' "$rotated" > "$RUNNER_TEMP/rotated.json.payload"
+          python3 -c "import json,sys; print(json.dumps({'value': open(sys.argv[1]).read()}))" \
+            "$RUNNER_TEMP/rotated.json.payload" > "$RUNNER_TEMP/rotated.body"
+          rm -f "$RUNNER_TEMP/rotated.json.payload"
+          for attempt in 1 2 3 4 5; do
+            code=$(curl -sS --max-time 20 -o "$RUNNER_TEMP/rotated.response" -w '%{http_code}' \
+              -X PUT -H "authorization: Bearer $CONTROL_SECRET" -H 'content-type: application/json' \
+              --data-binary "@$RUNNER_TEMP/rotated.body" \
+              "${CALLBACK_URL%/}/credentials/${CREDENTIAL_KEY}" || echo 000)
+            if [ "$code" = "200" ]; then
+              echo "credential: rotated value stored durably (attempt $attempt)"
+              rm -f "$RUNNER_TEMP/rotated.body" "$RUNNER_TEMP/rotated.response"
+              exit 0
+            fi
+            echo "credential: store attempt $attempt failed (HTTP $code)"
+            sleep $((attempt * 5))
+          done
+          # Not durable. Keep the value for an operator and refuse to report success.
+          printf '%s' "$rotated" > rotated-token.txt
+          rm -f "$RUNNER_TEMP/rotated.body" "$RUNNER_TEMP/rotated.response"
+          echo "::error::a rotated refresh token could NOT be stored durably; refusing to report this execution as complete"
+          exit 1
+
+      - name: Keep the rotated credential when persistence failed
+        if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: rotated-credential
+          path: rotated-token.txt
+          if-no-files-found: ignore
+          retention-days: 7
+
       - name: Report the result
+        id: report
         # Reports whenever this job still has a shell. A job-level timeout kills
         # the steps, so a timed-out run is deliberately recovered by the control
         # plane from the GitHub API instead of from here.
@@ -188,26 +369,85 @@ jobs:
                "work_id": t.get("workId"), "error": t.get("error"), "error_class": t.get("status")}
               for t in result.get("targets", []) if t.get("targetId")
           ]
-          print(json.dumps({"status": status, "result": json.dumps(result), "items": items,
-                            "error": result.get("error") or (None if status == "success" else f"exit code {code}")}))
+          print(json.dumps({
+              "status": status,
+              "result": json.dumps(result),
+              "items": items,
+              "error": result.get("error") or (None if status == "success" else f"exit code {code}"),
+              # A rate-limited account needs the server's own cooldown; a broken
+              # provider must not be retried on the same schedule. The exit code is
+              # the same for both, so the runner's categories have to travel.
+              "error_class": result.get("errorClass"),
+              "retry_after_ms": result.get("retryAfterMs"),
+          }))
           PY
 
           ITEMS=$(python3 -c 'import json,sys;print(json.dumps(json.load(open("/tmp/result.json"))["items"]))')
 
-          curl -sS --max-time 30 -X POST "$CALLBACK_URL/executions/$EXEC_PATH/items" \
-            -H "Authorization: Bearer $CONTROL_SECRET" -H 'Content-Type: application/json' \
-            -d "{\"items\": $ITEMS}" || echo "::warning::item report failed; reconciliation covers it"
+          for attempt in 1 2 3; do
+            items_code=$(curl -sS -o /dev/null -w '%{http_code}' --max-time 30 -X POST "$CALLBACK_URL/executions/$EXEC_PATH/items" \
+              -H "Authorization: Bearer $CONTROL_SECRET" -H 'Content-Type: application/json' \
+              -d "{\"items\": $ITEMS}" || echo 000)
+            echo "item report attempt $attempt -> HTTP $items_code"
+            [ "$items_code" = "200" ] && break
+            sleep 5
+          done
 
           python3 - "$EXEC_PATH" <<'PY' > /tmp/payload.json
           import json, sys
           path = sys.argv[1]
           data = json.load(open('/tmp/result.json'))
-          print(json.dumps({"status": data["status"], "result": data["result"], "error": data["error"]}))
+          print(json.dumps({k: v for k, v in {
+              "status": data["status"],
+              "result": data["result"],
+              "error": data["error"],
+              "error_class": data.get("error_class"),
+              "retry_after_ms": data.get("retry_after_ms"),
+          }.items() if v is not None}))
           PY
 
-          code=$(curl -sS -o /tmp/result-response.json -w '%{http_code}' --max-time 60 \
-            -X POST "$CALLBACK_URL/executions/$EXEC_PATH/result" \
-            -H "Authorization: Bearer $CONTROL_SECRET" -H 'Content-Type: application/json' \
-            --data @/tmp/payload.json || echo 000)
-          echo "result report -> HTTP $code"
+          result_code=000
+          for attempt in 1 2 3; do
+            result_code=$(curl -sS -o /tmp/result-response.json -w '%{http_code}' --max-time 60 \
+              -X POST "$CALLBACK_URL/executions/$EXEC_PATH/result" \
+              -H "Authorization: Bearer $CONTROL_SECRET" -H 'Content-Type: application/json' \
+              --data @/tmp/payload.json || echo 000)
+            echo "result report attempt $attempt -> HTTP $result_code"
+            [ "$result_code" = "200" ] && break
+            sleep 5
+          done
           head -c 500 /tmp/result-response.json || true
+          if [ "$result_code" != "200" ]; then
+            # The control plane never learned the outcome. Reconciliation would then
+            # have to infer the status from GitHub's conclusion, and a green run
+            # would be read as a successful slot — which a partial day is not. Fail
+            # loudly so the inference stays conservative.
+            echo "report_failed=1" >> "$GITHUB_OUTPUT"
+            echo "::warning::result report failed after 3 attempts; reconciliation will treat this run as failed"
+          fi
+
+      - name: Fail the job when the batch did not succeed
+        # Runs AFTER the report on purpose: the control plane must always receive
+        # the real per-target outcome. Rules:
+        #   - a failed report is always a failure (never let GitHub read it as success);
+        #   - exit 1/3/4 (process error, nothing delivered, unconfirmed send) are failures;
+        #   - exit 0 (delivered) and 2 (partial: e.g. one target had no candidate) are
+        #     legitimate business outcomes — the per-target detail is in the ledger.
+        # A run killed by the job timeout never reaches here; reconciliation recovers
+        # that case from the GitHub API.
+        if: always()
+        run: |
+          code="${{ steps.execute.outputs.exit_code }}"
+          report_failed="${{ steps.report.outputs.report_failed }}"
+          echo "batch exit code: ${code:-<none>} report_failed: ${report_failed:-0}"
+          if [ "${report_failed:-0}" = "1" ]; then
+            echo "::error::the batch result was never reported to the control plane"
+            exit 1
+          fi
+          case "${code:-1}" in
+            0|2) exit 0 ;;
+            *)
+              echo "::error::pixivflow batch exited ${code:-1}; the outcome was reported to the control plane"
+              exit 1
+              ;;
+          esac
