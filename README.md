@@ -36,7 +36,7 @@ cron 丢整天、两个时钟重复投稿 —— 这些是**结构问题**，重
 - 上线门禁（只读）：`scripts/cutover-preflight.sh`
 
 > 下面「我该选哪种部署？」里的 **Fly / Compose / systemd** 是**旧的常驻架构**，保留作为
-> 回滚目标与本地/自托管用途，直到 cutover 验收完成。生产不再走它们。
+> 回滚目标与本地/自托管用途，直到 §8 的 Fly 退役完成。生产不再走它们。
 
 ## 我该选哪种部署？（旧的常驻架构）
 
@@ -151,7 +151,8 @@ systemd。也可 `--platform fly|compose|systemd` 显式指定。
   （`cp fly/deploy.fly-multi-bot.toml ./telesubmit.fly.toml`）；之后改它的
   `[build.args]` 镜像版本 → `fly deploy --remote-only`，等健康检查通过后回报。
   默认常驻（always-on）。更低成本的推荐架构（PixivFlow 256MB 常驻 + TelePost
-  512MB auto-stop，投递走 Flycast，**生产已按此部署**）用 `deploy split`，见
+  512MB auto-stop，投递走 Flycast；**切换前的生产曾按此部署**，现在只作为回滚材料保留，
+  见 [docs/SERVERLESS-CUTOVER.md](docs/SERVERLESS-CUTOVER.md) §8）用 `deploy split`，见
   [docs/AUTOSTOP.md](docs/AUTOSTOP.md)。
   `combined.Dockerfile` 只组合已发布版本，不能部署 PixivFlow 未发布提交。源码热修复
   必须使用 `source <PixivFlow目录>`：工具要求工作区干净、移除临时配置中的全部
