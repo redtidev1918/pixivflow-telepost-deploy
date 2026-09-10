@@ -445,3 +445,34 @@ describe('a full sweep converges without duplicating work', () => {
     expect(bot2.every((slot) => slot.scheduleId === 'bot2-daily')).toBe(true);
   });
 });
+
+describe('convergence under concurrency', () => {
+  it('two concurrent sweeps dispatch exactly one attempt and record no error', async () => {
+    const store = new MemoryControlStore();
+    const provider = new FakeProvider();
+    const now = Date.parse('2026-09-11T10:20:00Z');
+    provider.nowMs = now;
+    const deps = {
+      store,
+      provider,
+      schedules: SCHEDULES,
+      mode: 'shadow' as const,
+      callbackUrl: CALLBACK,
+      pixivflowRef: 'test-ref',
+    };
+
+    const [a, b] = await Promise.all([reconcileAll(deps, now), reconcileAll(deps, now)]);
+
+    // The unique (slot_id, attempt) key elects one dispatcher; the other sweep
+    // converges instead of starting a second runner.
+    expect(provider.dispatched.length).toBe(a.dispatched + b.dispatched);
+    expect(a.dispatched + b.dispatched).toBeGreaterThan(0);
+    expect(store.eventsNamed('dispatch_started')).toHaveLength(provider.dispatched.length);
+    // Convergence is not an error worth alerting on.
+    expect(a.errors.length + b.errors.length).toBe(0);
+    for (const slot of store.slots.values()) {
+      const executions = [...store.executions.values()].filter((row) => row.slotId === slot.id);
+      expect(executions.length).toBeLessThanOrEqual(1);
+    }
+  });
+});

@@ -184,8 +184,8 @@ export async function reconcileAll(
   // 1. Adopt provider state for executions already in flight (callback-loss and
   //    dead-runner recovery both funnel through here).
   const open = await store.listOpenExecutions(MAX_EXECUTIONS_PER_SWEEP);
-  for (const execution of open) {
-    try {
+  const events: EventRecord[] = [];
+  for (const execution of open) {    try {
       const outcome = await reconcileExecution(
         store,
         execution,
@@ -205,7 +205,18 @@ export async function reconcileAll(
   //    the previous dispatch, so the next attempt number is count + 1.
   const windowStart = nowMs - (deps.lookbackHours ?? RECONCILIATION_LOOKBACK_HOURS) * 60 * 60 * 1000;
   const active = await store.listActiveOccurrences(windowStart, nowMs);
-  const due = dueForDispatch(active, nowMs, maxAttemptsFor).slice(0, MAX_DISPATCHES_PER_SWEEP);
+
+  // An occurrence that still has a live attempt must never be dispatched again.
+  // Slot status alone is not enough under concurrency: a second sweep can read a
+  // row before the first sweep's write is visible to it and open attempt N+1 next
+  // to an in-flight attempt N. The open-execution set is read AFTER the provider
+  // reconciliation above, so anything genuinely dead has already been resolved.
+  const busy = new Set(
+    (await store.listOpenExecutions(MAX_EXECUTIONS_PER_SWEEP)).map((execution) => execution.slotId)
+  );
+  const due = dueForDispatch(active, nowMs, maxAttemptsFor)
+    .filter((slot) => !busy.has(slot.id))
+    .slice(0, MAX_DISPATCHES_PER_SWEEP);
 
   if (provider.ready === false) {
     // Not configured yet: record the situation and leave the occurrences pending
@@ -256,6 +267,19 @@ export async function reconcileAll(
         // A new attempt for an occurrence that already had one IS a retry; a
         // provider rejection is an error, not a retry (it must stay visible).
         if (slot.attemptCount > 0) summary.retried += 1;
+      } else if (result.detail === 'attempt already open') {
+        // Two sweeps (or two concurrent ticks) both saw this occurrence as due and
+        // the unique (slot_id, attempt) key elected one dispatcher. Converging is
+        // the correct outcome — not an error worth alerting on.
+        events.push({
+          ts: nowMs,
+          event: 'dispatch_converged',
+          slotId: slot.id,
+          scheduleId: slot.scheduleId,
+          executionId: result.executionId,
+          attempt: slot.attemptCount + 1,
+          botId: slot.botId,
+        });
       } else if (result.detail) {
         summary.errors.push(`dispatch ${slot.id}: ${result.detail}`);
       }
@@ -265,6 +289,8 @@ export async function reconcileAll(
       );
     }
   }
+
+  if (events.length > 0) await store.logEvents(events);
 
   await store.recordReconciliation({
     id: deps.runId ?? `reconcile-${nowMs}`,

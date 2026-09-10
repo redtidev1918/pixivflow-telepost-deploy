@@ -32,6 +32,18 @@ import {
   type SlotStatus,
 } from '../src/store';
 
+/**
+ * Rows are handed out as COPIES, exactly like D1 hands out snapshots.
+ *
+ * Returning the live objects made the store observe states real D1 cannot
+ * produce: a caller could filter on one value and later read a mutated one, which
+ * produced a second dispatch attempt for an occurrence that was already being
+ * dispatched. Test-harness fidelity matters more than convenience here.
+ */
+function clone<T extends object>(row: T): T {
+  return { ...row };
+}
+
 export class MemoryControlStore implements ControlPlaneStore {
   readonly slots = new Map<string, OccurrenceRow>();
   readonly executions = new Map<string, ExecutionRow>();
@@ -71,11 +83,15 @@ export class MemoryControlStore implements ControlPlaneStore {
           row.occurrenceAt >= fromMs &&
           row.occurrenceAt <= toMs
       )
-      .sort((a, b) => a.occurrenceAt - b.occurrenceAt);
+      .sort((a, b) => a.occurrenceAt - b.occurrenceAt)
+      .map(clone);
   }
 
   async listRecentOccurrences(limit: number): Promise<OccurrenceRow[]> {
-    return [...this.slots.values()].sort((a, b) => b.occurrenceAt - a.occurrenceAt).slice(0, limit);
+    return [...this.slots.values()]
+      .sort((a, b) => b.occurrenceAt - a.occurrenceAt)
+      .slice(0, limit)
+      .map(clone);
   }
 
   async countByStatus(): Promise<Record<string, number>> {
@@ -129,19 +145,22 @@ export class MemoryControlStore implements ControlPlaneStore {
   }
 
   async getExecution(executionId: string): Promise<ExecutionRow | null> {
-    return this.executions.get(executionId) ?? null;
+    const row = this.executions.get(executionId);
+    return row ? clone(row) : null;
   }
 
   async latestExecutionForSlot(slotId: string): Promise<ExecutionRow | null> {
     const rows = [...this.executions.values()].filter((row) => row.slotId === slotId);
-    return rows.sort((a, b) => b.attempt - a.attempt)[0] ?? null;
+    const latest = rows.sort((a, b) => b.attempt - a.attempt)[0];
+    return latest ? clone(latest) : null;
   }
 
   async listOpenExecutions(limit: number): Promise<ExecutionRow[]> {
     return [...this.executions.values()]
       .filter((row) => !isTerminalExecution(row.status))
       .sort((a, b) => a.createdAt - b.createdAt)
-      .slice(0, limit);
+      .slice(0, limit)
+      .map(clone);
   }
 
   async listUnclaimedExecutions(olderThanMs: number, limit: number): Promise<ExecutionRow[]> {
@@ -202,7 +221,8 @@ export class MemoryControlStore implements ControlPlaneStore {
   }
 
   async getOccurrence(slotId: string): Promise<OccurrenceRow | null> {
-    return this.slots.get(slotId) ?? null;
+    const row = this.slots.get(slotId);
+    return row ? clone(row) : null;
   }
 
   async countExecutionsForSlot(slotId: string): Promise<number> {
@@ -248,7 +268,7 @@ export class MemoryControlStore implements ControlPlaneStore {
   }
 
   async listSlotItems(slotId: string): Promise<SlotItemRow[]> {
-    return [...this.items.values()].filter((row) => row.slotId === slotId);
+    return [...this.items.values()].filter((row) => row.slotId === slotId).map(clone);
   }
 
   // ---- reviews --------------------------------------------------------------
@@ -307,14 +327,16 @@ export class MemoryControlStore implements ControlPlaneStore {
   }
 
   async getReview(reviewId: string): Promise<ReviewRecord | null> {
-    return this.reviews.get(reviewId) ?? null;
+    const review = this.reviews.get(reviewId);
+    return review ? clone(review) : null;
   }
 
   async listPendingReviews(limit: number): Promise<ReviewRecord[]> {
     return [...this.reviews.values()]
       .filter((review) => review.status === 'pending')
       .sort((a, b) => a.createdAt - b.createdAt)
-      .slice(0, limit);
+      .slice(0, limit)
+      .map(clone);
   }
 
   async transitionReview(input: {
