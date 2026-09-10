@@ -49,6 +49,8 @@ export interface StartAttemptInput {
   mode: 'live' | 'shadow' | 'dry-run';
   /** Deployment-owned: which PixivFlow ref the runner executes. */
   pixivflowRef: string;
+  /** The shared external resource this execution consumes (concurrency identity). */
+  credentialKey: string;
 }
 
 export interface StartAttemptResult {
@@ -111,6 +113,7 @@ export async function startAttempt(
       callbackUrl: input.callbackUrl,
       mode: input.mode,
       pixivflowRef: input.pixivflowRef,
+      credentialKey: input.credentialKey,
     });
   } catch (error) {
     // A thrown dispatch (network failure, provider bug, bad credentials) must be
@@ -207,6 +210,11 @@ export interface ApplyResultInput {
   result?: string;
   error?: string;
   errorClass?: string;
+  /**
+   * The server's own cooldown hint, when the runner saw one (a Pixiv 429 with a
+   * Retry-After). The server knows better than a local guess, so it wins.
+   */
+  retryAfterMs?: number;
 }
 
 export interface ApplyResultOutcome {
@@ -250,12 +258,9 @@ export async function applyExecutionResult(
   // after Pixiv rate-limit cooldowns was retried straight away, and the retry then
   // succeeded in 6 minutes — so the immediate retry was pure waste on an account
   // that simply needed time. Clearing it on dispatch keeps the state honest.
-  if (!terminal && retryBackoffMs(input.status, execution.attempt) > 0) {
-    await store.setRetryNotBefore(
-      execution.slotId,
-      nowMs + retryBackoffMs(input.status, execution.attempt),
-      nowMs
-    );
+  if (!terminal) {
+    const delay = retryDelayMs(input, execution.attempt);
+    if (delay > 0) await store.setRetryNotBefore(execution.slotId, nowMs + delay, nowMs);
   }
   await store.setSlotStatus(execution.slotId, slotStatus, nowMs, {
     ...(input.error !== undefined ? { error: input.error } : {}),
@@ -318,6 +323,28 @@ export async function applyExecutionResult(
  * retried in a tight loop. A runner that reports an explicit `retry_after` wins
  * over this (see the result route), because the server knows better than a guess.
  */
+/**
+ * How long to wait before retrying, honouring the server over the local guess.
+ *
+ * A rate-limited run is not the same failure as a broken provider: the account is
+ * healthy and the server has told us when it will be, so a local exponential guess
+ * either wastes time or retries too early. `errorClass === 'pixiv_rate_limit'`
+ * therefore uses `max(server Retry-After, local backoff)` — the backoff still acts
+ * as a floor, so a server that reports nothing cannot cause a tight retry loop.
+ */
+export function retryDelayMs(
+  input: { status: ExecutionStatus; errorClass?: string; retryAfterMs?: number },
+  attempt: number
+): number {
+  const local = retryBackoffMs(input.status, attempt);
+  if (local === 0) return 0;
+  const server =
+    input.errorClass === 'pixiv_rate_limit' && typeof input.retryAfterMs === 'number'
+      ? Math.max(0, Math.min(input.retryAfterMs, RETRY_MAX_MS))
+      : 0;
+  return Math.max(local, server);
+}
+
 export const RETRY_BASE_MS = 60 * 1000;
 export const RETRY_MAX_MS = 60 * 60 * 1000;
 

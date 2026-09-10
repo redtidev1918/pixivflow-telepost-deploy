@@ -326,6 +326,7 @@ export async function reconcileAll(
           callbackUrl: deps.callbackUrl,
           mode: deps.mode,
           pixivflowRef: deps.pixivflowRef,
+          credentialKey: schedule.credential,
         },
         nowMs
       );

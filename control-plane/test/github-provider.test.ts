@@ -14,7 +14,7 @@ const request: DispatchRequest = {
   targets: ['bot1-illust-botefuku', 'bot1-novel-botefuku'],
   callbackUrl: 'https://control.example/control',
   mode: 'shadow',
-  pixivflowRef: 'v9.9.9',
+  pixivflowRef: 'v9.9.9', credentialKey: 'pixiv-refresh-token',
 };
 
 function provider(fetchImpl: typeof fetch) {

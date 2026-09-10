@@ -294,6 +294,9 @@ export async function handleControl(
         ...(typeof body.result === 'string' ? { result: body.result } : {}),
         ...(typeof body.error === 'string' ? { error: body.error } : {}),
         ...(typeof body.error_class === 'string' ? { errorClass: body.error_class } : {}),
+        ...(typeof body.retry_after_ms === 'number' && Number.isFinite(body.retry_after_ms)
+          ? { retryAfterMs: body.retry_after_ms }
+          : {}),
       },
       nowMs
     );

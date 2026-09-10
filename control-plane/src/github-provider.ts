@@ -133,6 +133,7 @@ export class GitHubActionsExecutionProvider implements ExecutionProvider {
             callback_url: request.callbackUrl,
             mode: request.mode,
             pixivflow_ref: request.pixivflowRef,
+            credential_key: request.credentialKey,
           },
         }),
       }

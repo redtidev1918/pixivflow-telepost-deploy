@@ -10,6 +10,7 @@ import {
   statusFromConclusion,
   DISPATCH_CLAIM_GRACE_MS,
   RETRY_BASE_MS,
+  retryDelayMs,
   RETRY_MAX_MS,
   retryBackoffMs,
 } from '../src/execution';
@@ -19,6 +20,7 @@ import { SCHEDULES } from '../src/schedules';
 import { FakeProvider, MemoryControlStore } from './memory-store';
 
 const CALLBACK = 'https://control.example/control';
+const CREDENTIAL = 'pixiv-refresh-token';
 const schedule = SCHEDULES.find((s) => s.id === 'bot1-daily')!;
 
 /** Seed one due occurrence (18:00 Shanghai == 10:00Z). */
@@ -54,7 +56,7 @@ describe('dispatch is at-most-once per attempt', () => {
         botId: schedule.botId,
         attempt: 1,
         targets: ['bot1-illust-botefuku'],
-        callbackUrl: CALLBACK, pixivflowRef: 'test-ref',
+        callbackUrl: CALLBACK, pixivflowRef: 'test-ref', credentialKey: CREDENTIAL,
         mode: 'shadow',
       },
       NOW
@@ -79,7 +81,7 @@ describe('dispatch is at-most-once per attempt', () => {
       botId: schedule.botId,
       attempt: 1,
       targets: ['bot1-illust-botefuku'],
-      callbackUrl: CALLBACK, pixivflowRef: 'test-ref',
+      callbackUrl: CALLBACK, pixivflowRef: 'test-ref', credentialKey: CREDENTIAL,
       mode: 'shadow' as const,
     };
 
@@ -105,7 +107,7 @@ describe('dispatch is at-most-once per attempt', () => {
     const result = await startAttempt(
       store,
       provider,
-      { slot, scheduleId: schedule.id, botId: schedule.botId, attempt: 1, targets: [], callbackUrl: CALLBACK, pixivflowRef: 'test-ref', mode: 'shadow' },
+      { slot, scheduleId: schedule.id, botId: schedule.botId, attempt: 1, targets: [], callbackUrl: CALLBACK, pixivflowRef: 'test-ref', credentialKey: CREDENTIAL, mode: 'shadow' },
       NOW
     );
 
@@ -134,7 +136,7 @@ describe('dispatch is at-most-once per attempt', () => {
         botId: schedule.botId,
         attempt: 1,
         targets: [],
-        callbackUrl: CALLBACK, pixivflowRef: 'test-ref',
+        callbackUrl: CALLBACK, pixivflowRef: 'test-ref', credentialKey: CREDENTIAL,
         mode: 'shadow',
       },
       NOW
@@ -155,7 +157,7 @@ describe('results are recorded once and rolled up honestly', () => {
     const { executionId } = await startAttempt(
       store,
       provider,
-      { slot, scheduleId: schedule.id, botId: schedule.botId, attempt: 1, targets: [], callbackUrl: CALLBACK, pixivflowRef: 'test-ref', mode: 'shadow' },
+      { slot, scheduleId: schedule.id, botId: schedule.botId, attempt: 1, targets: [], callbackUrl: CALLBACK, pixivflowRef: 'test-ref', credentialKey: CREDENTIAL, mode: 'shadow' },
       NOW
     );
 
@@ -173,7 +175,7 @@ describe('results are recorded once and rolled up honestly', () => {
     const { executionId } = await startAttempt(
       store,
       provider,
-      { slot, scheduleId: schedule.id, botId: schedule.botId, attempt: 1, targets: [], callbackUrl: CALLBACK, pixivflowRef: 'test-ref', mode: 'shadow' },
+      { slot, scheduleId: schedule.id, botId: schedule.botId, attempt: 1, targets: [], callbackUrl: CALLBACK, pixivflowRef: 'test-ref', credentialKey: CREDENTIAL, mode: 'shadow' },
       NOW
     );
 
@@ -204,7 +206,7 @@ describe('results are recorded once and rolled up honestly', () => {
     const attempt1 = await startAttempt(
       store,
       provider,
-      { slot, scheduleId: schedule.id, botId: schedule.botId, attempt: 1, targets: [], callbackUrl: CALLBACK, pixivflowRef: 'test-ref', mode: 'shadow' },
+      { slot, scheduleId: schedule.id, botId: schedule.botId, attempt: 1, targets: [], callbackUrl: CALLBACK, pixivflowRef: 'test-ref', credentialKey: CREDENTIAL, mode: 'shadow' },
       NOW
     );
     await applyExecutionResult(
@@ -220,7 +222,7 @@ describe('results are recorded once and rolled up honestly', () => {
     const attempt2 = await startAttempt(
       store,
       provider,
-      { slot: afterRetry, scheduleId: schedule.id, botId: schedule.botId, attempt: afterRetry.attemptCount + 1, targets: [], callbackUrl: CALLBACK, pixivflowRef: 'test-ref', mode: 'shadow' },
+      { slot: afterRetry, scheduleId: schedule.id, botId: schedule.botId, attempt: afterRetry.attemptCount + 1, targets: [], callbackUrl: CALLBACK, pixivflowRef: 'test-ref', credentialKey: CREDENTIAL, mode: 'shadow' },
       NOW + 2000
     );
     expect(attempt2.executionId).toBe(executionIdFor(slot.id, 2));
@@ -234,7 +236,7 @@ describe('results are recorded once and rolled up honestly', () => {
     await startAttempt(
       store,
       provider,
-      { slot: retried, scheduleId: schedule.id, botId: schedule.botId, attempt: retried.attemptCount + 1, targets: [], callbackUrl: CALLBACK, pixivflowRef: 'test-ref', mode: 'shadow' },
+      { slot: retried, scheduleId: schedule.id, botId: schedule.botId, attempt: retried.attemptCount + 1, targets: [], callbackUrl: CALLBACK, pixivflowRef: 'test-ref', credentialKey: CREDENTIAL, mode: 'shadow' },
       NOW + 4000
     );
     const last = await applyExecutionResult(
@@ -258,7 +260,7 @@ describe('results are recorded once and rolled up honestly', () => {
     const { executionId } = await startAttempt(
       store,
       provider,
-      { slot, scheduleId: schedule.id, botId: schedule.botId, attempt: 1, targets: [], callbackUrl: CALLBACK, pixivflowRef: 'test-ref', mode: 'shadow' },
+      { slot, scheduleId: schedule.id, botId: schedule.botId, attempt: 1, targets: [], callbackUrl: CALLBACK, pixivflowRef: 'test-ref', credentialKey: CREDENTIAL, mode: 'shadow' },
       NOW
     );
     await applyExecutionResult(
@@ -278,7 +280,7 @@ describe('losing a callback is survivable (provider state is authoritative)', ()
     const { executionId } = await startAttempt(
       store,
       provider,
-      { slot, scheduleId: schedule.id, botId: schedule.botId, attempt: 1, targets: [], callbackUrl: CALLBACK, pixivflowRef: 'test-ref', mode: 'shadow' },
+      { slot, scheduleId: schedule.id, botId: schedule.botId, attempt: 1, targets: [], callbackUrl: CALLBACK, pixivflowRef: 'test-ref', credentialKey: CREDENTIAL, mode: 'shadow' },
       NOW
     );
     // The runner claimed the run, then died before posting its result.
@@ -300,7 +302,7 @@ describe('losing a callback is survivable (provider state is authoritative)', ()
     const { executionId } = await startAttempt(
       store,
       provider,
-      { slot, scheduleId: schedule.id, botId: schedule.botId, attempt: 1, targets: [], callbackUrl: CALLBACK, pixivflowRef: 'test-ref', mode: 'shadow' },
+      { slot, scheduleId: schedule.id, botId: schedule.botId, attempt: 1, targets: [], callbackUrl: CALLBACK, pixivflowRef: 'test-ref', credentialKey: CREDENTIAL, mode: 'shadow' },
       NOW
     );
     // GitHub accepted the dispatch but our HTTP call never returned a run id.
@@ -328,7 +330,7 @@ describe('losing a callback is survivable (provider state is authoritative)', ()
     const { executionId } = await startAttempt(
       store,
       provider,
-      { slot, scheduleId: schedule.id, botId: schedule.botId, attempt: 1, targets: [], callbackUrl: CALLBACK, pixivflowRef: 'test-ref', mode: 'shadow' },
+      { slot, scheduleId: schedule.id, botId: schedule.botId, attempt: 1, targets: [], callbackUrl: CALLBACK, pixivflowRef: 'test-ref', credentialKey: CREDENTIAL, mode: 'shadow' },
       NOW
     );
     provider.recent = []; // nothing was actually started
@@ -353,7 +355,7 @@ describe('losing a callback is survivable (provider state is authoritative)', ()
     const { executionId } = await startAttempt(
       store,
       provider,
-      { slot, scheduleId: schedule.id, botId: schedule.botId, attempt: 1, targets: [], callbackUrl: CALLBACK, pixivflowRef: 'test-ref', mode: 'shadow' },
+      { slot, scheduleId: schedule.id, botId: schedule.botId, attempt: 1, targets: [], callbackUrl: CALLBACK, pixivflowRef: 'test-ref', credentialKey: CREDENTIAL, mode: 'shadow' },
       NOW
     );
     const outcome = await reconcileExecution(
@@ -383,7 +385,7 @@ describe('losing a callback is survivable (provider state is authoritative)', ()
     const { executionId } = await startAttempt(
       store,
       provider,
-      { slot, scheduleId: schedule.id, botId: schedule.botId, attempt: 1, targets: [], callbackUrl: CALLBACK, pixivflowRef: 'test-ref', mode: 'shadow' },
+      { slot, scheduleId: schedule.id, botId: schedule.botId, attempt: 1, targets: [], callbackUrl: CALLBACK, pixivflowRef: 'test-ref', credentialKey: CREDENTIAL, mode: 'shadow' },
       NOW
     );
     await claimExecution(store, { executionId, providerRunId: '1' }, NOW + 500);
@@ -399,7 +401,7 @@ describe('losing a callback is survivable (provider state is authoritative)', ()
     const attempt2 = await startAttempt(
       store,
       provider,
-      { slot: slotAfter, scheduleId: schedule.id, botId: schedule.botId, attempt: slotAfter.attemptCount + 1, targets: [], callbackUrl: CALLBACK, pixivflowRef: 'test-ref', mode: 'shadow' },
+      { slot: slotAfter, scheduleId: schedule.id, botId: schedule.botId, attempt: slotAfter.attemptCount + 1, targets: [], callbackUrl: CALLBACK, pixivflowRef: 'test-ref', credentialKey: CREDENTIAL, mode: 'shadow' },
       NOW + 2000
     );
     expect(attempt2.executionId).toBe(executionIdFor(slot.id, 2));
@@ -462,7 +464,7 @@ describe('convergence under concurrency', () => {
       schedules: SCHEDULES,
       mode: 'shadow' as const,
       callbackUrl: CALLBACK,
-      pixivflowRef: 'test-ref',
+      pixivflowRef: 'test-ref', credentialKey: CREDENTIAL,
     };
 
     const [a, b] = await Promise.all([reconcileAll(deps, now), reconcileAll(deps, now)]);
@@ -497,7 +499,7 @@ describe('durable duplicate history for disposable runners', () => {
     const { executionId } = await startAttempt(
       store,
       provider,
-      { slot, scheduleId: schedule.id, botId: schedule.botId, attempt: 1, targets: [], callbackUrl: CALLBACK, pixivflowRef: 'r', mode: 'shadow' },
+      { slot, scheduleId: schedule.id, botId: schedule.botId, attempt: 1, targets: [], callbackUrl: CALLBACK, pixivflowRef: 'r', credentialKey: CREDENTIAL, mode: 'shadow' },
       NOW
     );
 
@@ -558,7 +560,7 @@ describe('a job-level timeout is a retryable outcome, not a stranded occurrence'
     const { executionId } = await startAttempt(
       store,
       provider,
-      { slot, scheduleId: schedule.id, botId: schedule.botId, attempt: 1, targets: [], callbackUrl: CALLBACK, pixivflowRef: 'test-ref', mode: 'shadow' },
+      { slot, scheduleId: schedule.id, botId: schedule.botId, attempt: 1, targets: [], callbackUrl: CALLBACK, pixivflowRef: 'test-ref', credentialKey: CREDENTIAL, mode: 'shadow' },
       NOW
     );
     await claimExecution(store, { executionId, providerRunId: '1' }, NOW + 500);
@@ -684,6 +686,7 @@ describe('retry backoff', () => {
         mode: 'shadow',
         callbackUrl: 'https://cp.test/control',
         pixivflowRef: 'feat/execute-slot',
+        credentialKey: 'pixiv-refresh-token',
       } as never,
       NOW
     );
@@ -697,9 +700,75 @@ describe('retry backoff', () => {
         mode: 'shadow',
         callbackUrl: 'https://cp.test/control',
         pixivflowRef: 'feat/execute-slot',
+        credentialKey: 'pixiv-refresh-token',
       } as never,
       NOW + 11 * 60_000
     );
     expect(allowed.dispatched).toBe(1);
+  });
+});
+
+/**
+ * A rate-limited account and a broken provider share an exit code but not a remedy.
+ * The server told us when it will accept requests again, so its answer wins over a
+ * local guess — while the local backoff stays as a floor, so a server that reports
+ * nothing cannot cause a tight retry loop.
+ */
+describe('retry delay honours the server', () => {
+  it('uses the server cooldown when it is longer than the local backoff', () => {
+    const delay = retryDelayMs(
+      { status: 'failed', errorClass: 'pixiv_rate_limit', retryAfterMs: 45 * 60_000 },
+      1
+    );
+    expect(delay).toBe(45 * 60_000);
+  });
+
+  it('still waits at least the local backoff when the server asks for less', () => {
+    const delay = retryDelayMs(
+      { status: 'failed', errorClass: 'pixiv_rate_limit', retryAfterMs: 1000 },
+      2
+    );
+    expect(delay).toBe(RETRY_BASE_MS * 2);
+  });
+
+  it('caps an absurd server hint', () => {
+    const delay = retryDelayMs(
+      { status: 'failed', errorClass: 'pixiv_rate_limit', retryAfterMs: 10 * 60 * 60_000 },
+      1
+    );
+    expect(delay).toBe(RETRY_MAX_MS);
+  });
+
+  it('ignores a cooldown from a non-rate-limit failure', () => {
+    // A download failure must not inherit a rate-limit hint.
+    const delay = retryDelayMs({ status: 'failed', errorClass: 'download_failed', retryAfterMs: 60_000 }, 1);
+    expect(delay).toBe(RETRY_BASE_MS);
+  });
+
+  it('never delays a successful run', () => {
+    expect(retryDelayMs({ status: 'success', retryAfterMs: 60_000 }, 1)).toBe(0);
+  });
+});
+
+describe('the credential travels with the dispatch', () => {
+  it('sends the schedule credential as the runner concurrency identity', async () => {
+    const store = new MemoryControlStore();
+    const provider = new FakeProvider();
+    const slot = await seedDueSlot(store, NOW);
+
+    await startAttempt(store, provider, {
+      slot,
+      scheduleId: schedule.id,
+      botId: schedule.botId,
+      attempt: 1,
+      targets: [],
+      callbackUrl: CALLBACK,
+      pixivflowRef: 'test-ref',
+      credentialKey: schedule.credential,
+      mode: 'shadow',
+    }, NOW);
+
+    expect(provider.dispatches[0]!.credentialKey).toBe(schedule.credential);
+    expect(schedule.credential).toBe('pixiv-refresh-token');
   });
 });

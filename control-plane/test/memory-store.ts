@@ -597,6 +597,8 @@ export class FakeProvider implements ExecutionProvider {
   dispatched: Array<{ slotId: string; attempt: number }> = [];
   runs = new Map<string, ProviderRun>();
   recent: ProviderRun[] = [];
+  /** Every dispatch request this fake saw, in order. */
+  readonly dispatches: Array<{ slotId: string; credentialKey: string; attempt: number; ref: string }> = [];
   acceptDispatch = true;
   dispatchError: string | undefined;
   /** Simulate a provider whose dispatch throws (network failure, runtime bug). */
@@ -624,6 +626,12 @@ export class FakeProvider implements ExecutionProvider {
       createdAt: this.nowMs,
     };
     this.runs.set(runId, run);
+    this.dispatches.push({
+      slotId: request.slotId,
+      credentialKey: request.credentialKey,
+      attempt: request.attempt,
+      ref: request.pixivflowRef,
+    });
     this.recent.push(run);
     return { accepted: true };
   }

@@ -50,6 +50,14 @@ export interface DispatchRequest {
    * command, or a version whose result contract differs).
    */
   pixivflowRef: string;
+  /**
+   * The shared external resource this execution consumes.
+   *
+   * Sent so the runner can key its concurrency group on the SAME identity the D1
+   * admission uses. A hardcoded group name would serialise two unrelated accounts
+   * the day a second credential exists.
+   */
+  credentialKey: string;
 }
 
 export interface DispatchResult {

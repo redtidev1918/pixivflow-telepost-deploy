@@ -58,6 +58,15 @@ on:
         required: false
         type: string
         default: 'master'
+      # The shared external resource this execution consumes. The control plane
+      # sends its `schedule.credential`, so the concurrency group below keys on the
+      # SAME identity the D1 admission uses. Hardcoding a global constant would
+      # serialise two unrelated accounts the day a second one exists.
+      credential_key:
+        description: 'Shared credential this execution consumes (concurrency group)'
+        required: true
+        default: 'pixiv-refresh-token'
+        type: string
       job_timeout_minutes:
         description: 'Hard job bound. 1 is for validating the timeout path only.'
         required: false
@@ -89,7 +98,7 @@ on:
 # sweep. An unrecognised key here risks the whole workflow failing to parse, which is
 # a far worse trade for a backstop that is not load-bearing.
 concurrency:
-  group: pixivflow-pixiv-account
+  group: pixivflow-${{ inputs.credential_key }}
   cancel-in-progress: false
 
 permissions:
@@ -352,8 +361,17 @@ jobs:
                "work_id": t.get("workId"), "error": t.get("error"), "error_class": t.get("status")}
               for t in result.get("targets", []) if t.get("targetId")
           ]
-          print(json.dumps({"status": status, "result": json.dumps(result), "items": items,
-                            "error": result.get("error") or (None if status == "success" else f"exit code {code}")}))
+          print(json.dumps({
+              "status": status,
+              "result": json.dumps(result),
+              "items": items,
+              "error": result.get("error") or (None if status == "success" else f"exit code {code}"),
+              # A rate-limited account needs the server's own cooldown; a broken
+              # provider must not be retried on the same schedule. The exit code is
+              # the same for both, so the runner's categories have to travel.
+              "error_class": result.get("errorClass"),
+              "retry_after_ms": result.get("retryAfterMs"),
+          }))
           PY
 
           ITEMS=$(python3 -c 'import json,sys;print(json.dumps(json.load(open("/tmp/result.json"))["items"]))')
@@ -371,7 +389,13 @@ jobs:
           import json, sys
           path = sys.argv[1]
           data = json.load(open('/tmp/result.json'))
-          print(json.dumps({"status": data["status"], "result": data["result"], "error": data["error"]}))
+          print(json.dumps({k: v for k, v in {
+              "status": data["status"],
+              "result": data["result"],
+              "error": data["error"],
+              "error_class": data.get("error_class"),
+              "retry_after_ms": data.get("retry_after_ms"),
+          }.items() if v is not None}))
           PY
 
           result_code=000
