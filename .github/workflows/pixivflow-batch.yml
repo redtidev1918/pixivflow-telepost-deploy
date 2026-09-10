@@ -127,6 +127,12 @@ jobs:
       OCCURRENCE_AT: ${{ inputs.occurrence_at }}
       CALLBACK_URL: ${{ inputs.callback_url }}
       CONTROL_SECRET: ${{ secrets.CALLBACK_SECRET }}
+      # The versioned production config names the review groups and the channels, and
+      # resolves their tokens from here. Live mode without these would silently have no
+      # delivery target at all.
+      CONTROL_PLANE_CALLBACK_SECRET: ${{ secrets.CALLBACK_SECRET }}
+      TELEGRAM_BOT1_TOKEN: ${{ secrets.TELEGRAM_BOT1_TOKEN }}
+      TELEGRAM_BOT2_TOKEN: ${{ secrets.TELEGRAM_BOT2_TOKEN }}
       PIXIV_CLIENT_ID: ${{ secrets.PIXIV_CLIENT_ID }}
       PIXIV_CLIENT_SECRET: ${{ secrets.PIXIV_CLIENT_SECRET }}
       PIXIV_DEVICE_TOKEN: ${{ secrets.PIXIV_DEVICE_TOKEN }}
@@ -163,6 +169,9 @@ jobs:
           # Mask before it can reach any output; the value is never printed.
           echo "::add-mask::$token"
           printf 'PIXIV_REFRESH_TOKEN=%s\n' "$token" >> "$GITHUB_ENV"
+          # The config wants the control plane's base URL and the callback URL is that
+          # plus /control, so derive it rather than keeping a second copy in sync.
+          printf 'CONTROL_PLANE_URL=%s\n' "${CALLBACK_URL%/control}" >> "$GITHUB_ENV"
           echo "credential resolved from: $source"
 
       - name: Checkout control plane (for the versioned shadow config)
@@ -239,7 +248,20 @@ jobs:
           # non-zero exit here is DATA (partial/failed/uncertain), not a step
           # failure, so -e must be turned off explicitly.
           set +e
-          CONFIG="$GITHUB_WORKSPACE/control-plane/config/pixivflow.shadow.json"
+          # Live uses the versioned production config (real review groups, real
+          # channels); anything else uses the shadow config, which cannot publish at all.
+          # Selecting by mode means a shadow run can never be handed production targets
+          # by a workflow edit.
+          if [ "$MODE" = "live" ]; then
+            CONFIG="$GITHUB_WORKSPACE/control-plane/config/pixivflow.production.json"
+          else
+            CONFIG="$GITHUB_WORKSPACE/control-plane/config/pixivflow.shadow.json"
+          fi
+          echo "mode=$MODE config=$(basename "$CONFIG")"
+          if [ "$MODE" = "live" ] && ! grep -q '"delivery"' "$CONFIG"; then
+            echo "::error::live mode without a delivery target would publish nothing"
+            exit 1
+          fi
           ARGS=(--config "$CONFIG" --schedule-id "$SCHEDULE_ID" --slot-id "$SLOT_ID"
                 --attempt "$ATTEMPT" --mode "$MODE" --result-file "$GITHUB_WORKSPACE/slot-result.json"
                 --exclude-work-ids "$GITHUB_WORKSPACE/processed-works.json")
