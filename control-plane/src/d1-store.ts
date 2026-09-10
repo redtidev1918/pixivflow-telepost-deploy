@@ -48,6 +48,7 @@ export interface D1Like {
 }
 
 interface SlotRowDb {
+  retry_not_before: number | null;
   id: string;
   schedule_id: string;
   bot_id: string;
@@ -73,13 +74,14 @@ function toRow(row: SlotRowDb): OccurrenceRow {
     dispatchDeadline: row.dispatch_deadline,
     currentExecutionId: row.current_execution_id,
     dispatchedAt: row.dispatched_at,
+    retryNotBefore: row.retry_not_before ?? null,
     startedAt: row.started_at,
     completedAt: row.completed_at,
     lastError: row.last_error,
   };
 }
 
-const SLOT_COLUMNS = `id, schedule_id, bot_id, occurrence_at, status, attempt_count,
+const SLOT_COLUMNS = `id, schedule_id, bot_id, occurrence_at, status, attempt_count, retry_not_before,
   dispatch_deadline, current_execution_id, dispatched_at, started_at, completed_at, last_error`;
 
 interface ExecutionRowDb {
@@ -251,6 +253,22 @@ export class D1ControlStore implements ControlPlaneStore {
     return counts;
   }
 
+  async setRetryNotBefore(slotId: string, atMs: number, nowMs: number): Promise<void> {
+    await this.db
+      .prepare(`UPDATE slot_occurrences SET retry_not_before = ?, last_error = last_error WHERE id = ?`)
+      .bind(atMs, slotId)
+      .run();
+    void nowMs;
+  }
+
+  async clearRetryNotBefore(slotId: string, nowMs: number): Promise<void> {
+    await this.db
+      .prepare(`UPDATE slot_occurrences SET retry_not_before = NULL WHERE id = ?`)
+      .bind(slotId)
+      .run();
+    void nowMs;
+  }
+
   async markExpired(slotId: string, reason: string, nowMs: number): Promise<void> {
     await this.db
       .prepare(
@@ -320,6 +338,9 @@ export class D1ControlStore implements ControlPlaneStore {
         dispatched: row.dispatched,
         reconciled: row.reconciled,
         retried: row.retried,
+        // Not persisted as its own column: a held occurrence is simply one that
+        // stayed pending, which `created` vs `dispatched` already reveals.
+        held: 0,
         expired: row.expired,
         errors: row.errors ? (JSON.parse(row.errors) as string[]) : [],
       },

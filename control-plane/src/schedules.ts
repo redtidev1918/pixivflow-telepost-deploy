@@ -31,10 +31,37 @@ export interface ScheduleDefinition {
    * (it becomes `expired`). Reliability and content policy are separate concerns
    * — recovery may still be possible long after a slot stopped being wanted.
    */
+  /** The shared external credential this schedule's execution consumes. */
+  credential: string;
   dispatchDeadlineHours: number;
   /** Total dispatch attempts allowed for one occurrence, retries included. */
   maxAttempts: number;
 }
+
+/**
+ * The Pixiv credential is a SHARED, externally rate-limited resource.
+ *
+ * Slot-level concurrency is not enough: two different scheduled occurrences that
+ * share one Pixiv account will still hammer it together. Found the hard way — a
+ * shadow run that dispatched four occurrences at once pushed the account into rate
+ * limit cooldown, two slots spent 30 minutes waiting and were killed by the run
+ * budget, and a retry then succeeded in 6 minutes. Normal bot2 duration is 3.5-6.4
+ * minutes, so the 30 minutes was contention, not workload.
+ *
+ * The control plane is therefore the first admission layer: an occurrence whose
+ * credential is busy stays `pending` and is dispatched by a later sweep, once the
+ * holder is terminal. GitHub's per-slot concurrency group remains as a second line
+ * of defence, but it cannot see across slots and is not the queue.
+ */
+export const PIXIV_CREDENTIAL = 'pixiv-refresh-token';
+
+/** Concurrent executions allowed per credential. One account, one runner. */
+export const CREDENTIAL_ADMISSION: Record<string, number> = {
+  [PIXIV_CREDENTIAL]: 1,
+};
+
+/** A credential is released when the holder is terminal; this bounds a lost one. */
+export const CREDENTIAL_HOLD_MAX_MS = 150 * 60 * 1000;
 
 /** How far back reconciliation looks for occurrences it should have created. */
 export const RECONCILIATION_LOOKBACK_HOURS = 24;
@@ -66,6 +93,7 @@ export const SCHEDULES: ScheduleDefinition[] = [
       { id: 'bot1-illust-botefuku', workType: 'illustration' },
       { id: 'bot1-novel-botefuku', workType: 'novel' },
     ],
+    credential: PIXIV_CREDENTIAL,
     dispatchDeadlineHours: 6,
     maxAttempts: DEFAULT_MAX_ATTEMPTS,
   },
@@ -78,6 +106,7 @@ export const SCHEDULES: ScheduleDefinition[] = [
       { id: 'bot2-illust-marunomi', workType: 'illustration' },
       { id: 'bot2-novel-marunomi', workType: 'novel' },
     ],
+    credential: PIXIV_CREDENTIAL,
     dispatchDeadlineHours: 6,
     maxAttempts: DEFAULT_MAX_ATTEMPTS,
   },

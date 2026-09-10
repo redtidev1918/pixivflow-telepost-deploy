@@ -1,0 +1,12 @@
+-- A bounded "do not retry before" for an occurrence.
+--
+-- Retrying immediately after a run was killed by its own watchdog is how a second
+-- runner gets spent on the same condition. Observed in shadow validation: two slots
+-- hit Pixiv rate-limit cooldowns, burned their 30-minute run budget, and were
+-- retried straight away; the retry succeeded in 6 minutes, so the immediate retry
+-- was pure waste on a contended account.
+--
+-- The column is deliberately on the occurrence rather than on the execution: the
+-- decision "may this be dispatched now" belongs to the occurrence, and clearing it
+-- on a successful dispatch keeps the state honest.
+ALTER TABLE slot_occurrences ADD COLUMN retry_not_before INTEGER;

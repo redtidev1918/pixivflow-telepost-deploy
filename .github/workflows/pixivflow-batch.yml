@@ -70,11 +70,26 @@ on:
           - '90'
           - '120'
 
-# Layer 2 of exactly-once: one concurrency group per canonical slot. A duplicate
-# dispatch queues behind the running one instead of racing it. Layer 1 is D1:
-# UNIQUE(schedule_id, occurrence_at) plus the (slot_id, attempt) execution key.
+# Layer 2 of exactly-once, and the second line of defence for a shared account.
+#
+# The group is the CREDENTIAL, not the slot. Every schedule here consumes the same
+# Pixiv account and Pixiv rate-limits per account, so two different slots running
+# together is the failure that matters — and a per-slot group cannot see that.
+# Account-level grouping is strictly stronger: it also serialises a duplicate
+# dispatch of the same slot.
+#
+# Layer 1 is D1: UNIQUE(schedule_id, occurrence_at), UNIQUE(slot_id, attempt), and
+# account-level admission in the reconciliation sweep, which is what actually keeps
+# a due occurrence pending instead of spending a runner. This group only stops a
+# duplicate dispatch from racing.
+#
+# `queue: max` is deliberately NOT set: GitHub's default replaces a waiting pending
+# run, which would matter if GitHub were the queue. It is not — the control plane
+# owns admission, so a replaced pending run is simply dispatched again by the next
+# sweep. An unrecognised key here risks the whole workflow failing to parse, which is
+# a far worse trade for a backstop that is not load-bearing.
 concurrency:
-  group: pixivflow-${{ inputs.slot_id }}
+  group: pixivflow-pixiv-account
   cancel-in-progress: false
 
 permissions:

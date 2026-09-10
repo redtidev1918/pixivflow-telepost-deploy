@@ -9,6 +9,9 @@ import {
   startAttempt,
   statusFromConclusion,
   DISPATCH_CLAIM_GRACE_MS,
+  RETRY_BASE_MS,
+  RETRY_MAX_MS,
+  retryBackoffMs,
 } from '../src/execution';
 import { reconcileAll } from '../src/reconciliation';
 import { handleControl } from '../src/routes/control';
@@ -642,5 +645,61 @@ describe('a terminal item can only be corrected by a later attempt', () => {
     expect(stale).toBe('skipped-terminal');
     expect(same).toBe('skipped-terminal');
     expect((await store.listSlotItems(slotId))[0]!.workId).not.toBe('999');
+  });
+});
+
+/**
+ * A retryable failure earns a bounded backoff instead of an immediate retry.
+ *
+ * Shadow validation: a slot whose run was killed by its own watchdog after Pixiv
+ * rate-limit cooldowns was retried straight away, and that retry then succeeded in
+ * 6 minutes — so the immediate retry spent a second runner on an account that just
+ * needed time to clear.
+ */
+describe('retry backoff', () => {
+  it('grows with the attempt and is bounded', () => {
+    expect(retryBackoffMs('failed', 1)).toBe(RETRY_BASE_MS);
+    expect(retryBackoffMs('failed', 2)).toBe(RETRY_BASE_MS * 2);
+    expect(retryBackoffMs('failed', 3)).toBe(RETRY_BASE_MS * 4);
+    // Bounded: a permanently broken provider must still be visible within a day.
+    expect(retryBackoffMs('failed', 20)).toBe(RETRY_MAX_MS);
+  });
+
+  it('does not back off a successful or partial run', () => {
+    expect(retryBackoffMs('success', 1)).toBe(0);
+    expect(retryBackoffMs('partial', 1)).toBe(0);
+    expect(retryBackoffMs('uncertain', 1)).toBe(0);
+  });
+
+  it('withholds dispatch until the backoff expires', async () => {
+    const store = new MemoryControlStore();
+    const slot = await seedDueSlot(store, NOW);
+    await store.setRetryNotBefore(slot.id, NOW + 10 * 60_000);
+
+    const blocked = await reconcileAll(
+      {
+        store,
+        provider: new FakeProvider(),
+        schedules: SCHEDULES,
+        mode: 'shadow',
+        callbackUrl: 'https://cp.test/control',
+        pixivflowRef: 'feat/execute-slot',
+      } as never,
+      NOW
+    );
+    expect(blocked.dispatched).toBe(0);
+
+    const allowed = await reconcileAll(
+      {
+        store,
+        provider: new FakeProvider(),
+        schedules: SCHEDULES,
+        mode: 'shadow',
+        callbackUrl: 'https://cp.test/control',
+        pixivflowRef: 'feat/execute-slot',
+      } as never,
+      NOW + 11 * 60_000
+    );
+    expect(allowed.dispatched).toBe(1);
   });
 });

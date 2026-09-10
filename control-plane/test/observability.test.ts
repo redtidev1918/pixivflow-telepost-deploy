@@ -20,7 +20,7 @@ function sweep(startedAt: number): ReconciliationRunRow {
     id: 'sweep',
     startedAt,
     finishedAt: startedAt + 200,
-    summary: { created: 1, dispatched: 1, reconciled: 0, retried: 0, expired: 0, errors: [] },
+    summary: { created: 1, dispatched: 1, reconciled: 0, retried: 0, held: 0, expired: 0, errors: [] },
   };
 }
 

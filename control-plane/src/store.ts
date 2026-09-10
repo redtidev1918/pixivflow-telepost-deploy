@@ -44,6 +44,8 @@ export interface OccurrenceRow {
   dispatchDeadline: number | null;
   currentExecutionId: string | null;
   dispatchedAt: number | null;
+  /** Bounded backoff: do not dispatch this occurrence before this instant. */
+  retryNotBefore: number | null;
   startedAt: number | null;
   completedAt: number | null;
   lastError: string | null;
@@ -58,6 +60,8 @@ export interface ReconciliationSummary {
   reconciled: number;
   /** New attempts created for a non-terminal, retryable occurrence. */
   retried: number;
+  /** Occurrences kept pending because a shared credential was already in use. */
+  held: number;
   /** Occurrences that will never be dispatched (past their business deadline). */
   expired: number;
   errors: string[];
@@ -85,6 +89,10 @@ export interface ControlStore {
   listRecentOccurrences(limit: number): Promise<OccurrenceRow[]>;
   countByStatus(): Promise<Record<string, number>>;
   markExpired(slotId: string, reason: string, nowMs: number): Promise<void>;
+  /** Bounded backoff before another attempt may be dispatched. */
+  setRetryNotBefore(slotId: string, atMs: number, nowMs: number): Promise<void>;
+  /** Clears the backoff, so a later failure cannot inherit a stale one. */
+  clearRetryNotBefore(slotId: string, nowMs: number): Promise<void>;
   recordReconciliation(input: {
     id: string;
     startedAt: number;

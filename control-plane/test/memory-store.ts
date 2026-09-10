@@ -73,6 +73,7 @@ export class MemoryControlStore implements ControlPlaneStore {
       dispatchDeadline: occurrence.dispatchDeadline,
       currentExecutionId: null,
       dispatchedAt: null,
+      retryNotBefore: null,
       startedAt: null,
       completedAt: null,
       lastError: null,
@@ -104,6 +105,16 @@ export class MemoryControlStore implements ControlPlaneStore {
     const counts: Record<string, number> = {};
     for (const row of this.slots.values()) counts[row.status] = (counts[row.status] ?? 0) + 1;
     return counts;
+  }
+
+  async setRetryNotBefore(slotId: string, atMs: number): Promise<void> {
+    const row = this.requireSlot(slotId);
+    row.retryNotBefore = atMs;
+  }
+
+  async clearRetryNotBefore(slotId: string): Promise<void> {
+    const row = this.requireSlot(slotId);
+    row.retryNotBefore = null;
   }
 
   async markExpired(slotId: string, reason: string, nowMs: number): Promise<void> {

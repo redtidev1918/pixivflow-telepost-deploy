@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
 
+import { MemoryControlStore, FakeProvider } from './memory-store';
+import { reconcileAll } from '../src/reconciliation';
+import { PIXIV_CREDENTIAL } from '../src/schedules';
+
 import { dueForDispatch, pastDeadline, reconcile } from '../src/reconciliation';
 import { SCHEDULES } from '../src/schedules';
 import type { Occurrence } from '../src/occurrences';
@@ -31,6 +35,7 @@ class MemoryStore implements ControlStore {
       dispatchDeadline: occurrence.dispatchDeadline,
       currentExecutionId: null,
       dispatchedAt: null,
+      retryNotBefore: null,
       startedAt: null,
       completedAt: null,
       lastError: null,
@@ -51,6 +56,14 @@ class MemoryStore implements ControlStore {
 
   async listRecentOccurrences(limit: number): Promise<OccurrenceRow[]> {
     return [...this.rows.values()].sort((a, b) => b.occurrenceAt - a.occurrenceAt).slice(0, limit);
+  }
+
+  async setRetryNotBefore(slotId: string, atMs: number): Promise<void> {
+    this.rows.get(slotId)!.retryNotBefore = atMs;
+  }
+
+  async clearRetryNotBefore(slotId: string): Promise<void> {
+    this.rows.get(slotId)!.retryNotBefore = null;
   }
 
   async countByStatus(): Promise<Record<string, number>> {
@@ -208,6 +221,7 @@ describe('dispatch eligibility rules', () => {
     dispatchDeadline: 1000,
     currentExecutionId: null,
     dispatchedAt: null,
+    retryNotBefore: null,
     startedAt: null,
     completedAt: null,
     lastError: null,
@@ -245,5 +259,113 @@ describe('dispatch eligibility rules', () => {
     // returns the row to `pending`, which is dispatchable again while attempts
     // remain.
     expect(dueForDispatch([row({ status: 'pending', attemptCount: 1 })], 500, maxAttemptsFor)).toHaveLength(1);
+  });
+});
+
+/**
+ * The Pixiv credential is a SHARED, externally rate-limited resource, and a per-slot
+ * concurrency group cannot express that. Found in shadow validation: four
+ * occurrences dispatched at once against one account pushed it into rate-limit
+ * cooldown, two slots burned their whole run budget waiting and were killed, and a
+ * retry then finished in 6 minutes. Normal is 3.5-6.4 minutes, so the stall was
+ * contention, not workload.
+ *
+ * Admission is the control plane's job: an occurrence that is due but whose
+ * credential is busy stays pending, and a later sweep dispatches it. Nothing about
+ * the D1 idempotency layers changes.
+ */
+describe('account-level admission', () => {
+  const NOW = Date.parse('2026-09-11T11:00:00Z');
+  // Own schedules whose only time is still ahead of NOW, so the sweep's create
+  // phase produces nothing and the due set is exactly what the test inserts.
+  const SCHEDULES_UNDER_TEST = [
+    {
+      id: 'bot1-daily',
+      botId: 'bot1',
+      times: ['23:00'],
+      timezone: 'Asia/Shanghai',
+      targets: [{ id: 'bot1-illust', workType: 'illustration' }],
+      credential: PIXIV_CREDENTIAL,
+      dispatchDeadlineHours: 6,
+      maxAttempts: 3,
+    },
+    {
+      id: 'bot2-daily',
+      botId: 'bot2',
+      times: ['23:10'],
+      timezone: 'Asia/Shanghai',
+      targets: [{ id: 'bot2-illust', workType: 'illustration' }],
+      credential: PIXIV_CREDENTIAL,
+      dispatchDeadlineHours: 6,
+      maxAttempts: 3,
+    },
+  ];
+  const DEPLOY = {
+    mode: 'shadow' as const,
+    callbackUrl: 'https://cp.test/control',
+    pixivflowRef: 'feat/execute-slot',
+  };
+
+  async function due(store: MemoryControlStore, slotId: string, botId: string) {
+    await store.insertOccurrenceIfAbsent(
+      {
+        slotId,
+        scheduleId: `${botId}-daily`,
+        botId,
+        occurrenceAt: NOW - 60_000,
+        dispatchDeadline: NOW + 3_600_000,
+      } as never,
+      NOW
+    );
+  }
+
+  it('keeps the second occurrence pending while the first holds the credential', async () => {
+    const store = new MemoryControlStore();
+    await due(store, 'bot1-daily@2026-09-11T1000', 'bot1');
+    await store.openExecution({
+      id: 'bot1-daily@2026-09-11T1000#1',
+      slotId: 'bot1-daily@2026-09-11T1000',
+      attempt: 1,
+      provider: 'github',
+      nowMs: NOW - 60_000,
+    });
+    await store.openExecution({ id: 'x#1', slotId: 'x', attempt: 1, provider: 'github', nowMs: NOW });
+    await due(store, 'bot2-daily@2026-09-11T1010', 'bot2');
+
+    const summary = await reconcileAll(
+      { store, provider: new FakeProvider(), schedules: SCHEDULES_UNDER_TEST, ...DEPLOY } as never,
+      NOW
+    );
+
+    expect(summary.held).toBe(1);
+    expect(store.slots.get('bot2-daily@2026-09-11T1010')!.status).toBe('pending');
+    expect(store.events.some((event) => event.event === 'dispatch_held')).toBe(true);
+  });
+
+  it('dispatches the held occurrence once the credential is free', async () => {
+    const store = new MemoryControlStore();
+    await due(store, 'bot2-daily@2026-09-11T1010', 'bot2');
+
+    const summary = await reconcileAll(
+      { store, provider: new FakeProvider(), schedules: SCHEDULES_UNDER_TEST, ...DEPLOY } as never,
+      NOW
+    );
+
+    expect(summary.dispatched).toBe(1);
+    expect(summary.held).toBe(0);
+  });
+
+  it('does not let two occurrences in one sweep both take the credential', async () => {
+    const store = new MemoryControlStore();
+    await due(store, 'bot1-daily@2026-09-11T1000', 'bot1');
+    await due(store, 'bot2-daily@2026-09-11T1010', 'bot2');
+
+    const summary = await reconcileAll(
+      { store, provider: new FakeProvider(), schedules: SCHEDULES_UNDER_TEST, ...DEPLOY } as never,
+      NOW
+    );
+
+    expect(summary.dispatched).toBe(1);
+    expect(summary.held).toBe(1);
   });
 });

@@ -152,6 +152,10 @@ export async function startAttempt(
     return { executionId, dispatched: false, detail: dispatchResult.detail };
   }
 
+  // Dispatched: the previous backoff has served its purpose and must not linger,
+  // or a later failure would inherit a stale wait.
+  await store.clearRetryNotBefore(input.slot.id, nowMs);
+
   await store.logEvents([
     {
       ts: nowMs,
@@ -240,6 +244,19 @@ export async function applyExecutionResult(
 
   const slotStatus = slotRollup(input.status, execution.attempt, input.maxAttempts);
   const terminal = slotStatus !== 'pending';
+
+  // A retryable failure earns a bounded backoff rather than an immediate retry.
+  // Observed in shadow validation: a slot whose run was killed by its own watchdog
+  // after Pixiv rate-limit cooldowns was retried straight away, and the retry then
+  // succeeded in 6 minutes — so the immediate retry was pure waste on an account
+  // that simply needed time. Clearing it on dispatch keeps the state honest.
+  if (!terminal && retryBackoffMs(input.status, execution.attempt) > 0) {
+    await store.setRetryNotBefore(
+      execution.slotId,
+      nowMs + retryBackoffMs(input.status, execution.attempt),
+      nowMs
+    );
+  }
   await store.setSlotStatus(execution.slotId, slotStatus, nowMs, {
     ...(input.error !== undefined ? { error: input.error } : {}),
     currentExecutionId: null,
@@ -293,6 +310,24 @@ export async function applyExecutionResult(
  * `uncertain` is deliberately terminal — an unconfirmed Telegram send must never
  * be retried automatically.
  */
+/**
+ * How long to wait before retrying a non-terminal failure.
+ *
+ * Bounded and exponential: the first retry waits a minute, and no wait exceeds an
+ * hour, so a permanently broken provider is still visible within a day rather than
+ * retried in a tight loop. A runner that reports an explicit `retry_after` wins
+ * over this (see the result route), because the server knows better than a guess.
+ */
+export const RETRY_BASE_MS = 60 * 1000;
+export const RETRY_MAX_MS = 60 * 60 * 1000;
+
+export function retryBackoffMs(status: ExecutionStatus, attempt: number): number {
+  // A clean outcome needs no backoff; only a failure does.
+  if (status === 'success' || status === 'partial' || status === 'uncertain') return 0;
+  const exponent = Math.max(0, attempt - 1);
+  return Math.min(RETRY_BASE_MS * 2 ** exponent, RETRY_MAX_MS);
+}
+
 export function slotRollup(
   status: ExecutionStatus,
   attempt: number,

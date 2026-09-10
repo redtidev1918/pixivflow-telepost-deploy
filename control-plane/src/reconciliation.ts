@@ -16,7 +16,12 @@
 import { occurrencesInLookback, type Occurrence } from './occurrences';
 import { reconcileExecution, startAttempt } from './execution';
 import type { ExecutionProvider } from './provider';
-import { RECONCILIATION_LOOKBACK_HOURS, type ScheduleDefinition } from './schedules';
+import {
+  CREDENTIAL_ADMISSION,
+  CREDENTIAL_HOLD_MAX_MS,
+  RECONCILIATION_LOOKBACK_HOURS,
+  type ScheduleDefinition,
+} from './schedules';
 import {
   isTerminal,
   type ControlPlaneStore,
@@ -51,7 +56,7 @@ export interface ReconcileOptions {
 }
 
 export function emptySummary(): ReconciliationSummary {
-  return { created: 0, dispatched: 0, reconciled: 0, retried: 0, expired: 0, errors: [] };
+  return { created: 0, dispatched: 0, reconciled: 0, retried: 0, held: 0, expired: 0, errors: [] };
 }
 
 /**
@@ -75,6 +80,10 @@ export function dueForDispatch(
   return rows.filter((row) => {
     if (row.status !== 'pending') return false;
     if (row.dispatchDeadline !== null && nowMs > row.dispatchDeadline) return false;
+    // A backoff after a failure is a real constraint, not a suggestion: retrying
+    // immediately is what spends a second runner on the same contended account
+    // instead of waiting for it to clear.
+    if (row.retryNotBefore !== null && row.retryNotBefore > nowMs) return false;
     return row.attemptCount < maxAttemptsFor(row.scheduleId);
   });
 }
@@ -228,12 +237,39 @@ export async function reconcileAll(
   // row before the first sweep's write is visible to it and open attempt N+1 next
   // to an in-flight attempt N. The open-execution set is read AFTER the provider
   // reconciliation above, so anything genuinely dead has already been resolved.
-  const busy = new Set(
-    (await store.listOpenExecutions(MAX_EXECUTIONS_PER_SWEEP)).map((execution) => execution.slotId)
-  );
+  const openExecutions = await store.listOpenExecutions(MAX_EXECUTIONS_PER_SWEEP);
+  const busy = new Set(openExecutions.map((execution) => execution.slotId));
+
+  // Which shared credential is already taken, and by how many holders. A holder is
+  // any open execution whose schedule consumes that credential; it is released by
+  // becoming terminal, and bounded so a lost runner cannot block the account
+  // forever — the sweep before this one has already tried to resolve it.
+  const busyByCredential = new Map<string, number>();
+  for (const execution of openExecutions) {
+    const scheduleId = scheduleIdOf(execution.slotId, scheduleById);
+    const schedule = scheduleId ? scheduleById.get(scheduleId) : undefined;
+    if (!schedule) continue;
+    if (execution.startedAt !== null && nowMs - execution.startedAt > CREDENTIAL_HOLD_MAX_MS) {
+      continue;
+    }
+    busyByCredential.set(
+      schedule.credential,
+      (busyByCredential.get(schedule.credential) ?? 0) + 1
+    );
+  }
   const due = dueForDispatch(active, nowMs, maxAttemptsFor)
     .filter((slot) => !busy.has(slot.id))
     .slice(0, MAX_DISPATCHES_PER_SWEEP);
+
+  // Account-level admission. Every schedule here consumes the SAME Pixiv account,
+  // and Pixiv rate-limits per account, so dispatching a second occurrence while
+  // one holds the credential makes both slower and can push the account into
+  // cooldown. The provider reconcile above already refreshed every open
+  // execution, so a holder that is genuinely finished has been released by now.
+  //
+  // A held occurrence is NOT an error and NOT a retry: it simply stays pending and
+  // a later sweep dispatches it. That is why this runs before any attempt is open.
+  const held = admissionHolds(due, scheduleById, busyByCredential);
 
   if (provider.ready === false) {
     // Not configured yet: record the situation and leave the occurrences pending
@@ -263,6 +299,20 @@ export async function reconcileAll(
   for (const slot of due) {
     const schedule = scheduleById.get(slot.scheduleId);
     if (!schedule) continue;
+    if (held.has(slot.id)) {
+      // Visible on purpose: "why did 10:10 not run at 10:10" must be answerable
+      // from state rather than by reading runner logs.
+      events.push({
+        ts: nowMs,
+        event: 'dispatch_held',
+        slotId: slot.id,
+        scheduleId: slot.scheduleId,
+        botId: slot.botId,
+        detail: `credential ${schedule.credential} is busy`,
+      });
+      summary.held += 1;
+      continue;
+    }
     try {
       const result = await startAttempt(
         store,
@@ -281,6 +331,12 @@ export async function reconcileAll(
       );
       if (result.dispatched) {
         summary.dispatched += 1;
+        // Reserve the credential for the rest of this sweep, or a second due
+        // occurrence would pass the same admission check before either is live.
+        busyByCredential.set(
+          schedule.credential,
+          (busyByCredential.get(schedule.credential) ?? 0) + 1
+        );
         // A new attempt for an occurrence that already had one IS a retry; a
         // provider rejection is an error, not a retry (it must stay visible).
         if (slot.attemptCount > 0) summary.retried += 1;
@@ -317,6 +373,34 @@ export async function reconcileAll(
   });
 
   return summary;
+}
+
+/**
+ * Which of the due occurrences must wait for a shared credential.
+ *
+ * Admission is per credential, not per slot: two different schedules sharing one
+ * Pixiv account cannot run together, which is exactly the case a per-slot
+ * concurrency group cannot express.
+ */
+function admissionHolds(
+  due: readonly OccurrenceRow[],
+  scheduleById: Map<string, ScheduleDefinition>,
+  busyByCredential: Map<string, number>
+): Set<string> {
+  const remaining = new Map(busyByCredential);
+  const held = new Set<string>();
+  for (const slot of due) {
+    const schedule = scheduleById.get(slot.scheduleId);
+    if (!schedule) continue;
+    const limit = CREDENTIAL_ADMISSION[schedule.credential] ?? 1;
+    const inUse = remaining.get(schedule.credential) ?? 0;
+    if (inUse >= limit) {
+      held.add(slot.id);
+      continue;
+    }
+    remaining.set(schedule.credential, inUse + 1);
+  }
+  return held;
 }
 
 /** Slot ids are `<scheduleId>@<local>`, so the schedule id is recoverable. */
