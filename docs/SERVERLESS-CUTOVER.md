@@ -284,3 +284,54 @@ TELEGRAM_BOT1_TOKEN=... scripts/cutover-preflight.sh   # 确认已复原
 1. `token-maintenance.ts` 丢弃轮换后的 refresh token（§4.2）。生产每次启动都在丢自己的新 token。
 2. 配置加载器会把 unified storage 里的 token 回写到传入的配置文件；CI 中若配置文件来自 checkout，会被就地改写（job 结束即丢弃，属可接受，但不要把它当成只读）。
 3. 模块内存在两套配置校验器，规则重复。`telegram` 类型曾在其中一处缺失，导致该交付目标完全无法配置 —— 现已统一为 `collectTelegramDeliveryErrors`。
+
+## 8. Fly 退役：停机与删除分开
+
+**新系统独立跑完一个完整生产周期之前，Fly 不动。** 停机和删除是两件事，中间隔着一次观察：
+
+```
+新系统完整生产周期通过（见 §9 判据）
+        ↓
+停止 Fly machine（flyctl machine stop，可逆）
+        ↓
+确认没有任何 webhook / scheduler / review 依赖 Fly
+        ↓
+保留旧 volume + SQLite 快照 + 配置作为回滚材料
+        ↓
+再观察一个完整周期，确认不再需要回滚
+        ↓
+才删除 Fly machine
+```
+
+```bash
+# 1. 停（可逆）
+flyctl machine stop 683032ec6617e8 -a telesubmit-multi-bot
+# 2. 确认真的没人依赖它：
+#    - bot1/bot2 的 getWebhookInfo 指向 Worker
+#    - 一个完整周期内 Fly 日志无新请求
+#    - 无 pending TelePost review
+# 3. 确认无回滚需求后，才删机器
+flyctl machine destroy 683032ec6617e8 -a telesubmit-multi-bot
+```
+
+> ⚠️ **机器可以删，volume / SQLite / secret 备份不要同时删。** 机器只是计算实例；真正不
+> 可逆的是把旧状态一起清掉。永久删除状态数据需要单独确认。
+
+## 9. 完整生产周期判据（跑完才停 Fly）
+
+新系统独立承担 `10:00 / 10:10 / 18:00 / 18:10`，全部满足才算通过：
+
+| 判据 | 要求 |
+| --- | --- |
+| occurrence | 4/4 正确创建（canonical id、时区正确） |
+| 执行 | 4/4 正确执行，或按业务语义终结（`no_candidate` / `expired` 也是合法结果） |
+| 审核 | 按钮**真实经过 Worker webhook**（不是构造的回调） |
+| 发布 | 正常，且 0 意外重复 |
+| duplicate / uncertain | 0 / 0 |
+| stuck execution | 0（无长期 `running`） |
+| account admission | 正常：同一时刻只有一个 execution 持有凭据 |
+| Fly | 没有承担任何隐藏职责（无 webhook、无 scheduler、无 review） |
+
+第一轮必须**由人在审核群真实点击按钮** —— 这是唯一能证明「Telegram 官方 webhook →
+Worker」这一跳的方式。独立测试 bot 只能证明测试 bot 的 webhook，最终仍必须对正式
+bot1/bot2 做一次真实 cutover，因此不为它引入临时基础设施。
