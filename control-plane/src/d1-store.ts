@@ -14,6 +14,8 @@ import type {
   ItemStatus,
   OccurrenceRow,
   ReconciliationSummary,
+  ReviewRecord,
+  ReviewStatus,
   SlotItemInput,
   SlotItemRow,
   SlotStatus,
@@ -90,6 +92,78 @@ interface ExecutionRowDb {
 
 const EXECUTION_COLUMNS = `id, slot_id, attempt, provider, provider_run_id, status, created_at,
   dispatched_at, started_at, completed_at, error, error_class, result`;
+
+interface ReviewRowDb {
+  id: string;
+  bot_id: string;
+  slot_id: string | null;
+  target_id: string | null;
+  work_id: string | null;
+  chat_id: string;
+  message_id: number | null;
+  message_ids: string | null;
+  media_group_id: string | null;
+  file_ids: string | null;
+  caption: string | null;
+  publish_chat_id: string | null;
+  publish_thread_id: number | null;
+  status: string;
+  created_at: number;
+  updated_at: number;
+  decided_at: number | null;
+  decided_by: string | null;
+  published_message_id: number | null;
+  last_error: string | null;
+}
+
+const REVIEW_COLUMNS = `id, bot_id, slot_id, target_id, work_id, chat_id, message_id, message_ids,
+  media_group_id, file_ids, caption, publish_chat_id, publish_thread_id, status, created_at, updated_at,
+  decided_at, decided_by, published_message_id, last_error`;
+
+function parseNumberArray(raw: string | null): number[] | null {
+  if (!raw) return null;
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    return Array.isArray(parsed) ? parsed.filter((value): value is number => typeof value === 'number') : null;
+  } catch {
+    return null;
+  }
+}
+
+function parseStringArray(raw: string | null): string[] | null {
+  if (!raw) return null;
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    return Array.isArray(parsed) ? parsed.filter((value): value is string => typeof value === 'string') : null;
+  } catch {
+    return null;
+  }
+}
+
+function toReview(row: ReviewRowDb): ReviewRecord {
+  return {
+    id: row.id,
+    botId: row.bot_id,
+    slotId: row.slot_id,
+    targetId: row.target_id,
+    workId: row.work_id,
+    chatId: row.chat_id,
+    messageId: row.message_id,
+    messageIds: parseNumberArray(row.message_ids),
+    mediaGroupId: row.media_group_id,
+    fileIds: parseStringArray(row.file_ids),
+    caption: row.caption,
+    publishChatId: row.publish_chat_id,
+    publishThreadId: row.publish_thread_id,
+    status: row.status as ReviewStatus,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+    decidedAt: row.decided_at,
+    decidedBy: row.decided_by,
+    publishedMessageId: row.published_message_id,
+    lastError: row.last_error,
+  };
+}
 
 function toExecution(row: ExecutionRowDb): ExecutionRow {
   return {
@@ -398,6 +472,125 @@ export class D1ControlStore implements ControlPlaneStore {
   /** True when the execution is already terminal (used by idempotent callbacks). */
   static isTerminal(status: ExecutionStatus): boolean {
     return isTerminalExecution(status);
+  }
+
+  // ---- reviews (edge review adapter) ----------------------------------------
+
+  async createReview(input: {
+    id: string;
+    botId: string;
+    slotId?: string | null;
+    targetId?: string | null;
+    workId?: string | null;
+    chatId: string;
+    messageId?: number | null;
+    messageIds?: number[] | null;
+    mediaGroupId?: string | null;
+    fileIds?: string[] | null;
+    caption?: string | null;
+    publishChatId?: string | null;
+    publishThreadId?: number | null;
+    nowMs: number;
+  }): Promise<{ record: ReviewRecord; created: boolean }> {
+    // (bot_id, target_id, work_id) is unique, so a retried runner callback — or a
+    // second runner racing the same slot — converges on one review instead of
+    // creating a second pending decision for the same work.
+    const inserted = (await this.db
+      .prepare(
+        `INSERT OR IGNORE INTO reviews
+           (id, bot_id, slot_id, target_id, work_id, chat_id, message_id, message_ids, media_group_id,
+            file_ids, caption, publish_chat_id, publish_thread_id, status, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?)`
+      )
+      .bind(
+        input.id,
+        input.botId,
+        input.slotId ?? null,
+        input.targetId ?? null,
+        input.workId ?? null,
+        input.chatId,
+        input.messageId ?? null,
+        input.messageIds ? JSON.stringify(input.messageIds) : null,
+        input.mediaGroupId ?? null,
+        input.fileIds ? JSON.stringify(input.fileIds) : null,
+        input.caption ?? null,
+        input.publishChatId ?? null,
+        input.publishThreadId ?? null,
+        input.nowMs,
+        input.nowMs
+      )
+      .run()) as { meta?: { changes?: number } } | undefined;
+
+    const row = await this.db
+      .prepare(
+        `SELECT ${REVIEW_COLUMNS} FROM reviews WHERE bot_id = ? AND target_id IS ? AND work_id IS ?`
+      )
+      .bind(input.botId, input.targetId ?? null, input.workId ?? null)
+      .first<ReviewRowDb>();
+    if (!row) throw new Error(`review row not found after insert: ${input.id}`);
+    return { record: toReview(row), created: (inserted?.meta?.changes ?? 0) > 0 };
+  }
+
+  async getReview(reviewId: string): Promise<ReviewRecord | null> {
+    const row = await this.db
+      .prepare(`SELECT ${REVIEW_COLUMNS} FROM reviews WHERE id = ?`)
+      .bind(reviewId)
+      .first<ReviewRowDb>();
+    return row ? toReview(row) : null;
+  }
+
+  async listPendingReviews(limit: number): Promise<ReviewRecord[]> {
+    const { results } = await this.db
+      .prepare(
+        `SELECT ${REVIEW_COLUMNS} FROM reviews WHERE status = 'pending' ORDER BY created_at ASC LIMIT ?`
+      )
+      .bind(limit)
+      .all<ReviewRowDb>();
+    return (results ?? []).map(toReview);
+  }
+
+  async transitionReview(input: {
+    reviewId: string;
+    from: ReviewStatus;
+    to: ReviewStatus;
+    nowMs: number;
+    actor?: string | null;
+    error?: string | null;
+  }): Promise<boolean> {
+    // Compare-and-set: the WHERE clause on the expected status is what makes two
+    // concurrent callbacks elect exactly one deciding caller.
+    const result = (await this.db
+      .prepare(
+        `UPDATE reviews
+            SET status = ?, updated_at = ?, last_error = COALESCE(?, last_error),
+                decided_at = CASE WHEN ? = 'pending' THEN ? ELSE decided_at END,
+                decided_by = CASE WHEN ? = 'pending' THEN COALESCE(?, decided_by) ELSE decided_by END
+          WHERE id = ? AND status = ?`
+      )
+      .bind(
+        input.to,
+        input.nowMs,
+        input.error ?? null,
+        input.from,
+        input.nowMs,
+        input.from,
+        input.actor ?? null,
+        input.reviewId,
+        input.from
+      )
+      .run()) as { meta?: { changes?: number } } | undefined;
+    return (result?.meta?.changes ?? 0) > 0;
+  }
+
+  async markReviewPublished(input: {
+    reviewId: string;
+    publishedMessageId: number | null;
+    nowMs: number;
+  }): Promise<void> {
+    await this.db
+      .prepare(`UPDATE reviews SET published_message_id = ?, updated_at = ? WHERE id = ?`)
+      .bind(input.publishedMessageId, input.nowMs, input.reviewId)
+      .run();
   }
 
   // ---- slot items -----------------------------------------------------------

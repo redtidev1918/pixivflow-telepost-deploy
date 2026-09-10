@@ -11,6 +11,7 @@
  */
 
 import { applyExecutionResult, claimExecution } from '../execution';
+import { buildCallbackData } from '../reviews';
 import type { ControlPlaneStore, ExecutionStatus, ItemStatus } from '../store';
 import { SCHEDULES } from '../schedules';
 
@@ -72,6 +73,62 @@ export async function handleControl(
   url: URL,
   callbackSecret: string | undefined
 ): Promise<Response | null> {
+  // Runner side of the review flow: the runner has already posted the media to the
+  // review chat (media never passes through this Worker) and reports the ids so a
+  // decision can be taken and the publish can be a server-side copy.
+  if (url.pathname === '/control/reviews') {
+    if (request.method !== 'POST') return json({ error: 'method not allowed' }, 405);
+    if (!authorized(request, callbackSecret)) return json({ error: 'unauthorized' }, 401);
+
+    let body: Record<string, unknown>;
+    try {
+      body = (await request.json()) as Record<string, unknown>;
+    } catch {
+      return json({ error: 'invalid json body' }, 400);
+    }
+
+    const reviewId = typeof body.review_id === 'string' ? body.review_id : '';
+    const botId = typeof body.bot_id === 'string' ? body.bot_id : '';
+    const chatId = typeof body.chat_id === 'string' ? body.chat_id : '';
+    if (!reviewId || !botId || !chatId) {
+      return json({ error: 'review_id, bot_id and chat_id are required' }, 400);
+    }
+    const numberArray = (value: unknown): number[] | null =>
+      Array.isArray(value) ? value.filter((item): item is number => typeof item === 'number') : null;
+    const stringArray = (value: unknown): string[] | null =>
+      Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : null;
+
+    const { record, created } = await store.createReview({
+      id: reviewId,
+      botId,
+      chatId,
+      slotId: typeof body.slot_id === 'string' ? body.slot_id : null,
+      targetId: typeof body.target_id === 'string' ? body.target_id : null,
+      workId: typeof body.work_id === 'string' ? body.work_id : null,
+      messageId: typeof body.message_id === 'number' ? body.message_id : null,
+      messageIds: numberArray(body.message_ids),
+      mediaGroupId: typeof body.media_group_id === 'string' ? body.media_group_id : null,
+      fileIds: stringArray(body.file_ids),
+      caption: typeof body.caption === 'string' ? body.caption : null,
+      publishChatId: typeof body.publish_chat_id === 'string' ? body.publish_chat_id : null,
+      publishThreadId: typeof body.publish_thread_id === 'number' ? body.publish_thread_id : null,
+      nowMs: Date.now(),
+    });
+
+    return json({
+      ok: true,
+      reviewId: record.id,
+      created,
+      status: record.status,
+      // The runner needs these before it posts the media, so they are documented
+      // here as the one supported shape: `review:<reviewId>:<action>`.
+      callbackData: {
+        approve: buildCallbackData(record.id, 'approve'),
+        reject: buildCallbackData(record.id, 'reject'),
+      },
+    });
+  }
+
   const match = CONTROL_PATTERN.exec(url.pathname);
   if (!match) return null;
 

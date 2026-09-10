@@ -235,4 +235,71 @@ export interface SlotItemRow {
 }
 
 /** Everything reconciliation and the callback routes need, in one port. */
-export interface ControlPlaneStore extends ControlStore, ExecutionStore {}
+export interface ControlPlaneStore extends ControlStore, ExecutionStore, ReviewStore {}
+
+export type ReviewStatus = 'pending' | 'approved' | 'rejected' | 'expired' | 'uncertain';
+
+export interface ReviewRecord {
+  id: string;
+  botId: string;
+  slotId: string | null;
+  targetId: string | null;
+  workId: string | null;
+  /** Chat the review message lives in (media stays in Telegram, never here). */
+  chatId: string;
+  messageId: number | null;
+  /** A review can be an album: every message id of the media group. */
+  messageIds: number[] | null;
+  mediaGroupId: string | null;
+  fileIds: string[] | null;
+  caption: string | null;
+  /** Channel the accepted review is copied to (server-side, by Telegram). */
+  publishChatId: string | null;
+  publishThreadId: number | null;
+  status: ReviewStatus;
+  createdAt: number;
+  updatedAt: number;
+  decidedAt: number | null;
+  decidedBy: string | null;
+  publishedMessageId: number | null;
+  lastError: string | null;
+}
+
+export interface ReviewStore {
+  /** Idempotent on (bot_id, target_id, work_id): a replayed create returns the row. */
+  createReview(input: {
+    id: string;
+    botId: string;
+    slotId?: string | null;
+    targetId?: string | null;
+    workId?: string | null;
+    chatId: string;
+    messageId?: number | null;
+    messageIds?: number[] | null;
+    mediaGroupId?: string | null;
+    fileIds?: string[] | null;
+    caption?: string | null;
+    publishChatId?: string | null;
+    publishThreadId?: number | null;
+    nowMs: number;
+  }): Promise<{ record: ReviewRecord; created: boolean }>;
+  getReview(reviewId: string): Promise<ReviewRecord | null>;
+  listPendingReviews(limit: number): Promise<ReviewRecord[]>;
+  /**
+   * Compare-and-set on the review status. Returns false when another decision won
+   * the race (or the review was already decided) — the caller must then NOT publish.
+   */
+  transitionReview(input: {
+    reviewId: string;
+    from: ReviewStatus;
+    to: ReviewStatus;
+    nowMs: number;
+    actor?: string | null;
+    error?: string | null;
+  }): Promise<boolean>;
+  markReviewPublished(input: {
+    reviewId: string;
+    publishedMessageId: number | null;
+    nowMs: number;
+  }): Promise<void>;
+}

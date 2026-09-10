@@ -25,6 +25,8 @@ import {
   type ItemStatus,
   type OccurrenceRow,
   type ReconciliationSummary,
+  type ReviewRecord,
+  type ReviewStatus,
   type SlotItemInput,
   type SlotItemRow,
   type SlotStatus,
@@ -249,12 +251,108 @@ export class MemoryControlStore implements ControlPlaneStore {
     return [...this.items.values()].filter((row) => row.slotId === slotId);
   }
 
+  // ---- reviews --------------------------------------------------------------
+
+  readonly reviews = new Map<string, ReviewRecord>();
+
+  async createReview(input: {
+    id: string;
+    botId: string;
+    slotId?: string | null;
+    targetId?: string | null;
+    workId?: string | null;
+    chatId: string;
+    messageId?: number | null;
+    messageIds?: number[] | null;
+    mediaGroupId?: string | null;
+    fileIds?: string[] | null;
+    caption?: string | null;
+    publishChatId?: string | null;
+    publishThreadId?: number | null;
+    nowMs: number;
+  }): Promise<{ record: ReviewRecord; created: boolean }> {
+    // Mirrors the D1 unique index on (bot_id, target_id, work_id).
+    const existing = [...this.reviews.values()].find(
+      (review) =>
+        review.botId === input.botId &&
+        review.targetId === (input.targetId ?? null) &&
+        review.workId === (input.workId ?? null)
+    );
+    if (existing) return { record: existing, created: false };
+
+    const record: ReviewRecord = {
+      id: input.id,
+      botId: input.botId,
+      slotId: input.slotId ?? null,
+      targetId: input.targetId ?? null,
+      workId: input.workId ?? null,
+      chatId: input.chatId,
+      messageId: input.messageId ?? null,
+      messageIds: input.messageIds ?? null,
+      mediaGroupId: input.mediaGroupId ?? null,
+      fileIds: input.fileIds ?? null,
+      caption: input.caption ?? null,
+      publishChatId: input.publishChatId ?? null,
+      publishThreadId: input.publishThreadId ?? null,
+      status: 'pending',
+      createdAt: input.nowMs,
+      updatedAt: input.nowMs,
+      decidedAt: null,
+      decidedBy: null,
+      publishedMessageId: null,
+      lastError: null,
+    };
+    this.reviews.set(record.id, record);
+    return { record, created: true };
+  }
+
+  async getReview(reviewId: string): Promise<ReviewRecord | null> {
+    return this.reviews.get(reviewId) ?? null;
+  }
+
+  async listPendingReviews(limit: number): Promise<ReviewRecord[]> {
+    return [...this.reviews.values()]
+      .filter((review) => review.status === 'pending')
+      .sort((a, b) => a.createdAt - b.createdAt)
+      .slice(0, limit);
+  }
+
+  async transitionReview(input: {
+    reviewId: string;
+    from: ReviewStatus;
+    to: ReviewStatus;
+    nowMs: number;
+    actor?: string | null;
+    error?: string | null;
+  }): Promise<boolean> {
+    const review = this.reviews.get(input.reviewId);
+    if (!review || review.status !== input.from) return false;
+    review.status = input.to;
+    review.updatedAt = input.nowMs;
+    if (input.error) review.lastError = input.error;
+    if (input.from === 'pending') {
+      review.decidedAt = input.nowMs;
+      review.decidedBy = input.actor ?? null;
+    }
+    return true;
+  }
+
+  async markReviewPublished(input: {
+    reviewId: string;
+    publishedMessageId: number | null;
+    nowMs: number;
+  }): Promise<void> {
+    const review = this.reviews.get(input.reviewId);
+    if (!review) return;
+    review.publishedMessageId = input.publishedMessageId;
+    review.updatedAt = input.nowMs;
+  }
+
   // ---- test helpers ---------------------------------------------------------
 
   get createdSlotCount(): number {
     return this.createdSlots;
   }
-
   get createdExecutionCount(): number {
     return this.createdExecutions;
   }

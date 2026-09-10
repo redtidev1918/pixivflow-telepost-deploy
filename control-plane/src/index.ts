@@ -13,8 +13,11 @@ import { GitHubActionsExecutionProvider } from './github-provider';
 import { instantToLocal, nextOccurrence, occurrenceFor } from './occurrences';
 import type { DispatchRequest, DispatchResult, ExecutionProvider, ProviderRun } from './provider';
 import { reconcileAll } from './reconciliation';
+import { expirePendingReviews } from './reviews';
 import { RECONCILIATION_LOOKBACK_HOURS, SCHEDULES, validateSchedules } from './schedules';
 import { handleControl } from './routes/control';
+import { handleTelegramWebhook } from './routes/telegram';
+import { BotRegistry } from './telegram/client';
 
 export interface Env {
   CONTROL_DB: D1Like;
@@ -37,6 +40,15 @@ export interface Env {
    * runner cannot be told where to call back without it.
    */
   CONTROL_PLANE_URL?: string;
+  /** Telegram webhook verification (per-webhook secret_token). */
+  TELEGRAM_WEBHOOK_SECRET?: string;
+  /** Each bot has its own token: a bot1 callback can never act with bot2's token. */
+  TELEGRAM_BOT1_TOKEN?: string;
+  TELEGRAM_BOT2_TOKEN?: string;
+}
+
+function botTokens(env: Env): Record<string, string | undefined> {
+  return { bot1: env.TELEGRAM_BOT1_TOKEN, bot2: env.TELEGRAM_BOT2_TOKEN };
 }
 
 function lookbackHours(env: Env): number {
@@ -107,6 +119,9 @@ export default {
       },
       nowMs
     );
+    // Undecided reviews expire on the same sweep: an old review must never be
+    // published days later because a human finally tapped the button.
+    await expirePendingReviews(store, nowMs);
   },
 
   async fetch(request: Request, env: Env): Promise<Response> {
@@ -115,6 +130,15 @@ export default {
 
     const controlResponse = await handleControl(request, store, url, env.CALLBACK_SECRET);
     if (controlResponse) return controlResponse;
+
+    // Telegram webhook: review decisions (see routes/telegram.ts). Handled before
+    // anything else so a decision is never gated behind read-only plumbing.
+    const registry = new BotRegistry(botTokens(env));
+    const telegramResponse = await handleTelegramWebhook(request, store, url, {
+      ...(env.TELEGRAM_WEBHOOK_SECRET ? { TELEGRAM_WEBHOOK_SECRET: env.TELEGRAM_WEBHOOK_SECRET } : {}),
+      getBot: (botId) => registry.get(botId),
+    });
+    if (telegramResponse) return telegramResponse;
 
     if (url.pathname === '/health') {
       return json({ status: 'ok', service: 'pixivflow-control-plane' });
@@ -189,10 +213,12 @@ export default {
         store.listRecentOccurrences(10),
       ]);
       const recentExecutions = await store.listOpenExecutions(10);
+      const pendingReviews = await store.listPendingReviews(10);
       return json({
         now,
         executionMode: executionMode(env),
         providerConfigured: Boolean(env.GITHUB_REPO && env.GITHUB_DISPATCH_TOKEN),
+        telegramConfigured: Boolean(env.TELEGRAM_WEBHOOK_SECRET && (env.TELEGRAM_BOT1_TOKEN || env.TELEGRAM_BOT2_TOKEN)),
         lookbackHours: lookbackHours(env),
         nextOccurrence: nextOccurrence(SCHEDULES, now),
         schedules: SCHEDULES.map((schedule) => ({
@@ -206,6 +232,15 @@ export default {
         })),
         countsByStatus: counts,
         recentOccurrences: recent,
+        pendingReviews: pendingReviews.map((review) => ({
+          id: review.id,
+          botId: review.botId,
+          slotId: review.slotId,
+          targetId: review.targetId,
+          workId: review.workId,
+          status: review.status,
+          createdAt: review.createdAt,
+        })),
         recentExecutions: recentExecutions.map((execution) => ({
           id: execution.id,
           slotId: execution.slotId,
