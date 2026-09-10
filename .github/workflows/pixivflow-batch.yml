@@ -1,0 +1,213 @@
+name: pixivflow-batch
+
+# Disposable execution plane. The control plane tells this workflow exactly which
+# canonical occurrence to run; the workflow never re-derives "what should run
+# today".
+#
+# There is deliberately NO `schedule:` trigger. A GitHub cron that fires hours late
+# (or not at all) must never decide whether the day's work happens — Cloudflare's
+# periodic reconciliation is the clock, and GitHub is only ever told what to run.
+#
+# A job-level timeout is the hard stop. If it fires, this job's steps are killed
+# (including the reporting step below), which is exactly why the control plane
+# also reconciles execution state from the GitHub API: a lost report must be
+# recoverable, not fatal.
+
+on:
+  workflow_dispatch:
+    inputs:
+      slot_id:
+        description: 'Canonical occurrence id, e.g. bot1-daily@2026-09-11T1800'
+        required: true
+        type: string
+      schedule_id:
+        description: 'Schedule to execute, e.g. bot1-daily'
+        required: true
+        type: string
+      callback_url:
+        description: 'Control-plane callback base, e.g. https://host/control'
+        required: true
+        type: string
+      occurrence_at:
+        description: 'Canonical occurrence instant (epoch ms), for audit only'
+        required: false
+        type: string
+        default: ''
+      attempt:
+        description: 'Attempt number for this occurrence'
+        required: false
+        type: string
+        default: '1'
+      bot_id:
+        description: 'Bot identity, echoed into the result'
+        required: false
+        type: string
+        default: ''
+      targets:
+        description: 'Comma-separated target ids (blank = the schedule targets)'
+        required: false
+        type: string
+        default: ''
+      mode:
+        description: 'live publishes; shadow/dry-run must not'
+        required: false
+        type: string
+        default: 'shadow'
+      pixivflow_ref:
+        description: 'PixivFlow git ref to execute'
+        required: false
+        type: string
+        default: 'master'
+
+# Layer 2 of exactly-once: one concurrency group per canonical slot. A duplicate
+# dispatch queues behind the running one instead of racing it. Layer 1 is D1:
+# UNIQUE(schedule_id, occurrence_at) plus the (slot_id, attempt) execution key.
+concurrency:
+  group: pixivflow-${{ inputs.slot_id }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  execute:
+    runs-on: ubuntu-latest
+    # Hard bound. A wedged Pixiv call cannot run forever: the runner dies here and
+    # the control plane converges the occurrence from provider state.
+    timeout-minutes: 90
+    env:
+      SLOT_ID: ${{ inputs.slot_id }}
+      SCHEDULE_ID: ${{ inputs.schedule_id }}
+      ATTEMPT: ${{ inputs.attempt }}
+      BOT_ID: ${{ inputs.bot_id }}
+      TARGETS: ${{ inputs.targets }}
+      MODE: ${{ inputs.mode }}
+      OCCURRENCE_AT: ${{ inputs.occurrence_at }}
+      CALLBACK_URL: ${{ inputs.callback_url }}
+      CONTROL_SECRET: ${{ secrets.CALLBACK_SECRET }}
+      PIXIV_CLIENT_ID: ${{ secrets.PIXIV_CLIENT_ID }}
+      PIXIV_CLIENT_SECRET: ${{ secrets.PIXIV_CLIENT_SECRET }}
+      PIXIV_DEVICE_TOKEN: ${{ secrets.PIXIV_DEVICE_TOKEN }}
+      PIXIV_REFRESH_TOKEN: ${{ secrets.PIXIV_REFRESH_TOKEN }}
+    steps:
+      - name: Checkout control plane (for the versioned shadow config)
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Checkout PixivFlow at the requested ref
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: redtidev1918/PixivFlow
+          ref: ${{ inputs.pixivflow_ref }}
+          path: pixivflow-src
+          # PixivFlow is a public repository: the standard GitHub-hosted runner is
+          # the free execution capacity this design relies on. Swapping the
+          # execution provider must not require touching business state.
+          persist-credentials: false
+
+      - uses: actions/setup-node@0a44ba7841725637a19e28fa30b79a866c81b0a6 # v4
+        with:
+          node-version: '24'
+
+      - name: Claim the execution
+        # Best effort: the control plane records the run id so it can query
+        # provider state later. If this fails, reconciliation still adopts the run
+        # from the GitHub API, so a claim failure must not stop the work.
+        run: |
+          set -uo pipefail
+          EXEC_PATH=$(python3 -c 'import urllib.parse,os;print(urllib.parse.quote(os.environ["SLOT_ID"]+"#"+os.environ["ATTEMPT"], safe=""))')
+          echo "execution path: $EXEC_PATH"
+          for attempt in 1 2 3; do
+            code=$(curl -sS -o /tmp/claim.json -w '%{http_code}' --max-time 30 \
+              -X POST "$CALLBACK_URL/executions/$EXEC_PATH/claim" \
+              -H "Authorization: Bearer $CONTROL_SECRET" \
+              -H 'Content-Type: application/json' \
+              -d "{\"provider_run_id\":\"${GITHUB_RUN_ID}\"}" || echo 000)
+            echo "claim attempt $attempt -> HTTP $code"
+            body=$(head -c 300 /tmp/claim.json 2>/dev/null || true)
+            echo "claim body: $body"
+            [ "$code" = "200" ] && break
+            sleep 5
+          done
+          [ "$code" = "200" ] || echo "::warning::claim failed; reconciliation will adopt this run from the GitHub API"
+
+      - name: Build PixivFlow
+        working-directory: pixivflow-src
+        run: |
+          set -euo pipefail
+          npm ci --no-audit --no-fund
+          npm run build
+
+      - name: Execute the slot
+        id: execute
+        working-directory: pixivflow-src
+        run: |
+          set -uo pipefail
+          CONFIG="$GITHUB_WORKSPACE/control-plane/config/pixivflow.shadow.json"
+          ARGS=(--config "$CONFIG" --schedule-id "$SCHEDULE_ID" --slot-id "$SLOT_ID"
+                --attempt "$ATTEMPT" --mode "$MODE" --result-file "$GITHUB_WORKSPACE/slot-result.json")
+          [ -n "$BOT_ID" ] && ARGS+=(--bot-id "$BOT_ID")
+          [ -n "$TARGETS" ] && ARGS+=(--targets "$TARGETS")
+          [ -n "$OCCURRENCE_AT" ] && ARGS+=(--occurrence-at "$OCCURRENCE_AT")
+
+          node dist/index.js execute-slot "${ARGS[@]}"
+          code=$?
+          echo "exit_code=$code" >> "$GITHUB_OUTPUT"
+          echo "execute-slot exited $code"
+          # Never fail here: the reporting step must run so the control plane gets
+          # the real per-target outcome instead of guessing.
+          exit 0
+
+      - name: Report the result
+        # Reports whenever this job still has a shell. A job-level timeout kills
+        # the steps, so a timed-out run is deliberately recovered by the control
+        # plane from the GitHub API instead of from here.
+        if: always()
+        run: |
+          set -uo pipefail
+          EXEC_PATH=$(python3 -c 'import urllib.parse,os;print(urllib.parse.quote(os.environ["SLOT_ID"]+"#"+os.environ["ATTEMPT"], safe=""))')
+          RESULT_FILE="$GITHUB_WORKSPACE/slot-result.json"
+          EXIT_CODE="${{ steps.execute.outputs.exit_code }}"
+
+          python3 - "$RESULT_FILE" "$EXIT_CODE" > /tmp/result.json <<'PY'
+          import json, sys, pathlib
+          path, exit_code = sys.argv[1], sys.argv[2]
+          try:
+              result = json.loads(pathlib.Path(path).read_text())
+          except Exception:
+              result = {"slotId": None, "targets": [], "status": "failed"}
+          # The exit code IS the execution status; a missing result file (crashed
+          # runner) must not be reported as success.
+          code = int(exit_code) if exit_code.strip().isdigit() else 1
+          status = {0: "success", 2: "partial", 3: "failed", 4: "uncertain"}.get(code, "failed")
+          item_status = {"submitted": "submitted", "stored": "downloaded", "delivery_pending": "delivery_pending",
+                         "no_candidate": "no_candidate", "duplicate": "duplicate", "failed": "failed", "missing": "failed"}
+          items = [
+              {"target_id": t.get("targetId"), "status": item_status.get(t.get("status", "missing"), "failed"),
+               "work_id": t.get("workId"), "error": t.get("error"), "error_class": t.get("status")}
+              for t in result.get("targets", []) if t.get("targetId")
+          ]
+          print(json.dumps({"status": status, "result": json.dumps(result), "items": items,
+                            "error": result.get("error") or (None if status == "success" else f"exit code {code}")}))
+          PY
+
+          ITEMS=$(python3 -c 'import json,sys;print(json.dumps(json.load(open("/tmp/result.json"))["items"]))')
+
+          curl -sS --max-time 30 -X POST "$CALLBACK_URL/executions/$EXEC_PATH/items" \
+            -H "Authorization: Bearer $CONTROL_SECRET" -H 'Content-Type: application/json' \
+            -d "{\"items\": $ITEMS}" || echo "::warning::item report failed; reconciliation covers it"
+
+          python3 - "$EXEC_PATH" <<'PY' > /tmp/payload.json
+          import json, sys
+          path = sys.argv[1]
+          data = json.load(open('/tmp/result.json'))
+          print(json.dumps({"status": data["status"], "result": data["result"], "error": data["error"]}))
+          PY
+
+          code=$(curl -sS -o /tmp/result-response.json -w '%{http_code}' --max-time 60 \
+            -X POST "$CALLBACK_URL/executions/$EXEC_PATH/result" \
+            -H "Authorization: Bearer $CONTROL_SECRET" -H 'Content-Type: application/json' \
+            --data @/tmp/payload.json || echo 000)
+          echo "result report -> HTTP $code"
+          head -c 500 /tmp/result-response.json || true
