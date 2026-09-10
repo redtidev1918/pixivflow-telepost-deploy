@@ -103,6 +103,14 @@ jobs:
       PIXIV_CLIENT_SECRET: ${{ secrets.PIXIV_CLIENT_SECRET }}
       PIXIV_DEVICE_TOKEN: ${{ secrets.PIXIV_DEVICE_TOKEN }}
       PIXIV_REFRESH_TOKEN: ${{ secrets.PIXIV_REFRESH_TOKEN }}
+      # Read-only auth is the default on purpose: this workflow has no Pixiv
+      # credential of its own yet, and PixivAuth refreshes on every boot — a
+      # refresh can rotate the single production refresh token that Fly is using,
+      # and a running daemon never re-reads it from disk. Read-only refuses to
+      # refresh at all, so a credential-less run fails loudly instead of touching
+      # the token endpoint. Set the repo variable to 'false' once this workflow has
+      # its OWN credential.
+      PIXIV_AUTH_READONLY: ${{ vars.PIXIV_AUTH_READONLY || 'true' }}
     steps:
       - name: Checkout control plane (for the versioned shadow config)
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
