@@ -112,10 +112,45 @@ shadow 全部通过 -> 一次 cutover -> 正式 bot1/bot2 webhook -> Worker
 - 正在运行的守护进程**从不重新读取**磁盘上的 token（`credentials.refreshToken` 在构造时捕获，只在进程内更新），所以一旦被轮换，生产必须重启才能恢复。
 - Pixiv 在 `grant_type=refresh_token` 时是否轮换旧 token，是客户端**无法证明**的服务端行为。
 
+  **实测（2026-09-10，真实 GitHub runner）**：一次全新 runner 无缓存 refresh 了 **2 次**，两次都成功，且 `Received updated refresh token` 出现 **0 次** —— 即这两次 Pixiv 返回了**同一个** refresh token。
+
+  ⚠️ **但这只是 2 次观测，不能推广成"Pixiv 永不轮换"**。`PixivAuth` 专门处理 `data.refresh_token` 差异，就该继续把"服务端未来可能返回新 refresh token"当作合法情况。因此不存在"因为不会轮换所以安全"这种论证；安全来自下面 §4.2.1 的不变式。
+
 **当前无法安全复用**：
 
 - 本地 `~/.pixivflow/config/standalone.config.json` 里存的**就是** Fly 生产 refresh token（已比对一致）。任何本地 PixivFlow 运行都会把它从 unified storage 解析进内存。
 - 唯一可以避免刷新的路径是使用缓存中的 access token。实测本机缓存已过期：`expiresAt = 2026-08-29 21:07:46`（写入 169 字节 JSON，`bearer`）。
+
+### 4.2.1 轮换不变式：先持久化，才允许成功
+
+共享一套凭据意味着"拿到新 token 就地丢掉"是单向门：runner 随 job 销毁，丢掉的 token 谁也拿不回来，账号访问一起失去。所以 cutover 前必须锁死：
+
+```
+runner 收到 rotated refresh token
+        ↓
+必须安全持久化（D1 是这套架构里唯一的耐久存储）
+        ↓
+不写进 Actions log（值被 mask，只打印摘要与状态）
+        ↓
+不能只留在 ephemeral runner（artifact 仅作最后兜底）
+        ↓
+在确认已 durable 保存之前，不得认为 execution 完整成功
+```
+
+实现：
+
+| 位置 | 机制 |
+| --- | --- |
+| D1 `runner_credentials` | 存当前值；记录 `previous_hash`（被替换值的摘要，**不是** token 历史）与 `rotations` 计数 |
+| `PUT /control/credentials/:name` | 写入；拒绝空/过短/仍是 `${...}` 占位符的值；轮换时写 `runner_credential_rotated` 审计事件（只含 name/计数/前一次时间） |
+| `GET /control/credentials/:name` | **只返回元数据**，绝不含明文 |
+| `POST /control/credentials/:name/read` | 唯一能读到明文的方式（显式 POST，避免被缓存/进 URL/进日志） |
+| workflow `Resolve the Pixiv credential` | 每次运行**从控制平面取**当前值 ⇒ 上一轮写回的新 token 立刻被下一轮使用；token 不再需要长期存放在 GitHub secret 里 |
+| workflow `Persist a rotated credential` | 在 **report 之前**执行：检测任何位置出现的非占位符差异值 → 重试 PUT；失败则**拒绝上报** |
+
+失败即"不上报"的意义：未上报的 execution 停在非终态，由 reconciliation 从 GitHub 侧收敛成 `failed`，**不可能被当成一次完整成功**。
+
+**实测（真实 Cloudflare + D1）**：空库 `stored:false` / `read` 404；占位符被拒 400；写入真实值 `changed:false, rotations:0`；PUT 一个不同值 → `changed:true, rotations:1`、`previousHash=722c05473f2ad7d2`（＝被替换值的摘要）、明文不在元数据里；`read` 返回 43 字符原值；无授权 GET/POST 均 401。
 
 **已加入的安全原语**（`PIXIV_AUTH_READONLY`）：
 
