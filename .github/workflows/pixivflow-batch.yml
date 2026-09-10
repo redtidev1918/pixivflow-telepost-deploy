@@ -139,6 +139,22 @@ jobs:
           npm ci --no-audit --no-fund
           npm run build
 
+      - name: Fetch durable duplicate history
+        # A disposable runner starts with an empty local database, so it cannot know
+        # which works this bot already handled. The control plane owns that history;
+        # without it the run re-selects old works and silently produces nothing new.
+        # Best effort: a lookup failure must not stop the run.
+        run: |
+          set +e
+          code=$(curl -sS -o "$GITHUB_WORKSPACE/processed-works.json" -w '%{http_code}' --max-time 30 \
+            "$CALLBACK_URL/processed-works?bot_id=${BOT_ID:-bot1}&limit=1000" \
+            -H "Authorization: Bearer $CONTROL_SECRET" || echo 000)
+          echo "processed-works -> HTTP $code"
+          if [ "$code" != "200" ]; then
+            echo '{"illustration":[],"novel":[]}' > "$GITHUB_WORKSPACE/processed-works.json"
+            echo "::warning::duplicate history unavailable; continuing without it"
+          fi
+
       - name: Execute the slot
         id: execute
         working-directory: pixivflow-src
@@ -150,7 +166,8 @@ jobs:
           set +e
           CONFIG="$GITHUB_WORKSPACE/control-plane/config/pixivflow.shadow.json"
           ARGS=(--config "$CONFIG" --schedule-id "$SCHEDULE_ID" --slot-id "$SLOT_ID"
-                --attempt "$ATTEMPT" --mode "$MODE" --result-file "$GITHUB_WORKSPACE/slot-result.json")
+                --attempt "$ATTEMPT" --mode "$MODE" --result-file "$GITHUB_WORKSPACE/slot-result.json"
+                --exclude-work-ids "$GITHUB_WORKSPACE/processed-works.json")
           [ -n "$BOT_ID" ] && ARGS+=(--bot-id "$BOT_ID")
           [ -n "$TARGETS" ] && ARGS+=(--targets "$TARGETS")
           [ -n "$OCCURRENCE_AT" ] && ARGS+=(--occurrence-at "$OCCURRENCE_AT")

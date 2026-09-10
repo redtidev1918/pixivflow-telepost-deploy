@@ -670,6 +670,52 @@ export class D1ControlStore implements ControlPlaneStore {
     return 'updated';
   }
 
+  // ---- processed works (durable duplicate history) ---------------------------
+
+  async recordProcessedWorks(input: {
+    botId: string;
+    slotId?: string | null;
+    works: Array<{ workType: string; pixivId: string; targetId?: string | null }>;
+    nowMs: number;
+  }): Promise<number> {
+    if (input.works.length === 0) return 0;
+    let created = 0;
+    for (const work of input.works) {
+      // INSERT OR IGNORE: the same work reported by a retry (or by a second
+      // execution of the same slot) must not create a second history entry.
+      const result = (await this.db
+        .prepare(
+          `INSERT OR IGNORE INTO processed_works (bot_id, work_type, pixiv_id, target_id, slot_id, first_seen_at)
+           VALUES (?, ?, ?, ?, ?, ?)`
+        )
+        .bind(
+          input.botId,
+          work.workType,
+          work.pixivId,
+          work.targetId ?? null,
+          input.slotId ?? null,
+          input.nowMs
+        )
+        .run()) as { meta?: { changes?: number } } | undefined;
+      if ((result?.meta?.changes ?? 0) > 0) created += 1;
+    }
+    return created;
+  }
+
+  async listProcessedWorks(
+    botId: string,
+    limit: number
+  ): Promise<Array<{ workType: string; pixivId: string }>> {
+    const { results } = await this.db
+      .prepare(
+        `SELECT work_type, pixiv_id FROM processed_works
+          WHERE bot_id = ? ORDER BY first_seen_at DESC LIMIT ?`
+      )
+      .bind(botId, limit)
+      .all<{ work_type: string; pixiv_id: string }>();
+    return (results ?? []).map((row) => ({ workType: row.work_type, pixivId: row.pixiv_id }));
+  }
+
   async listSlotItems(slotId: string): Promise<SlotItemRow[]> {
     const { results } = await this.db
       .prepare(

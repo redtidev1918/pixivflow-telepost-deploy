@@ -235,7 +235,7 @@ export interface SlotItemRow {
 }
 
 /** Everything reconciliation and the callback routes need, in one port. */
-export interface ControlPlaneStore extends ControlStore, ExecutionStore, ReviewStore {}
+export interface ControlPlaneStore extends ControlStore, ExecutionStore, ReviewStore, ProcessedWorkStore {}
 
 export type ReviewStatus = 'pending' | 'approved' | 'rejected' | 'expired' | 'uncertain';
 
@@ -305,4 +305,28 @@ export interface ReviewStore {
     publishedMessageId: number | null;
     nowMs: number;
   }): Promise<void>;
+}
+
+/**
+ * Durable duplicate history.
+ *
+ * A disposable runner starts with an empty local database, so "has this work been
+ * handled already?" cannot be answered from the runner. The control plane owns
+ * that answer, and the runner asks for it before selecting candidates — otherwise
+ * a fresh runner re-selects works that were delivered weeks ago and the day
+ * silently produces nothing new.
+ */
+export interface ProcessedWorkStore {
+  /** Idempotent on (bot_id, work_type, pixiv_id). Returns how many were new. */
+  recordProcessedWorks(input: {
+    botId: string;
+    slotId?: string | null;
+    works: Array<{ workType: string; pixivId: string; targetId?: string | null }>;
+    nowMs: number;
+  }): Promise<number>;
+  /** Most recently recorded ids for a bot, newest first (bounded by `limit`). */
+  listProcessedWorks(
+    botId: string,
+    limit: number
+  ): Promise<Array<{ workType: string; pixivId: string }>>;
 }

@@ -372,6 +372,39 @@ export class MemoryControlStore implements ControlPlaneStore {
     review.updatedAt = input.nowMs;
   }
 
+  // ---- processed works ------------------------------------------------------
+
+  readonly processed = new Set<string>();
+  readonly processedRows: Array<{ workType: string; pixivId: string; botId: string }> = [];
+
+  async recordProcessedWorks(input: {
+    botId: string;
+    slotId?: string | null;
+    works: Array<{ workType: string; pixivId: string; targetId?: string | null }>;
+    nowMs: number;
+  }): Promise<number> {
+    let created = 0;
+    for (const work of input.works) {
+      const key = `${input.botId}|${work.workType}|${work.pixivId}`;
+      if (this.processed.has(key)) continue;
+      this.processed.add(key);
+      this.processedRows.push({ ...work, botId: input.botId });
+      created += 1;
+    }
+    return created;
+  }
+
+  async listProcessedWorks(
+    botId: string,
+    limit: number
+  ): Promise<Array<{ workType: string; pixivId: string }>> {
+    return this.processedRows
+      .filter((row) => row.botId === botId)
+      .slice(-limit)
+      .reverse()
+      .map((row) => ({ workType: row.workType, pixivId: row.pixivId }));
+  }
+
   // ---- test helpers ---------------------------------------------------------
 
   get createdSlotCount(): number {

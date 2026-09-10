@@ -73,6 +73,25 @@ export async function handleControl(
   url: URL,
   callbackSecret: string | undefined
 ): Promise<Response | null> {
+  // Durable duplicate history for a runner that starts with an empty local
+  // database: the list of works this bot has already handled.
+  if (url.pathname === '/control/processed-works') {
+    if (request.method !== 'GET') return json({ error: 'method not allowed' }, 405);
+    if (!authorized(request, callbackSecret)) return json({ error: 'unauthorized' }, 401);
+    const botId = url.searchParams.get('bot_id') ?? '';
+    if (!botId) return json({ error: 'bot_id is required' }, 400);
+    const requested = Number(url.searchParams.get('limit') ?? '500');
+    const limit = Number.isFinite(requested) ? Math.min(Math.max(Math.trunc(requested), 1), 2000) : 500;
+    const works = await store.listProcessedWorks(botId, limit);
+    // Grouped by work type: the runner excludes per type, exactly like the local
+    // dedupe it replaces.
+    const grouped: Record<string, string[]> = {};
+    for (const work of works) {
+      (grouped[work.workType] ??= []).push(work.pixivId);
+    }
+    return json({ ok: true, botId, limit, count: works.length, works: grouped });
+  }
+
   // Pre-flight for the runner's retry safety: if the review already exists, the
   // media is already in the review chat and the runner must NOT post it again.
   const reviewLookup = /^\/control\/reviews\/([^/]+)$/.exec(url.pathname);
@@ -224,6 +243,9 @@ export async function handleControl(
   const slot = await store.getOccurrence(existing.slotId);
   const rawItems = Array.isArray(body.items) ? body.items : [];
   const results: Array<{ targetId: string; outcome: string }> = [];
+  // Works that this run actually handled become durable duplicate history: the
+  // next (disposable) runner must not reselect them from an empty local database.
+  const handled: Array<{ workType: string; pixivId: string; targetId: string }> = [];
   for (const raw of rawItems) {
     const item = raw as Record<string, unknown>;
     const targetId = typeof item.target_id === 'string' ? item.target_id : undefined;
@@ -244,7 +266,26 @@ export async function handleControl(
       },
       nowMs,
     });
+    // `submitted` is the only status that proves the work went somewhere; a
+    // `duplicate` is already in history by definition.
+    if (status === 'submitted' && typeof item.work_id === 'string' && item.work_id.length > 0) {
+      handled.push({
+        workType: typeof item.work_type === 'string' ? item.work_type : 'unknown',
+        pixivId: item.work_id,
+        targetId,
+      });
+    }
     results.push({ targetId, outcome });
+  }
+
+  if (handled.length > 0) {
+    const recorded = await store.recordProcessedWorks({
+      botId: slot?.botId ?? 'unknown',
+      slotId: existing.slotId,
+      works: handled,
+      nowMs,
+    });
+    return json({ ok: true, executionId, items: results, processedWorksRecorded: recorded });
   }
   return json({ ok: true, executionId, items: results });
 }

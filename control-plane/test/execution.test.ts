@@ -11,6 +11,7 @@ import {
   DISPATCH_CLAIM_GRACE_MS,
 } from '../src/execution';
 import { reconcileAll } from '../src/reconciliation';
+import { handleControl } from '../src/routes/control';
 import { SCHEDULES } from '../src/schedules';
 import { FakeProvider, MemoryControlStore } from './memory-store';
 
@@ -474,5 +475,62 @@ describe('convergence under concurrency', () => {
       const executions = [...store.executions.values()].filter((row) => row.slotId === slot.id);
       expect(executions.length).toBeLessThanOrEqual(1);
     }
+  });
+});
+
+describe('durable duplicate history for disposable runners', () => {
+  const secret = 'control-secret';
+  const authedPost = (path: string, body: unknown) =>
+    new Request(`https://control.example${path}`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', authorization: `Bearer ${secret}` },
+      body: JSON.stringify(body),
+    });
+
+  it('records works reported as submitted, idempotently', async () => {
+    const store = new MemoryControlStore();
+    const provider = new FakeProvider();
+    const slot = await seedDueSlot(store, NOW);
+    const { executionId } = await startAttempt(
+      store,
+      provider,
+      { slot, scheduleId: schedule.id, botId: schedule.botId, attempt: 1, targets: [], callbackUrl: CALLBACK, pixivflowRef: 'r', mode: 'shadow' },
+      NOW
+    );
+
+    const body = {
+      items: [
+        { target_id: 'bot1-illust-botefuku', status: 'submitted', work_type: 'illustration', work_id: '29088506' },
+        { target_id: 'bot1-novel-botefuku', status: 'no_candidate', work_type: 'novel' },
+      ],
+    };
+    const first = await handleControl(authedPost(`/control/executions/${encodeURIComponent(executionId)}/items`, body), store, new URL(`https://c/control/executions/${encodeURIComponent(executionId)}/items`), secret);
+    expect(await first!.json()).toMatchObject({ processedWorksRecorded: 1 });
+
+    // A replayed item report must not create a second history entry.
+    const replay = await handleControl(authedPost(`/control/executions/${encodeURIComponent(executionId)}/items`, body), store, new URL(`https://c/control/executions/${encodeURIComponent(executionId)}/items`), secret);
+    expect(await replay!.json()).toMatchObject({ processedWorksRecorded: 0 });
+
+    const listed = await handleControl(
+      new Request('https://control.example/control/processed-works?bot_id=bot1', { headers: { authorization: `Bearer ${secret}` } }),
+      store,
+      new URL('https://control.example/control/processed-works?bot_id=bot1'),
+      secret
+    );
+    expect(await listed!.json()).toMatchObject({
+      ok: true,
+      botId: 'bot1',
+      count: 1,
+      works: { illustration: ['29088506'] },
+    });
+
+    // Unknown work ids never enter history just because an item was reported.
+    const other = await handleControl(
+      new Request('https://control.example/control/processed-works?bot_id=bot2', { headers: { authorization: `Bearer ${secret}` } }),
+      store,
+      new URL('https://control.example/control/processed-works?bot_id=bot2'),
+      secret
+    );
+    expect(await other!.json()).toMatchObject({ count: 0, works: {} });
   });
 });
