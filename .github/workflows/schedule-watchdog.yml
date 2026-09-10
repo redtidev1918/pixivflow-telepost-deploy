@@ -1,4 +1,4 @@
-# Delayed watchdog (back-up trigger) for the Fly autosleep PixivFlow deployment
+# Delayed watchdog (back-up trigger) for the Fly PixivFlow deployment
 # (app telesubmit-multi-bot). The Cloudflare Worker is the PRIMARY clock; this
 # workflow re-POSTs the SAME idempotent trigger ~20 min after each scheduled fire
 # as a safety net.
@@ -10,6 +10,14 @@
 # the 90 min grace window (PixivFlow schedulerRuntime.trigger.graceMinutes). It is
 # an HTTP trigger source only — PixivFlow owns the occurrence; duplicate/late fires
 # converge on one Slot.
+#
+# Trigger response contract (durable dispatch): the endpoint records the occurrence
+# durably and answers immediately, reporting the BUSINESS disposition in the JSON
+# body — so this job judges by that disposition, not by the bare HTTP code:
+#   202 {"status":"accepted",  "note":"queued"}           -> admitted, executing now
+#   202 {"status":"running",   "note":"already_running"}  -> another worker owns the slot
+#   200 {"status":"completed", "note":"already_completed"}-> slot is terminal (success/partial)
+#   410 expired / 425 not due -> terminal, non-fatal;  401/403/503 -> hard failure (needs a human)
 #
 # Primary (Cloudflare) vs watchdog (this), Asia/Shanghai:
 #   bot1-daily  primary 10:00 / 18:00 -> watchdog 10:20 / 18:20
@@ -64,31 +72,115 @@ jobs:
             echo "id=$ID" >> "$GITHUB_OUTPUT"
             echo "-> schedule id: $ID"
           fi
-      - name: POST idempotent schedule trigger (wakes autosleep machine)
+      - name: POST idempotent schedule trigger (judge business status)
         env:
           SCHEDULE_TRIGGER_URL: ${{ secrets.SCHEDULE_TRIGGER_URL }}
           SCHEDULE_TRIGGER_TOKEN: ${{ secrets.SCHEDULE_TRIGGER_TOKEN }}
           MANUAL: ${{ github.event.inputs.schedule_id }}
         run: |
+          set -uo pipefail
           BASE="${SCHEDULE_TRIGGER_URL%/}"
           URL="$BASE/internal/schedules/${{ steps.sched.outputs.id }}/run"
           echo "POST $URL"
-          # Scheduled fires are authoritative: a non-2xx must fail the job so a
-          # broken clock is visible. Manual dispatches are smoke tests that may
-          # legitimately land outside the grace window (425/410); surface the body
-          # but don't fail, so ops can trigger anytime to confirm wake+auth.
-          if [ -n "$MANUAL" ]; then
-            curl -sS --max-time 540 -w "\nHTTP %{http_code}\n" \
-              -X POST "$URL" \
-              -H "Authorization: Bearer $SCHEDULE_TRIGGER_TOKEN" \
-              -H "Content-Type: application/json" \
-              -d '{}' || true
-          else
-            # The request stays open for the whole run — that connection IS the
-            # activity lease that keeps the autosleep machine awake.
-            curl -sS --fail-with-body --max-time 540 \
-              -X POST "$URL" \
-              -H "Authorization: Bearer $SCHEDULE_TRIGGER_TOKEN" \
-              -H "Content-Type: application/json" \
-              -d '{}'
+
+          BODY_FILE="$(mktemp)"
+          CODE_FILE="$(mktemp)"
+          trap 'rm -f "$BODY_FILE" "$CODE_FILE"' EXIT
+
+          # Scheduled fires are authoritative: a broken clock must fail the job so it
+          # is visible. Manual dispatches are smoke tests that may legitimately land
+          # outside the grace window (425/410) — surface the body, never fail the job.
+          #
+          # --max-time 540 is kept as a weak wake/lease hint, but the trigger endpoint
+          # now durably records the occurrence and answers IMMEDIATELY: the response is
+          # expected in milliseconds, not minutes. The HTTP code alone is therefore no
+          # longer the verdict; the business disposition in the JSON body is.
+          set +e
+          curl -sS --max-time 540 \
+            -X POST "$URL" \
+            -H "Authorization: Bearer $SCHEDULE_TRIGGER_TOKEN" \
+            -H "Content-Type: application/json" \
+            -d '{}' \
+            -o "$BODY_FILE" -w '%{http_code}' > "$CODE_FILE"
+          CURL_RC=$?
+          set -e
+
+          CODE="$(cat "$CODE_FILE")"
+          echo "--- response body ---"
+          cat "$BODY_FILE"; echo
+          echo "HTTP $CODE (curl rc=$CURL_RC)"
+
+          if [ "$CURL_RC" -ne 0 ]; then
+            if [ -n "$MANUAL" ]; then
+              echo "::warning::manual run: transport error (curl rc=$CURL_RC); not failing this smoke test"
+              exit 0
+            fi
+            echo "::error::transport error talking to the trigger endpoint (curl rc=$CURL_RC); letting the platform retry"
+            exit 1
           fi
+
+          # Decision table (business semantics, not the bare HTTP code):
+          #   2xx + note already_completed          -> success: the slot is genuinely terminal
+          #   2xx + note queued / already_running   -> success: run ADMITTED (and NOT yet completed)
+          #   410 expired / 425 not due             -> terminal, non-fatal (same set as before)
+          #   401 / 403 / 503                       -> hard failure: auth/config broken, needs a human
+          #   other 5xx / 408 / 429 / unparsable or unrecognizable 2xx -> hard failure so the platform may retry
+          HTTP_CODE="$CODE" BODY_FILE="$BODY_FILE" MANUAL="$MANUAL" python3 - <<'PY'
+          import json, os, sys
+
+          raw_code = os.environ.get("HTTP_CODE", "").strip()
+          manual = os.environ.get("MANUAL", "") != ""
+          with open(os.environ["BODY_FILE"], encoding="utf-8", errors="replace") as fh:
+              body = fh.read()
+
+          TERMINAL = {410, 425}
+          HARD_AUTH = {401, 403, 503}
+          # `note` is the authoritative disposition; `status` is accepted as an
+          # equivalent signal so a body carrying only one of the two still works.
+          NOW_RUNNING = {"queued", "already_running", "accepted", "running"}
+          TERMINAL_SLOT = {"already_completed", "completed"}
+          KNOWN = NOW_RUNNING | TERMINAL_SLOT
+
+          try:
+              code = int(raw_code)
+          except ValueError:
+              code = None
+
+          def verdict(passed, message):
+              if passed:
+                  print("PASS: " + message)
+                  sys.exit(0)
+              if manual:
+                  print("WARNING: " + message)
+                  print("::warning::manual run: reporting only, never failing this smoke test")
+                  sys.exit(0)
+              print("::error::" + message)
+              sys.exit(1)
+
+          if code is None:
+              verdict(False, "no usable HTTP status (%r) — treating as a retryable failure" % raw_code)
+
+          if code in TERMINAL:
+              verdict(True, "HTTP %d: occurrence expired / not due yet — terminal, non-fatal" % code)
+
+          if code in HARD_AUTH:
+              verdict(False, "HTTP %d: auth/config is broken — a human must look at this" % code)
+
+          if 200 <= code < 300:
+              try:
+                  payload = json.loads(body)
+              except Exception:
+                  payload = None
+              if not isinstance(payload, dict):
+                  verdict(False, "HTTP %d but the body is not a JSON object — cannot judge business status" % code)
+              note = str(payload.get("note") or "").strip().lower()
+              status = str(payload.get("status") or "").strip().lower()
+              disposition = note if note in KNOWN else (status if status in KNOWN else "")
+              if disposition in TERMINAL_SLOT:
+                  verdict(True, "HTTP %d note/status=%r: slot was ALREADY TERMINAL (success/partial)" % (code, disposition))
+              if disposition in NOW_RUNNING:
+                  verdict(True, "HTTP %d note/status=%r: run ADMITTED and executing in the background (NOT completed)" % (code, disposition))
+              verdict(False, "HTTP %d with unrecognized disposition (note=%r, status=%r) — retryable failure" % (code, note, status))
+
+          verdict(False, "HTTP %d: rejected/unexpected response — retryable failure" % code)
+          PY
