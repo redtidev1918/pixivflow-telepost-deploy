@@ -73,6 +73,26 @@ export async function handleControl(
   url: URL,
   callbackSecret: string | undefined
 ): Promise<Response | null> {
+  // Pre-flight for the runner's retry safety: if the review already exists, the
+  // media is already in the review chat and the runner must NOT post it again.
+  const reviewLookup = /^\/control\/reviews\/([^/]+)$/.exec(url.pathname);
+  if (reviewLookup) {
+    if (request.method !== 'GET') return json({ error: 'method not allowed' }, 405);
+    if (!authorized(request, callbackSecret)) return json({ error: 'unauthorized' }, 401);
+    const review = await store.getReview(decodeURIComponent(reviewLookup[1] ?? ''));
+    if (!review) return json({ error: 'unknown review' }, 404);
+    return json({
+      ok: true,
+      reviewId: review.id,
+      botId: review.botId,
+      status: review.status,
+      messageIds: review.messageIds,
+      messageId: review.messageId,
+      publishChatId: review.publishChatId,
+      publishedMessageId: review.publishedMessageId,
+    });
+  }
+
   // Runner side of the review flow: the runner has already posted the media to the
   // review chat (media never passes through this Worker) and reports the ids so a
   // decision can be taken and the publish can be a server-side copy.
@@ -112,6 +132,10 @@ export async function handleControl(
       caption: typeof body.caption === 'string' ? body.caption : null,
       publishChatId: typeof body.publish_chat_id === 'string' ? body.publish_chat_id : null,
       publishThreadId: typeof body.publish_thread_id === 'number' ? body.publish_thread_id : null,
+      // Only two initial states are accepted: a normal review awaiting a decision,
+      // or an unconfirmed send that must never be approved automatically.
+      ...(body.status === 'uncertain' ? { status: 'uncertain' as const } : {}),
+      ...(typeof body.error === 'string' ? { error: body.error } : {}),
       nowMs: Date.now(),
     });
 

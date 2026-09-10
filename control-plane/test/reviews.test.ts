@@ -9,6 +9,7 @@ import {
   DEFAULT_REVIEW_TTL_MS,
 } from '../src/reviews';
 import { handleTelegramWebhook } from '../src/routes/telegram';
+import { handleControl } from '../src/routes/control';
 import type { BotApiClient, TelegramResult } from '../src/telegram/client';
 import { MemoryControlStore } from './memory-store';
 
@@ -406,5 +407,62 @@ describe('webhook', () => {
       { TELEGRAM_WEBHOOK_SECRET: secret, getBot: () => null }
     );
     expect(response).toBeNull();
+  });
+});
+
+describe('runner-side review endpoints', () => {
+  const secret = 'control-secret';
+  const post = (path: string, body: unknown, token = secret) =>
+    new Request(`https://control.example${path}`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', authorization: `Bearer ${token}` },
+      body: JSON.stringify(body),
+    });
+  const get = (path: string, token = secret) =>
+    new Request(`https://control.example${path}`, { headers: { authorization: `Bearer ${token}` } });
+
+  it('looks a review up so a runner can prove it must not post again', async () => {
+    const store = new MemoryControlStore();
+    await seedReview(store);
+
+    const found = await handleControl(get('/control/reviews/rv1'), store, new URL('https://c/control/reviews/rv1'), secret);
+    expect(found?.status).toBe(200);
+    expect(await found!.json()).toMatchObject({ ok: true, reviewId: 'rv1', status: 'pending' });
+
+    const missing = await handleControl(get('/control/reviews/nope'), store, new URL('https://c/control/reviews/nope'), secret);
+    expect(missing?.status).toBe(404);
+
+    const unauthorized = await handleControl(get('/control/reviews/rv1', 'wrong'), store, new URL('https://c/control/reviews/rv1'), secret);
+    expect(unauthorized?.status).toBe(401);
+  });
+
+  it('records an unconfirmed send as uncertain instead of pending', async () => {
+    const store = new MemoryControlStore();
+    const response = await handleControl(
+      post('/control/reviews', {
+        review_id: 'rv_uncertain',
+        bot_id: 'bot1',
+        chat_id: '-100review',
+        publish_chat_id: '-100channel',
+        status: 'uncertain',
+        error: 'Telegram send outcome unconfirmed',
+      }),
+      store,
+      new URL('https://control.example/control/reviews'),
+      secret
+    );
+
+    expect(response?.status).toBe(200);
+    const review = (await store.getReview('rv_uncertain'))!;
+    expect(review.status).toBe('uncertain');
+    // An uncertain review can never be approved: the send may not have happened.
+    const bot = fakeBot();
+    const outcome = await decideReview(
+      { store, getBot: () => bot },
+      { reviewId: 'rv_uncertain', action: 'approve' },
+      NOW + 1000
+    );
+    expect(outcome.decided).toBe(false);
+    expect(bot.calls).toHaveLength(0);
   });
 });

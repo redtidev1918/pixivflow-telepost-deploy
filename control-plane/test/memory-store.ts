@@ -289,6 +289,8 @@ export class MemoryControlStore implements ControlPlaneStore {
     caption?: string | null;
     publishChatId?: string | null;
     publishThreadId?: number | null;
+    status?: 'pending' | 'uncertain';
+    error?: string | null;
     nowMs: number;
   }): Promise<{ record: ReviewRecord; created: boolean }> {
     // Mirrors the D1 unique index on (bot_id, target_id, work_id).
@@ -314,13 +316,13 @@ export class MemoryControlStore implements ControlPlaneStore {
       caption: input.caption ?? null,
       publishChatId: input.publishChatId ?? null,
       publishThreadId: input.publishThreadId ?? null,
-      status: 'pending',
+      status: input.status ?? 'pending',
       createdAt: input.nowMs,
       updatedAt: input.nowMs,
       decidedAt: null,
       decidedBy: null,
       publishedMessageId: null,
-      lastError: null,
+      lastError: input.error ?? null,
     };
     this.reviews.set(record.id, record);
     return { record, created: true };

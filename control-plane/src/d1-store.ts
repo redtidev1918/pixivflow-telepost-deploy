@@ -490,6 +490,13 @@ export class D1ControlStore implements ControlPlaneStore {
     caption?: string | null;
     publishChatId?: string | null;
     publishThreadId?: number | null;
+    /**
+     * A review whose media may have reached the chat but whose outcome is unknown
+     * is recorded as `uncertain` from the start: that is what stops a retry from
+     * posting a second copy (the runner's pre-flight check finds it and stops).
+     */
+    status?: 'pending' | 'uncertain';
+    error?: string | null;
     nowMs: number;
   }): Promise<{ record: ReviewRecord; created: boolean }> {
     // (bot_id, target_id, work_id) is unique, so a retried runner callback — or a
@@ -499,8 +506,8 @@ export class D1ControlStore implements ControlPlaneStore {
       .prepare(
         `INSERT OR IGNORE INTO reviews
            (id, bot_id, slot_id, target_id, work_id, chat_id, message_id, message_ids, media_group_id,
-            file_ids, caption, publish_chat_id, publish_thread_id, status, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?)`
+            file_ids, caption, publish_chat_id, publish_thread_id, status, created_at, updated_at, last_error)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
       )
       .bind(
         input.id,
@@ -516,8 +523,10 @@ export class D1ControlStore implements ControlPlaneStore {
         input.caption ?? null,
         input.publishChatId ?? null,
         input.publishThreadId ?? null,
+        input.status ?? 'pending',
         input.nowMs,
-        input.nowMs
+        input.nowMs,
+        input.error ?? null
       )
       .run()) as { meta?: { changes?: number } } | undefined;
 

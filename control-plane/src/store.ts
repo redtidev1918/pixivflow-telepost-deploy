@@ -281,6 +281,9 @@ export interface ReviewStore {
     caption?: string | null;
     publishChatId?: string | null;
     publishThreadId?: number | null;
+    /** `uncertain` records a send whose outcome could not be confirmed. */
+    status?: 'pending' | 'uncertain';
+    error?: string | null;
     nowMs: number;
   }): Promise<{ record: ReviewRecord; created: boolean }>;
   getReview(reviewId: string): Promise<ReviewRecord | null>;
