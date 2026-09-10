@@ -142,6 +142,21 @@ EXPECT_OWNER=worker scripts/cutover-preflight.sh
 
 1. 配 GitHub secrets：`TELEGRAM_BOT1_TOKEN`、`TELEGRAM_BOT2_TOKEN`、`CALLBACK_SECRET`、`CONTROL_PLANE_URL`
 2. Shadow 实跑一次完整 occurrence（`--mode shadow`，`EXECUTION_MODE=shadow`）：验证选题、去重、下载、上报、`processed_works` 落库，且**不发布任何内容**
+
+   **已完成的部分（真实基础设施，无 Pixiv 凭据）**：2026-09-10 用真实调度路径跑通了整条链路 —— Cloudflare sweep → `workflow_dispatch` → 真实 GitHub Actions run `34522570110` → sweep 认领该 run（写入 `provider_run_id`）→ runner 上报 items 与 result（HTTP 200）→ 控制平面落库
+
+   ```
+   dispatch_started -> dispatch_success -> github_run_started
+   -> github_run_finished{partial} -> slot_terminal{partial}
+   ```
+
+   slot `bot1-daily@2026-09-10T2330` = `partial`，两个 item 均 `no_candidate`，`--exclude-work-ids` 生效。job 结论 `success`（exit 2 按设计保持绿色）。
+
+   **同时证明生产 token 未被触碰**：本次 job 的 `PIXIV_*` 全部为空且 `PIXIV_AUTH_READONLY=true`；日志中
+   `Read-only auth: skipping the boot-time refresh-token probe` 等守卫命中 18 次，而
+   `Received updated refresh token` / `Refreshed Pixiv access token` / `Config file automatically updated` **均为 0 次**。
+
+   **仍需独立 Pixiv shadow 凭据**：真正的选题→下载→上传送审只能等有了独立凭据（或一份未过期的 access token）才能验证。
 3. 故障注入：job 超时、上报丢失、重复 dispatch、D1 写失败、runner 崩溃 —— 每次都要证明恰好一个 terminal 状态，且没有第二次执行
 4. 按 §4.1 的裁定完成审核域接线
 5. 一个完整调度周期内双跑（Fly 生产 + 无服务器平面），比较两边的 slot 结果
