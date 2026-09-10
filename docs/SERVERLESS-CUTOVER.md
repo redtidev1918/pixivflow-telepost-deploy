@@ -158,6 +158,16 @@ EXPECT_OWNER=worker scripts/cutover-preflight.sh
 
    **仍需独立 Pixiv shadow 凭据**：真正的选题→下载→上传送审只能等有了独立凭据（或一份未过期的 access token）才能验证。
 3. 故障注入：job 超时、上报丢失、重复 dispatch、D1 写失败、runner 崩溃 —— 每次都要证明恰好一个 terminal 状态，且没有第二次执行
+
+   **已在真实基础设施上验证**（无需凭据）：
+
+   | 层 | 机制 | 实测证据 |
+   | --- | --- | --- |
+   | 1 | D1 唯一键 `(schedule_id, occurrence_at)`、`(slot_id, attempt)` | 重复插入被拒；attempt 2 仍允许（重试可用） |
+   | 2 | workflow `concurrency: pixivflow-<slot_id>`（`cancel-in-progress: false`） | 同槽连发两次：第二个 run 在 `pending` 排队约 3.5 分钟，待第一个完成才 `in_progress` |
+   | 3 | 终态写入 once + 认领守卫 | 重放的上报返回 `applied:false`；该 slot 始终只有 1 条 execution、1 次 `slot_terminal`，`provider_run_id` 未被覆盖 |
+
+   其他：丢 tick 恢复（删除 occurrence 后下一次 sweep 立即重建并正确判过期）、并发 sweep（3 次 ×2 阶段全部落库、0 重复 id）、approve/reject 并发竞态（5 轮各仅 1 个赢家，两种顺序都出现）、崩溃遗留 claim 的收敛（1 恢复为 published / 1 转 uncertain）。
 4. 按 §4.1 的裁定完成审核域接线
 5. 一个完整调度周期内双跑（Fly 生产 + 无服务器平面），比较两边的 slot 结果
 6. 切换：Cloudflare cron 接管发放，Fly watchdog 先降为 observer，再停用
