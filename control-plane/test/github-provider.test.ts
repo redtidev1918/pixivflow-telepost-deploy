@@ -14,6 +14,7 @@ const request: DispatchRequest = {
   targets: ['bot1-illust-botefuku', 'bot1-novel-botefuku'],
   callbackUrl: 'https://control.example/control',
   mode: 'shadow',
+  pixivflowRef: 'v9.9.9',
 };
 
 function provider(fetchImpl: typeof fetch) {
@@ -51,6 +52,7 @@ describe('dispatch', () => {
         targets: 'bot1-illust-botefuku,bot1-novel-botefuku',
         callback_url: 'https://control.example/control',
         mode: 'shadow',
+        pixivflow_ref: 'v9.9.9',
       },
     });
     expect(seenHeaders.authorization).toBe(`Bearer ${TOKEN}`);

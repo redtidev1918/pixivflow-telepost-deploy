@@ -164,6 +164,7 @@ jobs:
           exit 0
 
       - name: Report the result
+        id: report
         # Reports whenever this job still has a shell. A job-level timeout kills
         # the steps, so a timed-out run is deliberately recovered by the control
         # plane from the GitHub API instead of from here.
@@ -198,9 +199,14 @@ jobs:
 
           ITEMS=$(python3 -c 'import json,sys;print(json.dumps(json.load(open("/tmp/result.json"))["items"]))')
 
-          curl -sS --max-time 30 -X POST "$CALLBACK_URL/executions/$EXEC_PATH/items" \
-            -H "Authorization: Bearer $CONTROL_SECRET" -H 'Content-Type: application/json' \
-            -d "{\"items\": $ITEMS}" || echo "::warning::item report failed; reconciliation covers it"
+          for attempt in 1 2 3; do
+            items_code=$(curl -sS -o /dev/null -w '%{http_code}' --max-time 30 -X POST "$CALLBACK_URL/executions/$EXEC_PATH/items" \
+              -H "Authorization: Bearer $CONTROL_SECRET" -H 'Content-Type: application/json' \
+              -d "{\"items\": $ITEMS}" || echo 000)
+            echo "item report attempt $attempt -> HTTP $items_code"
+            [ "$items_code" = "200" ] && break
+            sleep 5
+          done
 
           python3 - "$EXEC_PATH" <<'PY' > /tmp/payload.json
           import json, sys
@@ -209,9 +215,48 @@ jobs:
           print(json.dumps({"status": data["status"], "result": data["result"], "error": data["error"]}))
           PY
 
-          code=$(curl -sS -o /tmp/result-response.json -w '%{http_code}' --max-time 60 \
-            -X POST "$CALLBACK_URL/executions/$EXEC_PATH/result" \
-            -H "Authorization: Bearer $CONTROL_SECRET" -H 'Content-Type: application/json' \
-            --data @/tmp/payload.json || echo 000)
-          echo "result report -> HTTP $code"
+          result_code=000
+          for attempt in 1 2 3; do
+            result_code=$(curl -sS -o /tmp/result-response.json -w '%{http_code}' --max-time 60 \
+              -X POST "$CALLBACK_URL/executions/$EXEC_PATH/result" \
+              -H "Authorization: Bearer $CONTROL_SECRET" -H 'Content-Type: application/json' \
+              --data @/tmp/payload.json || echo 000)
+            echo "result report attempt $attempt -> HTTP $result_code"
+            [ "$result_code" = "200" ] && break
+            sleep 5
+          done
           head -c 500 /tmp/result-response.json || true
+          if [ "$result_code" != "200" ]; then
+            # The control plane never learned the outcome. Reconciliation would then
+            # have to infer the status from GitHub's conclusion, and a green run
+            # would be read as a successful slot — which a partial day is not. Fail
+            # loudly so the inference stays conservative.
+            echo "report_failed=1" >> "$GITHUB_OUTPUT"
+            echo "::warning::result report failed after 3 attempts; reconciliation will treat this run as failed"
+          fi
+
+      - name: Fail the job when the batch did not succeed
+        # Runs AFTER the report on purpose: the control plane must always receive
+        # the real per-target outcome. Rules:
+        #   - a failed report is always a failure (never let GitHub read it as success);
+        #   - exit 1/3/4 (process error, nothing delivered, unconfirmed send) are failures;
+        #   - exit 0 (delivered) and 2 (partial: e.g. one target had no candidate) are
+        #     legitimate business outcomes — the per-target detail is in the ledger.
+        # A run killed by the job timeout never reaches here; reconciliation recovers
+        # that case from the GitHub API.
+        if: always()
+        run: |
+          code="${{ steps.execute.outputs.exit_code }}"
+          report_failed="${{ steps.report.outputs.report_failed }}"
+          echo "batch exit code: ${code:-<none>} report_failed: ${report_failed:-0}"
+          if [ "${report_failed:-0}" = "1" ]; then
+            echo "::error::the batch result was never reported to the control plane"
+            exit 1
+          fi
+          case "${code:-1}" in
+            0|2) exit 0 ;;
+            *)
+              echo "::error::pixivflow batch exited ${code:-1}; the outcome was reported to the control plane"
+              exit 1
+              ;;
+          esac

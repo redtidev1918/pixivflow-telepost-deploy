@@ -153,6 +153,8 @@ export interface ReconcileDeps {
   mode: 'live' | 'shadow' | 'dry-run';
   /** Where a runner reports claim/result (the Worker's own public URL). */
   callbackUrl: string;
+  /** PixivFlow ref the runners must execute (deployment configuration). */
+  pixivflowRef: string;
   lookbackHours?: number;
   runId?: string;
 }
@@ -245,6 +247,7 @@ export async function reconcileAll(
           targets: schedule.targets.map((target) => target.id),
           callbackUrl: deps.callbackUrl,
           mode: deps.mode,
+          pixivflowRef: deps.pixivflowRef,
         },
         nowMs
       );

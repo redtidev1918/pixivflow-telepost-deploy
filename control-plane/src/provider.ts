@@ -41,6 +41,15 @@ export interface DispatchRequest {
   callbackUrl: string;
   /** `shadow`/`dry-run` runners must not publish to the real channel. */
   mode: 'live' | 'shadow' | 'dry-run';
+  /**
+   * Which PixivFlow ref the runner must execute.
+   *
+   * The control plane decides this, not the runner: "which code version runs" is
+   * deployment configuration, and a runner that picks its own version can execute
+   * something the control plane never validated (a branch without the batch
+   * command, or a version whose result contract differs).
+   */
+  pixivflowRef: string;
 }
 
 export interface DispatchResult {

@@ -25,6 +25,9 @@ CONTROL_PLANE_URL = "https://pixivflow-control-plane.redtidev1918.workers.dev"
 GITHUB_REPO = "redtidev1918/pixivflow-telepost-deploy"
 GITHUB_WORKFLOW = "pixivflow-batch.yml"
 GITHUB_REF = "feat/serverless-control-plane"
+# Which PixivFlow ref runners execute. Pin a released tag once PixivFlow ships
+# the batch command; until then the feature branch under test.
+PIXIVFLOW_REF = "feat/execute-slot"
 
 # Secrets (set with `wrangler secret put`, never committed):
 #   GITHUB_DISPATCH_TOKEN  TEMPORARY MIGRATION AUTH (replace with a GitHub App)

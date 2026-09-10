@@ -28,6 +28,8 @@ export interface Env {
   GITHUB_REPO?: string;
   GITHUB_WORKFLOW?: string;
   GITHUB_REF?: string;
+  /** PixivFlow ref the dispatched runners must execute. */
+  PIXIVFLOW_REF?: string;
   /**
    * TEMPORARY MIGRATION AUTH: a PAT stands in until a GitHub App is wired up
    * (see the control-plane README). Never logged.
@@ -116,6 +118,7 @@ export default {
         schedules: SCHEDULES,
         mode: executionMode(env),
         callbackUrl: `${(env.CONTROL_PLANE_URL ?? '').replace(/\/+$/, '')}/control`,
+        pixivflowRef: env.PIXIVFLOW_REF ?? 'master',
       },
       nowMs
     );
@@ -161,6 +164,7 @@ export default {
           schedules: SCHEDULES,
           mode: executionMode(env),
           callbackUrl: `${(env.CONTROL_PLANE_URL ?? '').replace(/\/+$/, '')}/control`,
+          pixivflowRef: env.PIXIVFLOW_REF ?? 'master',
         },
         nowMs
       );

@@ -132,6 +132,7 @@ export class GitHubActionsExecutionProvider implements ExecutionProvider {
             targets: request.targets.join(','),
             callback_url: request.callbackUrl,
             mode: request.mode,
+            pixivflow_ref: request.pixivflowRef,
           },
         }),
       }

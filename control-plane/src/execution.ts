@@ -47,6 +47,8 @@ export interface StartAttemptInput {
   targets: string[];
   callbackUrl: string;
   mode: 'live' | 'shadow' | 'dry-run';
+  /** Deployment-owned: which PixivFlow ref the runner executes. */
+  pixivflowRef: string;
 }
 
 export interface StartAttemptResult {
@@ -108,6 +110,7 @@ export async function startAttempt(
       targets: input.targets,
       callbackUrl: input.callbackUrl,
       mode: input.mode,
+      pixivflowRef: input.pixivflowRef,
     });
   } catch (error) {
     // A thrown dispatch (network failure, provider bug, bad credentials) must be

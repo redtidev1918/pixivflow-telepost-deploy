@@ -50,7 +50,7 @@ describe('dispatch is at-most-once per attempt', () => {
         botId: schedule.botId,
         attempt: 1,
         targets: ['bot1-illust-botefuku'],
-        callbackUrl: CALLBACK,
+        callbackUrl: CALLBACK, pixivflowRef: 'test-ref',
         mode: 'shadow',
       },
       NOW
@@ -75,7 +75,7 @@ describe('dispatch is at-most-once per attempt', () => {
       botId: schedule.botId,
       attempt: 1,
       targets: ['bot1-illust-botefuku'],
-      callbackUrl: CALLBACK,
+      callbackUrl: CALLBACK, pixivflowRef: 'test-ref',
       mode: 'shadow' as const,
     };
 
@@ -101,7 +101,7 @@ describe('dispatch is at-most-once per attempt', () => {
     const result = await startAttempt(
       store,
       provider,
-      { slot, scheduleId: schedule.id, botId: schedule.botId, attempt: 1, targets: [], callbackUrl: CALLBACK, mode: 'shadow' },
+      { slot, scheduleId: schedule.id, botId: schedule.botId, attempt: 1, targets: [], callbackUrl: CALLBACK, pixivflowRef: 'test-ref', mode: 'shadow' },
       NOW
     );
 
@@ -130,7 +130,7 @@ describe('dispatch is at-most-once per attempt', () => {
         botId: schedule.botId,
         attempt: 1,
         targets: [],
-        callbackUrl: CALLBACK,
+        callbackUrl: CALLBACK, pixivflowRef: 'test-ref',
         mode: 'shadow',
       },
       NOW
@@ -151,7 +151,7 @@ describe('results are recorded once and rolled up honestly', () => {
     const { executionId } = await startAttempt(
       store,
       provider,
-      { slot, scheduleId: schedule.id, botId: schedule.botId, attempt: 1, targets: [], callbackUrl: CALLBACK, mode: 'shadow' },
+      { slot, scheduleId: schedule.id, botId: schedule.botId, attempt: 1, targets: [], callbackUrl: CALLBACK, pixivflowRef: 'test-ref', mode: 'shadow' },
       NOW
     );
 
@@ -169,7 +169,7 @@ describe('results are recorded once and rolled up honestly', () => {
     const { executionId } = await startAttempt(
       store,
       provider,
-      { slot, scheduleId: schedule.id, botId: schedule.botId, attempt: 1, targets: [], callbackUrl: CALLBACK, mode: 'shadow' },
+      { slot, scheduleId: schedule.id, botId: schedule.botId, attempt: 1, targets: [], callbackUrl: CALLBACK, pixivflowRef: 'test-ref', mode: 'shadow' },
       NOW
     );
 
@@ -200,7 +200,7 @@ describe('results are recorded once and rolled up honestly', () => {
     const attempt1 = await startAttempt(
       store,
       provider,
-      { slot, scheduleId: schedule.id, botId: schedule.botId, attempt: 1, targets: [], callbackUrl: CALLBACK, mode: 'shadow' },
+      { slot, scheduleId: schedule.id, botId: schedule.botId, attempt: 1, targets: [], callbackUrl: CALLBACK, pixivflowRef: 'test-ref', mode: 'shadow' },
       NOW
     );
     await applyExecutionResult(
@@ -216,7 +216,7 @@ describe('results are recorded once and rolled up honestly', () => {
     const attempt2 = await startAttempt(
       store,
       provider,
-      { slot: afterRetry, scheduleId: schedule.id, botId: schedule.botId, attempt: afterRetry.attemptCount + 1, targets: [], callbackUrl: CALLBACK, mode: 'shadow' },
+      { slot: afterRetry, scheduleId: schedule.id, botId: schedule.botId, attempt: afterRetry.attemptCount + 1, targets: [], callbackUrl: CALLBACK, pixivflowRef: 'test-ref', mode: 'shadow' },
       NOW + 2000
     );
     expect(attempt2.executionId).toBe(executionIdFor(slot.id, 2));
@@ -230,7 +230,7 @@ describe('results are recorded once and rolled up honestly', () => {
     await startAttempt(
       store,
       provider,
-      { slot: retried, scheduleId: schedule.id, botId: schedule.botId, attempt: retried.attemptCount + 1, targets: [], callbackUrl: CALLBACK, mode: 'shadow' },
+      { slot: retried, scheduleId: schedule.id, botId: schedule.botId, attempt: retried.attemptCount + 1, targets: [], callbackUrl: CALLBACK, pixivflowRef: 'test-ref', mode: 'shadow' },
       NOW + 4000
     );
     const last = await applyExecutionResult(
@@ -254,7 +254,7 @@ describe('results are recorded once and rolled up honestly', () => {
     const { executionId } = await startAttempt(
       store,
       provider,
-      { slot, scheduleId: schedule.id, botId: schedule.botId, attempt: 1, targets: [], callbackUrl: CALLBACK, mode: 'shadow' },
+      { slot, scheduleId: schedule.id, botId: schedule.botId, attempt: 1, targets: [], callbackUrl: CALLBACK, pixivflowRef: 'test-ref', mode: 'shadow' },
       NOW
     );
     await applyExecutionResult(
@@ -274,7 +274,7 @@ describe('losing a callback is survivable (provider state is authoritative)', ()
     const { executionId } = await startAttempt(
       store,
       provider,
-      { slot, scheduleId: schedule.id, botId: schedule.botId, attempt: 1, targets: [], callbackUrl: CALLBACK, mode: 'shadow' },
+      { slot, scheduleId: schedule.id, botId: schedule.botId, attempt: 1, targets: [], callbackUrl: CALLBACK, pixivflowRef: 'test-ref', mode: 'shadow' },
       NOW
     );
     // The runner claimed the run, then died before posting its result.
@@ -296,7 +296,7 @@ describe('losing a callback is survivable (provider state is authoritative)', ()
     const { executionId } = await startAttempt(
       store,
       provider,
-      { slot, scheduleId: schedule.id, botId: schedule.botId, attempt: 1, targets: [], callbackUrl: CALLBACK, mode: 'shadow' },
+      { slot, scheduleId: schedule.id, botId: schedule.botId, attempt: 1, targets: [], callbackUrl: CALLBACK, pixivflowRef: 'test-ref', mode: 'shadow' },
       NOW
     );
     // GitHub accepted the dispatch but our HTTP call never returned a run id.
@@ -324,7 +324,7 @@ describe('losing a callback is survivable (provider state is authoritative)', ()
     const { executionId } = await startAttempt(
       store,
       provider,
-      { slot, scheduleId: schedule.id, botId: schedule.botId, attempt: 1, targets: [], callbackUrl: CALLBACK, mode: 'shadow' },
+      { slot, scheduleId: schedule.id, botId: schedule.botId, attempt: 1, targets: [], callbackUrl: CALLBACK, pixivflowRef: 'test-ref', mode: 'shadow' },
       NOW
     );
     provider.recent = []; // nothing was actually started
@@ -349,7 +349,7 @@ describe('losing a callback is survivable (provider state is authoritative)', ()
     const { executionId } = await startAttempt(
       store,
       provider,
-      { slot, scheduleId: schedule.id, botId: schedule.botId, attempt: 1, targets: [], callbackUrl: CALLBACK, mode: 'shadow' },
+      { slot, scheduleId: schedule.id, botId: schedule.botId, attempt: 1, targets: [], callbackUrl: CALLBACK, pixivflowRef: 'test-ref', mode: 'shadow' },
       NOW
     );
     const outcome = await reconcileExecution(
@@ -379,7 +379,7 @@ describe('losing a callback is survivable (provider state is authoritative)', ()
     const { executionId } = await startAttempt(
       store,
       provider,
-      { slot, scheduleId: schedule.id, botId: schedule.botId, attempt: 1, targets: [], callbackUrl: CALLBACK, mode: 'shadow' },
+      { slot, scheduleId: schedule.id, botId: schedule.botId, attempt: 1, targets: [], callbackUrl: CALLBACK, pixivflowRef: 'test-ref', mode: 'shadow' },
       NOW
     );
     await claimExecution(store, { executionId, providerRunId: '1' }, NOW + 500);
@@ -395,7 +395,7 @@ describe('losing a callback is survivable (provider state is authoritative)', ()
     const attempt2 = await startAttempt(
       store,
       provider,
-      { slot: slotAfter, scheduleId: schedule.id, botId: schedule.botId, attempt: slotAfter.attemptCount + 1, targets: [], callbackUrl: CALLBACK, mode: 'shadow' },
+      { slot: slotAfter, scheduleId: schedule.id, botId: schedule.botId, attempt: slotAfter.attemptCount + 1, targets: [], callbackUrl: CALLBACK, pixivflowRef: 'test-ref', mode: 'shadow' },
       NOW + 2000
     );
     expect(attempt2.executionId).toBe(executionIdFor(slot.id, 2));
@@ -412,7 +412,7 @@ describe('a full sweep converges without duplicating work', () => {
     provider.nowMs = now;
 
     const first = await reconcileAll(
-      { store, provider, schedules: SCHEDULES, mode: 'shadow', callbackUrl: CALLBACK },
+      { store, provider, schedules: SCHEDULES, mode: 'shadow', callbackUrl: CALLBACK, pixivflowRef: 'test-ref' },
       now
     );
     expect(first.created).toBeGreaterThan(0);
@@ -420,7 +420,7 @@ describe('a full sweep converges without duplicating work', () => {
     expect(provider.dispatched).toHaveLength(first.dispatched);
 
     const second = await reconcileAll(
-      { store, provider, schedules: SCHEDULES, mode: 'shadow', callbackUrl: CALLBACK },
+      { store, provider, schedules: SCHEDULES, mode: 'shadow', callbackUrl: CALLBACK, pixivflowRef: 'test-ref' },
       now + 10 * 60_000
     );
     expect(second.created).toBe(0);
@@ -434,7 +434,7 @@ describe('a full sweep converges without duplicating work', () => {
     const store = new MemoryControlStore();
     const provider = new FakeProvider();
     await reconcileAll(
-      { store, provider, schedules: SCHEDULES, mode: 'shadow', callbackUrl: CALLBACK },
+      { store, provider, schedules: SCHEDULES, mode: 'shadow', callbackUrl: CALLBACK, pixivflowRef: 'test-ref' },
       Date.parse('2026-09-11T10:20:00Z')
     );
     const bot1 = [...store.slots.values()].filter((slot) => slot.botId === 'bot1');
