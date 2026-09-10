@@ -142,12 +142,27 @@ export async function decideReview(
         description: current ? `already ${current.status}` : undefined,
       };
     }
-    // The keyboard lives on the control card, never on a file. Rows written before the
-    // card existed fall back to the first media message.
-    await deps.getBot(review.botId)?.editMessageReplyMarkup({
+    // The decision is reported on the card the operator pressed, and the keyboard goes
+    // with it. A card that only loses its buttons leaves the operator wondering whether
+    // anything happened.
+    const rejectText = `❌ 审核 ${review.id}\n已拒绝，没有发布到频道。`;
+    const cardEdit = await deps.getBot(review.botId)?.editMessageText({
       chatId: review.chatId,
       messageId: review.controlMessageId ?? review.messageId ?? review.mediaMessageIds?.[0] ?? 0,
+      text: rejectText,
     });
+    if (cardEdit) {
+      await store.logEvents([
+        {
+          ts: nowMs,
+          event: cardEdit.ok ? 'review_card_updated' : 'review_card_update_failed',
+          detail: JSON.stringify({
+            reviewId: review.id,
+            ...(cardEdit.ok ? { text: rejectText } : { description: cardEdit.description ?? 'unknown' }),
+          }),
+        },
+      ]);
+    }
     return { status: 'rejected', decided: true, published: false };
   }
 
@@ -273,12 +288,31 @@ export async function decideReview(
       nowMs,
       actor: input.actor ?? null,
     });
-    // The keyboard lives on the control card, not on a file. Fall back to the first
-    // media message only for rows written before the control card existed.
-    await bot.editMessageReplyMarkup({
+    // The keyboard lives on the control card, not on a file, and the card now says where
+    // the post went. TelePost reported the same thing; an approval that only removes its
+    // buttons leaves the operator with no link to the post they just published.
+    const link = publishedLink(review.publishChatId, publishedId);
+    const cardText = link
+      ? `✅ 审核 ${review.id}\n已发布：${link}`
+      : `✅ 审核 ${review.id}\n已发布到 ${review.publishChatId}（该目标没有可分享链接）`;
+    const cardEdit = await bot.editMessageText({
       chatId: review.chatId,
       messageId: review.controlMessageId ?? review.messageId ?? media[0]!,
+      text: cardText,
     });
+    // The card is the operator's only confirmation, so a failed update must be visible
+    // rather than a silently missing message. The text is recorded too, which is how the
+    // link can be verified from state instead of from a screenshot.
+    await store.logEvents([
+      {
+        ts: nowMs,
+        event: cardEdit.ok ? 'review_card_updated' : 'review_card_update_failed',
+        detail: JSON.stringify({
+          reviewId: review.id,
+          ...(cardEdit.ok ? { text: cardText } : { description: cardEdit.description ?? 'unknown' }),
+        }),
+      },
+    ]);
     if (!marked) {
       // Another actor resolved the claim while we were copying. We must not
       // overwrite their result; the copy did happen, so this is reported as such.
@@ -379,6 +413,21 @@ export async function reapStalePublishing(
   }
 
   return { published, uncertain };
+}
+
+/**
+ * A shareable link to the published post, or null when there is none.
+ *
+ * A public channel (`@name`) and a private supergroup/channel (`-100…`) both have a
+ * t.me form. A private USER chat — which is what the migration smoke publishes into, so
+ * the real channel is never touched — has no shareable link at all, and inventing one
+ * would be worse than saying where it went in words.
+ */
+export function publishedLink(publishChatId: string | null, messageId: number | null): string | null {
+  if (!publishChatId || messageId === null) return null;
+  if (publishChatId.startsWith('@')) return `https://t.me/${publishChatId.slice(1)}/${messageId}`;
+  if (publishChatId.startsWith('-100')) return `https://t.me/c/${publishChatId.slice(4)}/${messageId}`;
+  return null;
 }
 
 function readMessageId(value: unknown): number | null {

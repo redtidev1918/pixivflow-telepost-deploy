@@ -108,6 +108,21 @@ export async function handleTelegramWebhook(
   }
 
   const actor = callback.from?.username ?? (callback.from?.id !== undefined ? String(callback.from.id) : 'unknown');
+
+  // Audit what was actually pressed, before deciding anything.
+  //
+  // Two real presses in a row arrived as `reject` while the operator believed they had
+  // pressed approve, and there was no record of the raw action to tell either of us what
+  // happened. A decision is worth an audit line, and "which button was that" has to be
+  // answerable from state rather than from a conversation.
+  await store.logEvents([
+    {
+      ts: Date.now(),
+      event: 'review_callback_received',
+      botId,
+      detail: JSON.stringify({ reviewId: parsed.reviewId, action: parsed.action, actor }),
+    },
+  ]);
   const outcome = await decideReview(
     { store, getBot: env.getBot },
     { reviewId: parsed.reviewId, action: parsed.action, actor },

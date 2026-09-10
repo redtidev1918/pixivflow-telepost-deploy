@@ -10,6 +10,7 @@ import {
 } from '../src/reviews';
 import { handleTelegramWebhook } from '../src/routes/telegram';
 import { handleControl } from '../src/routes/control';
+import { publishedLink } from '../src/reviews';
 import { MemoryControlStore } from './memory-store';
 import { fakeBot, seedReview, NOW } from './reviews-helpers';
 
@@ -73,7 +74,7 @@ describe('decisions are write-once and side effects follow the winner', () => {
     expect(bot.calls.filter((call) => call.method === 'copyMessage')).toHaveLength(1);
   });
 
-  it('a reject publishes nothing and clears the keyboard', async () => {
+  it('a reject publishes nothing and reports the outcome on the card', async () => {
     const store = new MemoryControlStore();
     const bot = fakeBot();
     await seedReview(store);
@@ -86,7 +87,12 @@ describe('decisions are write-once and side effects follow the winner', () => {
 
     expect(outcome).toMatchObject({ status: 'rejected', decided: true, published: false });
     expect(bot.calls.some((call) => call.method === 'copyMessage')).toBe(false);
-    expect(bot.calls.some((call) => call.method === 'editMessageReplyMarkup')).toBe(true);
+    // The decision is reported on the card the operator pressed; clearing the keyboard
+    // and telling them what happened are the same call.
+    const edit = bot.calls.find((call) => call.method === 'editMessageText');
+    expect(edit).toBeDefined();
+    expect((edit!.payload as { text: string }).text).toContain('已拒绝');
+    expect(bot.calls.some((call) => call.method === 'editMessageReplyMarkup')).toBe(false);
   });
 
   it('an approve/reject race elects exactly one winner', async () => {
@@ -507,8 +513,11 @@ describe('publishing keeps the media and the text apart', () => {
 
     await decideReview({ store, getBot: () => bot }, { reviewId: 'rv_layout_reject', action: 'reject' }, NOW + 1);
 
-    const edits = bot.calls.filter((call) => call.method === 'editMessageReplyMarkup');
+    const edits = bot.calls.filter((call) => call.method === 'editMessageText');
+    expect(edits).toHaveLength(1);
     expect((edits[0]!.payload as { messageId: number }).messageId).toBe(303);
+    // The card says what happened, and the keyboard goes with the same call.
+    expect((edits[0]!.payload as { text: string }).text).toContain('已拒绝');
   });
 
   it('does not report success when the media landed but the caption did not', async () => {
@@ -580,5 +589,63 @@ describe('the published structure is recorded', () => {
     expect(review.publishedMessageId).toBe(1100);
     expect(review.publishedCaptionMessageId).toBe(555);
     expect(review.publishedCaptionMessageId).not.toBe(review.publishedMessageId);
+  });
+});
+
+/**
+ * An approval has to say where the post went. The operator pressed a button on a card,
+ * so the card is where the outcome belongs — TelePost reported the same thing, and a
+ * card that only loses its buttons leaves them hunting for the post.
+ */
+describe('the control card reports where the post went', () => {
+  it('edits the card with a channel link', async () => {
+    const store = new MemoryControlStore();
+    const bot = fakeBot();
+    await seedReview(store, {
+      id: 'rv_link',
+      mediaMessageIds: [10, 11],
+      controlMessageId: 12,
+      publishChatId: '@xgdShare',
+    });
+
+    await decideReview({ store, getBot: () => bot }, { reviewId: 'rv_link', action: 'approve' }, NOW + 1);
+
+    const edit = bot.calls.find((call) => call.method === 'editMessageText');
+    const text = (edit!.payload as { text: string }).text;
+    // copyMessages answers [{message_id: 1010}, …], so the first copied id is the anchor.
+    expect(text).toContain('已发布');
+    expect(text).toMatch(/https:\/\/t\.me\/xgdShare\/\d+/);
+  });
+
+  it('says where it went when the target has no shareable link', async () => {
+    const store = new MemoryControlStore();
+    const bot = fakeBot();
+    // A private user chat has no t.me form; inventing one would be worse than words.
+    await seedReview(store, {
+      id: 'rv_link_dm',
+      mediaMessageIds: [20],
+      controlMessageId: 21,
+      publishChatId: '5073758941',
+    });
+
+    await decideReview({ store, getBot: () => bot }, { reviewId: 'rv_link_dm', action: 'approve' }, NOW + 1);
+
+    const text = (bot.calls.find((call) => call.method === 'editMessageText')!.payload as { text: string }).text;
+    expect(text).toContain('已发布');
+    expect(text).toContain('5073758941');
+    expect(text).not.toContain('t.me');
+  });
+});
+
+describe('publishedLink', () => {
+  it('builds a t.me link for a public channel and for a private supergroup id', () => {
+    expect(publishedLink('@xgdShare', 42)).toBe('https://t.me/xgdShare/42');
+    expect(publishedLink('-1004318193445', 42)).toBe('https://t.me/c/4318193445/42');
+  });
+
+  it('gives no link for a private user chat or a missing message id', () => {
+    expect(publishedLink('5073758941', 42)).toBeNull();
+    expect(publishedLink('@xgdShare', null)).toBeNull();
+    expect(publishedLink(null, 42)).toBeNull();
   });
 });

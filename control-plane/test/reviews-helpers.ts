@@ -33,6 +33,8 @@ export function fakeBot(botId = 'bot1'): FakeBot {
     },
     editMessageReplyMarkup: async (input: Parameters<BotApiClient['editMessageReplyMarkup']>[0]) =>
       record('editMessageReplyMarkup', input),
+    editMessageText: async (input: Parameters<BotApiClient['editMessageText']>[0]) =>
+      record('editMessageText', input),
     sendMessage: async (input: Parameters<BotApiClient['sendMessage']>[0]) => record('sendMessage', input),
   } satisfies FakeBot;
 

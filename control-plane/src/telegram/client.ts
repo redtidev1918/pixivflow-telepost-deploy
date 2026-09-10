@@ -59,6 +59,19 @@ export interface BotApiClient {
   }): Promise<TelegramResult>;
   /** Remove the inline keyboard so a decided review cannot be pressed again. */
   editMessageReplyMarkup(input: { chatId: string; messageId: number }): Promise<TelegramResult>;
+  /**
+   * Replace the control card's text (and, in the same call, its keyboard).
+   *
+   * A decision has to be visible where the decision was made: the operator pressed a
+   * button on a card, so the card is where the outcome belongs — including where the
+   * post ended up.
+   */
+  editMessageText(input: {
+    chatId: string;
+    messageId: number;
+    text: string;
+    removeKeyboard?: boolean;
+  }): Promise<TelegramResult>;
   sendMessage(input: { chatId: string; text: string; replyToMessageId?: number }): Promise<TelegramResult>;
 }
 
@@ -114,6 +127,20 @@ export class TelegramBotApi implements BotApiClient {
   /** Proves the token works, and names the bot it belongs to. */
   getMe(): Promise<TelegramResult> {
     return this.call('getMe', {});
+  }
+
+  editMessageText(input: {
+    chatId: string;
+    messageId: number;
+    text: string;
+    removeKeyboard?: boolean;
+  }): Promise<TelegramResult> {
+    return this.call('editMessageText', {
+      chat_id: input.chatId,
+      message_id: input.messageId,
+      text: input.text,
+      ...(input.removeKeyboard === false ? {} : { reply_markup: { inline_keyboard: [] } }),
+    });
   }
 
   answerCallbackQuery(callbackQueryId: string, text?: string): Promise<TelegramResult> {
