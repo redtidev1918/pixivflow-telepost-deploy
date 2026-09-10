@@ -392,6 +392,28 @@ export class D1ControlStore implements ControlPlaneStore {
     };
   }
 
+  async listRunnerCredentials(): Promise<RunnerCredentialRow[]> {
+    const { results } = await this.db
+      .prepare(
+        `SELECT name, updated_at, previous_hash, rotations FROM runner_credentials ORDER BY name`
+      )
+      .all<{ name: string; updated_at: number; previous_hash: string | null; rotations: number }>();
+    return (results ?? []).map((row) => ({
+      name: row.name,
+      updatedAt: row.updated_at,
+      previousHash: row.previous_hash,
+      rotations: row.rotations,
+    }));
+  }
+
+  async deleteRunnerCredential(name: string): Promise<boolean> {
+    const result = (await this.db
+      .prepare(`DELETE FROM runner_credentials WHERE name = ?`)
+      .bind(name)
+      .run()) as { meta?: { changes?: number } } | undefined;
+    return (result?.meta?.changes ?? 0) > 0;
+  }
+
   async putRunnerCredential(input: {
     name: string;
     value: string;

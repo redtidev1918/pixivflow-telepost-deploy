@@ -79,6 +79,24 @@ export async function handleControl(
   // secret is an explicit POST, so a probe, a dashboard or a log line cannot leak
   // it by accident.
   const masterKey = env.CREDENTIAL_MASTER_KEY;
+
+  // The collection, so an operator can see which accounts exist without reading
+  // D1 by hand. Values are never part of it.
+  if (url.pathname === '/control/credentials') {
+    if (!authorized(request, callbackSecret)) return json({ error: 'unauthorized' }, 401);
+    if (request.method !== 'GET') return json({ error: 'method not allowed' }, 405);
+    const rows = await store.listRunnerCredentials();
+    return json({
+      ok: true,
+      count: rows.length,
+      credentials: rows.map((row) => ({
+        name: row.name,
+        updatedAt: row.updatedAt,
+        rotations: row.rotations,
+        previousHash: row.previousHash,
+      })),
+    });
+  }
   const credentialPath = /^\/control\/credentials\/([^/]+)$/.exec(url.pathname);
   if (credentialPath) {
     const name = decodeURIComponent(credentialPath[1] ?? '');
@@ -136,6 +154,15 @@ export async function handleControl(
         ]);
       }
       return json({ ok: true, name, stored: true, changed: result.changed, rotations: result.rotations });
+    }
+
+    if (request.method === 'DELETE') {
+      const removed = await store.deleteRunnerCredential(name);
+      if (!removed) return json({ error: 'no credential stored' }, 404);
+      await store.logEvents([
+        { ts: Date.now(), event: 'runner_credential_removed', detail: JSON.stringify({ name }) },
+      ]);
+      return json({ ok: true, name, removed: true });
     }
 
     return json({ error: 'method not allowed' }, 405);

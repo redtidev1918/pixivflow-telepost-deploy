@@ -142,3 +142,39 @@ describe('secret comparison', () => {
     expect(secretsMatch('', '')).toBe(true);
   });
 });
+
+describe('the collection and removal', () => {
+  it('lists aliases without their values', async () => {
+    const store = new MemoryControlStore();
+    await store.putRunnerCredential({ name: 'pixiv-main', value: 'a'.repeat(43), nowMs: 1 });
+    await store.putRunnerCredential({ name: 'pixiv-alt', value: 'b'.repeat(43), nowMs: 2 });
+
+    const body = (await (await request(store, 'GET', '/control/credentials'))!.json()) as {
+      count: number;
+      credentials: Array<{ name: string }>;
+    };
+
+    expect(body.count).toBe(2);
+    expect(body.credentials.map((c) => c.name)).toEqual(['pixiv-alt', 'pixiv-main']);
+    // Two accounts is a value, not a code change: the identity is the alias.
+    expect(JSON.stringify(body)).not.toContain('a'.repeat(43));
+  });
+
+  it('removes an alias and reports an absent one honestly', async () => {
+    const store = new MemoryControlStore();
+    await store.putRunnerCredential({ name: 'pixiv-alt', value: 'c'.repeat(43), nowMs: 1 });
+
+    const removed = await request(store, 'DELETE', '/control/credentials/pixiv-alt');
+    expect((await removed!.json()).removed).toBe(true);
+    expect(store.events.some((e) => e.event === 'runner_credential_removed')).toBe(true);
+
+    expect((await request(store, 'DELETE', '/control/credentials/pixiv-alt'))!.status).toBe(404);
+    expect((await store.listRunnerCredentials()).length).toBe(0);
+  });
+
+  it('fails closed on the collection too', async () => {
+    const store = new MemoryControlStore();
+    expect((await request(store, 'GET', '/control/credentials', { secret: 'wrong' }))!.status).toBe(401);
+    expect((await request(store, 'DELETE', '/control/credentials/pixiv-main', { secret: null }))!.status).toBe(401);
+  });
+});

@@ -286,6 +286,10 @@ export interface RunnerCredentialStore {
    * secret, and so a route that needs the value has to ask for it by name.
    */
   readRunnerCredentialSecret(name: string): Promise<RunnerCredentialSecret | null>;
+  /** Every stored credential alias, oldest first. Metadata only, never values. */
+  listRunnerCredentials(): Promise<RunnerCredentialRow[]>;
+  /** Remove an alias. Used when an account is retired. */
+  deleteRunnerCredential(name: string): Promise<boolean>;
   /**
    * Store a (possibly rotated) value. Idempotent: writing the same value again
    * only refreshes `updatedAt` and does not count as a rotation.

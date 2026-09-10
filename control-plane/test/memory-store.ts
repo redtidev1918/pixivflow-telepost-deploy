@@ -513,6 +513,21 @@ export class MemoryControlStore implements ControlPlaneStore {
     return { name, ...row };
   }
 
+  async listRunnerCredentials(): Promise<RunnerCredentialRow[]> {
+    return [...this.credentials.entries()]
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([name, row]) => ({
+        name,
+        updatedAt: row.updatedAt,
+        previousHash: row.previousHash,
+        rotations: row.rotations,
+      }));
+  }
+
+  async deleteRunnerCredential(name: string): Promise<boolean> {
+    return this.credentials.delete(name);
+  }
+
   async putRunnerCredential(input: {
     name: string;
     value: string;
