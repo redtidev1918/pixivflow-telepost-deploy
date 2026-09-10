@@ -33,7 +33,7 @@ var scaffold embed.FS
 // generic provenance）与 TelePost 2.15.0（generic source_label/source_ref/
 // scheduled_at 入参）。
 const (
-	telepostBaseline = "2.15.0"
+	telepostBaseline = "2.17.2"
 	pixivBaseline    = "2.12.0"
 )
 
