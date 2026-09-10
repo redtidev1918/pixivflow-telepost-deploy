@@ -12,9 +12,9 @@ import { D1ControlStore, type D1Like } from './d1-store';
 import { GitHubActionsExecutionProvider } from './github-provider';
 import { instantToLocal, nextOccurrence, occurrenceFor } from './occurrences';
 import type { DispatchRequest, DispatchResult, ExecutionProvider, ProviderRun } from './provider';
-import type { ReconciliationRunRow } from './store';
+import type { ReconciliationRunRow, ReconciliationSummary } from './store';
 import { reconcileAll } from './reconciliation';
-import { expirePendingReviews } from './reviews';
+import { expirePendingReviews, reapStalePublishing } from './reviews';
 import {
   RECONCILIATION_LOOKBACK_HOURS,
   SCHEDULES,
@@ -149,25 +149,53 @@ export function clockHealth(
   return { lastSweepAt: last.startedAt, ageMinutes: Math.round(ageMinutes * 10) / 10, state };
 }
 
+/**
+ * One reconciliation sweep.
+ *
+ * The cron and the ops trigger MUST run the same thing: a hand-triggered sweep
+ * that skips a step is worse than no ops trigger, because it reports success
+ * while the clock would have done more. That is exactly how the stale-claim
+ * reaper was first wired (cron only) and missed by a manual sweep.
+ */
+async function sweep(
+  store: D1ControlStore,
+  env: Env,
+  nowMs: number
+): Promise<ReconciliationSummary> {
+  const summary = await reconcileAll(
+    {
+      store,
+      provider: buildProvider(env),
+      schedules: SCHEDULES,
+      mode: executionMode(env),
+      callbackUrl: `${(env.CONTROL_PLANE_URL ?? '').replace(/\/+$/, '')}/control`,
+      pixivflowRef: env.PIXIVFLOW_REF ?? 'master',
+    },
+    nowMs
+  );
+
+  // Undecided reviews expire on the same sweep: an old review must never be
+  // published days later because a human finally tapped the button.
+  await expirePendingReviews(store, nowMs);
+
+  // Claims abandoned mid-publish converge here instead of sitting invisible. With
+  // the copy recorded they resolve as published; without it they become uncertain,
+  // because a blind retry is how the same media gets posted twice.
+  const reaped = await reapStalePublishing(store, nowMs);
+  if (reaped.published > 0 || reaped.uncertain > 0) {
+    await store.logEvents([
+      { ts: nowMs, event: 'review_claims_reaped', detail: JSON.stringify(reaped) },
+    ]);
+  }
+
+  return summary;
+}
+
 export default {
   async scheduled(_event: ScheduledController, env: Env): Promise<void> {
     validateSchedules(SCHEDULES);
     const store = new D1ControlStore(env.CONTROL_DB);
-    const nowMs = Date.now();
-    await reconcileAll(
-      {
-        store,
-        provider: buildProvider(env),
-        schedules: SCHEDULES,
-        mode: executionMode(env),
-        callbackUrl: `${(env.CONTROL_PLANE_URL ?? '').replace(/\/+$/, '')}/control`,
-        pixivflowRef: env.PIXIVFLOW_REF ?? 'master',
-      },
-      nowMs
-    );
-    // Undecided reviews expire on the same sweep: an old review must never be
-    // published days later because a human finally tapped the button.
-    await expirePendingReviews(store, nowMs);
+    await sweep(store, env, Date.now());
   },
 
   async fetch(request: Request, env: Env): Promise<Response> {
@@ -200,17 +228,7 @@ export default {
       if (header !== `Bearer ${env.CALLBACK_SECRET}`) return json({ error: 'unauthorized' }, 401);
       validateSchedules(SCHEDULES);
       const nowMs = Date.now();
-      const summary = await reconcileAll(
-        {
-          store,
-          provider: buildProvider(env),
-          schedules: SCHEDULES,
-          mode: executionMode(env),
-          callbackUrl: `${(env.CONTROL_PLANE_URL ?? '').replace(/\/+$/, '')}/control`,
-          pixivflowRef: env.PIXIVFLOW_REF ?? 'master',
-        },
-        nowMs
-      );
+      const summary = await sweep(store, env, nowMs);
       return json({ ok: true, now: nowMs, summary });
     }
 

@@ -261,7 +261,52 @@ export interface ControlPlaneStore
     ProcessedWorkStore,
     ObservabilityStore {}
 
-export type ReviewStatus = 'pending' | 'approved' | 'rejected' | 'expired' | 'uncertain';
+/**
+ * Review states, ported from TelePost's production state machine
+ * (telepost/domain/review.py) so the proven semantics survive the move.
+ *
+ *   pending -> publishing -> published
+ *                   |  \-> failed (re-claimable; the approve button becomes
+ *                   |            "retry publish", which is why a failed publish
+ *                   |            must stay distinguishable from an undecided one)
+ *                   \-> uncertain (this deployment's addition: an ambiguous
+ *                       publish is a human's problem, never an automatic retry)
+ *
+ * `preparing` is deliberately absent: TelePost needs it because it persists a row
+ * before uploading the preview. Here the runner uploads first and reports after,
+ * so there is no pre-message row to model.
+ */
+export type ReviewStatus =
+  | 'pending'
+  | 'publishing'
+  | 'published'
+  | 'failed'
+  | 'rejected'
+  | 'expired'
+  | 'uncertain';
+
+/** Nothing more happens without a human. Never move back to `publishing`. */
+export const TERMINAL_REVIEW_STATUSES: readonly ReviewStatus[] = [
+  'published',
+  'rejected',
+  'expired',
+  'uncertain',
+];
+
+/** A publish may be claimed from these (TelePost's CLAIMABLE set). */
+export const CLAIMABLE_REVIEW_STATUSES: readonly ReviewStatus[] = ['pending', 'failed'];
+
+/**
+ * A stale claim is recomputed from these, never re-published blindly.
+ *
+ * TelePost reclaims a stale `publishing` row after 300s and re-runs the publish.
+ * That is safe only when its delivery ledger already proves the send happened; a
+ * crash after Telegram accepted the copy and before the ledger row was written
+ * leaves no such evidence, and the reclaim then posts the media a second time.
+ * Here the recorded message id IS that evidence: present, the claim is resolved
+ * as published; absent, the outcome is genuinely unknown and becomes `uncertain`.
+ */
+export const PUBLISHING_STALE_MS = 5 * 60 * 1000;
 
 export interface ReviewRecord {
   id: string;
@@ -292,6 +337,34 @@ export interface ReviewRecord {
 export interface ReviewStore {
   /** Counts by status: an `uncertain` review exists to be seen by a human. */
   countReviewsByStatus(): Promise<Record<string, number>>;
+  /**
+   * Atomically claim a review for publishing.
+   *
+   * ONE conditional UPDATE, ported from TelePost
+   * (telepost/storage/sqlite/reviews.py:191-221): it moves `pending`/`failed` to
+   * `publishing` and is also the stale-reclaim path, so two concurrent approvers
+   * can never both proceed. Returns the row as it is now, claimed or not, so the
+   * caller can tell "someone else is publishing" from "already published".
+   */
+  claimReviewForPublishing(input: {
+    reviewId: string;
+    nowMs: number;
+    staleMs: number;
+  }): Promise<{ claimed: boolean; record: ReviewRecord | null }>;
+  /**
+   * Record the message Telegram actually created, while still `publishing`.
+   *
+   * Written BEFORE the terminal transition on purpose. A crash in between leaves
+   * a `publishing` row that already proves the copy landed, which is what lets
+   * the reaper resolve it as published instead of asking a human or resending.
+   */
+  recordPublishedMessage(input: {
+    reviewId: string;
+    publishedMessageId: number | null;
+    nowMs: number;
+  }): Promise<boolean>;
+  /** Claims left `publishing` for too long: crash evidence, not a queue. */
+  listStalePublishing(input: { olderThanMs: number; limit: number }): Promise<ReviewRecord[]>;
   /** Idempotent on (bot_id, target_id, work_id): a replayed create returns the row. */
   createReview(input: {
     id: string;
@@ -326,11 +399,16 @@ export interface ReviewStore {
     actor?: string | null;
     error?: string | null;
   }): Promise<boolean>;
+  /**
+   * Terminal `publishing -> published`, guarded so a late writer cannot clobber a
+   * row another actor already resolved. False means this caller no longer owns it.
+   */
   markReviewPublished(input: {
     reviewId: string;
     publishedMessageId: number | null;
     nowMs: number;
-  }): Promise<void>;
+    actor?: string | null;
+  }): Promise<boolean>;
 }
 
 /**

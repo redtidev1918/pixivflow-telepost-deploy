@@ -45,6 +45,17 @@ function tableColumns(): Map<string, Set<string>> {
       tables.set(table!, columns);
     }
 
+    // A rebuild (CREATE new + RENAME) replaces the old column set; without this a
+    // rebuilt table would leave the guard validating a table that no longer exists.
+    for (const match of stripped.matchAll(/ALTER TABLE\s+(\w+)\s+RENAME TO\s+"?(\w+)"?/gi)) {
+      const [, from, to] = match;
+      const columns = tables.get(from!);
+      if (columns) {
+        tables.set(to!, columns);
+        tables.delete(from!);
+      }
+    }
+
     for (const match of stripped.matchAll(/ALTER TABLE\s+(\w+)\s+ADD COLUMN\s+"?(\w+)"?/gi)) {
       const [, table, column] = match;
       const columns = tables.get(table!) ?? new Set<string>();

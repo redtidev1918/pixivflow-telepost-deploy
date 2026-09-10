@@ -18,7 +18,13 @@
  */
 
 import type { BotApiClient } from './telegram/client';
-import type { ControlPlaneStore, ReviewRecord, ReviewStatus } from './store';
+import {
+  CLAIMABLE_REVIEW_STATUSES,
+  PUBLISHING_STALE_MS,
+  type ControlPlaneStore,
+  type ReviewRecord,
+  type ReviewStatus,
+} from './store';
 
 export const CALLBACK_PREFIX = 'review';
 
@@ -88,6 +94,8 @@ export interface DecideReviewDeps {
   store: ControlPlaneStore;
   /** Resolved per bot: a bot1 callback can never publish with a bot2 token. */
   getBot(botId: string): BotApiClient | null;
+  /** How long a `publishing` claim may stay untouched before it is stale. */
+  staleMs?: number;
 }
 
 export async function decideReview(
@@ -99,36 +107,29 @@ export async function decideReview(
   const review = await store.getReview(input.reviewId);
   if (!review) return { status: 'unknown', decided: false, published: false };
 
-  // A decision is only ever taken on a pending review. A rejected/approved review
-  // replays as "already decided" instead of acting twice — this is what makes a
-  // double tap, a Telegram replay and a retried webhook safe.
-  if (review.status !== 'pending') {
-    return {
-      status: review.status,
-      decided: false,
-      published: review.publishedMessageId !== null,
-    };
-  }
-
-  const target: ReviewStatus = input.action === 'approve' ? 'approved' : 'rejected';
-  const won = await store.transitionReview({
-    reviewId: review.id,
-    from: 'pending',
-    to: target,
-    nowMs,
-    actor: input.actor ?? null,
-  });
-  if (!won) {
-    // Another callback decided first; that one owns the side effects.
-    const current = await store.getReview(review.id);
-    return {
-      status: current?.status ?? 'unknown',
-      decided: false,
-      published: (current?.publishedMessageId ?? null) !== null,
-    };
-  }
-
+  // Rejection is a plain conditional UPDATE from `pending`/`failed` — the same
+  // transition set TelePost's reject uses. It never goes through `publishing`
+  // because it publishes nothing.
   if (input.action === 'reject') {
+    // TelePost's reject transitions from the claimable set only, so a rejected
+    // callback arriving after a publish cannot undo it.
+    const from = CLAIMABLE_REVIEW_STATUSES.includes(review.status) ? review.status : null;
+    const won = from !== null && (await store.transitionReview({
+      reviewId: review.id,
+      from,
+      to: 'rejected',
+      nowMs,
+      actor: input.actor ?? null,
+    }));
+    if (!won) {
+      const current = await store.getReview(review.id);
+      return {
+        status: current?.status ?? 'unknown',
+        decided: false,
+        published: (current?.publishedMessageId ?? null) !== null,
+        description: current ? `already ${current.status}` : undefined,
+      };
+    }
     await deps.getBot(review.botId)?.editMessageReplyMarkup({
       chatId: review.chatId,
       messageId: review.messageId ?? 0,
@@ -136,39 +137,46 @@ export async function decideReview(
     return { status: 'rejected', decided: true, published: false };
   }
 
-  const bot = deps.getBot(review.botId);
-  if (!bot) {
-    // The decision is recorded, but nothing can be published without that bot's
-    // token. Visible and recoverable, never silently "done".
-    await store.transitionReview({
-      reviewId: review.id,
-      from: 'approved',
-      to: 'uncertain',
-      nowMs,
-      error: `no Telegram client for bot ${review.botId}`,
-    });
+  // The claim is the at-most-once latch: a double tap, a Telegram replay and a
+  // retried webhook all converge here, and exactly one of them proceeds.
+  const { claimed, record } = await store.claimReviewForPublishing({
+    reviewId: review.id,
+    nowMs,
+    staleMs: deps.staleMs ?? PUBLISHING_STALE_MS,
+  });
+
+  if (!claimed) {
+    const current = record ?? review;
+    // TelePost's three-way branch, kept verbatim: an already-published row is an
+    // idempotent success, an in-flight row is busy, anything else is not decidable.
+    if (current.status === 'published') {
+      return { status: 'published', decided: false, published: true };
+    }
     return {
-      status: 'uncertain',
-      decided: true,
+      status: current.status,
+      decided: false,
       published: false,
-      uncertain: true,
-      description: `no Telegram client configured for ${review.botId}`,
+      description:
+        current.status === 'publishing' ? 'another actor is publishing' : `already ${current.status}`,
     };
   }
 
-  if (!review.publishChatId) {
-    await store.transitionReview({
-      reviewId: review.id,
-      from: 'approved',
-      to: 'uncertain',
-      nowMs,
-      error: 'review has no publish target',
-    });
+  const bot = deps.getBot(review.botId);
+  if (!bot) {
+    await failPublish(store, review.id, nowMs, `no Telegram client for bot ${review.botId}`);
     return {
-      status: 'uncertain',
+      status: 'failed',
       decided: true,
       published: false,
-      uncertain: true,
+      description: `no Telegram client configured for ${review.botId}`,
+    };
+  }
+  if (!review.publishChatId) {
+    await failPublish(store, review.id, nowMs, 'review has no publish target');
+    return {
+      status: 'failed',
+      decided: true,
+      published: false,
       description: 'review has no publish target',
     };
   }
@@ -181,14 +189,8 @@ export async function decideReview(
       ? [review.messageId]
       : [];
   if (ids.length === 0) {
-    await store.transitionReview({
-      reviewId: review.id,
-      from: 'approved',
-      to: 'uncertain',
-      nowMs,
-      error: 'review has no message to copy',
-    });
-    return { status: 'uncertain', decided: true, published: false, uncertain: true };
+    await failPublish(store, review.id, nowMs, 'review has no message to copy');
+    return { status: 'failed', decided: true, published: false };
   }
 
   const copyResult = ids.length > 1
@@ -208,18 +210,43 @@ export async function decideReview(
 
   if (copyResult.ok) {
     const publishedId = extractMessageId(copyResult.result);
-    await store.markReviewPublished({ reviewId: review.id, publishedMessageId: publishedId, nowMs });
+    // Record the evidence BEFORE the terminal transition. A crash in between
+    // leaves a `publishing` row that already proves the copy landed, so the
+    // reaper resolves it as published rather than resending the media. This is
+    // TelePost's load-bearing ordering (ledger before terminal write).
+    await store.recordPublishedMessage({
+      reviewId: review.id,
+      publishedMessageId: publishedId,
+      nowMs,
+    });
+    const marked = await store.markReviewPublished({
+      reviewId: review.id,
+      publishedMessageId: publishedId,
+      nowMs,
+      actor: input.actor ?? null,
+    });
     await bot.editMessageReplyMarkup({ chatId: review.chatId, messageId: review.messageId ?? ids[0]! });
-    return { status: 'approved', decided: true, published: true };
+    if (!marked) {
+      // Another actor resolved the claim while we were copying. We must not
+      // overwrite their result; the copy did happen, so this is reported as such.
+      const current = await store.getReview(review.id);
+      return {
+        status: current?.status ?? 'published',
+        decided: true,
+        published: true,
+        description: 'the claim was resolved by another actor while publishing',
+      };
+    }
+    return { status: 'published', decided: true, published: true };
   }
 
   const ambiguous = (copyResult.description ?? '').startsWith('network error');
   if (ambiguous) {
-    // We do not know whether Telegram applied the copy. Never retry blindly:
-    // a second copy would publish the same media twice.
+    // We do not know whether Telegram applied the copy. Never resend: a second
+    // copy publishes the same media twice. `uncertain` is terminal and visible.
     await store.transitionReview({
       reviewId: review.id,
-      from: 'approved',
+      from: 'publishing',
       to: 'uncertain',
       nowMs,
       error: copyResult.description ?? 'ambiguous publish outcome',
@@ -233,21 +260,72 @@ export async function decideReview(
     };
   }
 
-  // A definitive rejection means nothing was published, so the review can be
-  // retried by an operator instead of being stuck.
-  await store.transitionReview({
-    reviewId: review.id,
-    from: 'approved',
-    to: 'pending',
-    nowMs,
-    error: copyResult.description ?? 'publish rejected',
-  });
+  // A definitive rejection means Telegram applied nothing, so the review is
+  // retryable — which is exactly what `failed` means, and why the approve button
+  // can be relabelled "retry publish" without any doubt about the state.
+  await failPublish(store, review.id, nowMs, copyResult.description ?? 'publish rejected');
   return {
-    status: 'pending',
+    status: 'failed',
     decided: true,
     published: false,
     description: copyResult.description,
   };
+}
+
+/** `publishing -> failed`: nothing was published and a retry is safe. */
+async function failPublish(
+  store: ControlPlaneStore,
+  reviewId: string,
+  nowMs: number,
+  error: string
+): Promise<void> {
+  await store.transitionReview({ reviewId, from: 'publishing', to: 'failed', nowMs, error });
+}
+
+/**
+ * Resolves claims nobody finished.
+ *
+ * TelePost reclaims a stale `publishing` row and re-runs the publish, which is
+ * safe only because its delivery ledger usually proves the send happened. This
+ * closes that hole and keeps the recovery: the recorded message id IS the proof.
+ *
+ *   - a claim with a recorded message id means Telegram accepted the copy, so the
+ *     review is resolved as published — no resend, no human needed;
+ *   - a claim without one is genuinely unknown (the crash may have happened
+ *     before or after the copy), so it becomes `uncertain` for a human to check.
+ *     Resending there is precisely how the same media gets posted twice.
+ */
+export async function reapStalePublishing(
+  store: ControlPlaneStore,
+  nowMs: number,
+  staleMs: number = PUBLISHING_STALE_MS,
+  limit = 50
+): Promise<{ published: number; uncertain: number }> {
+  const stale = await store.listStalePublishing({ olderThanMs: nowMs - staleMs, limit });
+  let published = 0;
+  let uncertain = 0;
+
+  for (const review of stale) {
+    if (review.publishedMessageId !== null) {
+      const marked = await store.markReviewPublished({
+        reviewId: review.id,
+        publishedMessageId: review.publishedMessageId,
+        nowMs,
+      });
+      if (marked) published += 1;
+      continue;
+    }
+    const won = await store.transitionReview({
+      reviewId: review.id,
+      from: 'publishing',
+      to: 'uncertain',
+      nowMs,
+      error: 'the claim was abandoned mid-publish and nothing proves the copy',
+    });
+    if (won) uncertain += 1;
+  }
+
+  return { published, uncertain };
 }
 
 function extractMessageId(result: Record<string, unknown> | undefined): number | null {

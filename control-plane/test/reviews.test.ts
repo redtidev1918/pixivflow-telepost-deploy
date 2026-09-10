@@ -10,61 +10,8 @@ import {
 } from '../src/reviews';
 import { handleTelegramWebhook } from '../src/routes/telegram';
 import { handleControl } from '../src/routes/control';
-import type { BotApiClient, TelegramResult } from '../src/telegram/client';
 import { MemoryControlStore } from './memory-store';
-
-const NOW = Date.parse('2026-09-11T10:00:00Z');
-
-interface FakeBot extends BotApiClient {
-  calls: Array<{ method: string; payload: unknown }>;
-  /** Optional script: return a crafted Telegram result for one method. */
-  script?: (method: string) => TelegramResult | undefined;
-}
-
-function fakeBot(botId = 'bot1'): FakeBot {
-  const calls: FakeBot['calls'] = [];
-  const bot = {
-    botId,
-    calls,
-    script: undefined as ((method: string) => TelegramResult | undefined) | undefined,
-    answerCallbackQuery: async (id: string, text?: string) => record('answerCallbackQuery', { id, text }),
-    copyMessage: async (input: Parameters<BotApiClient['copyMessage']>[0]) => record('copyMessage', input),
-    copyMessages: async (input: Parameters<BotApiClient['copyMessages']>[0]) => record('copyMessages', input),
-    editMessageReplyMarkup: async (input: Parameters<BotApiClient['editMessageReplyMarkup']>[0]) =>
-      record('editMessageReplyMarkup', input),
-    sendMessage: async (input: Parameters<BotApiClient['sendMessage']>[0]) => record('sendMessage', input),
-  } satisfies FakeBot;
-
-  function record(method: string, payload: unknown): TelegramResult {
-    calls.push({ method, payload });
-    const scripted = bot.script?.(method);
-    return scripted ?? { ok: true, result: { message_id: 555 } };
-  }
-
-  return bot;
-}
-
-async function seedReview(
-  store: MemoryControlStore,
-  overrides: Partial<Parameters<typeof createReview>[1]> = {},
-  nowMs = NOW
-) {
-  return createReview(
-    store,
-    {
-      id: 'rv1',
-      botId: 'bot1',
-      chatId: '-100review',
-      messageId: 42,
-      publishChatId: '-100channel',
-      targetId: 'bot1-illust-botefuku',
-      workId: '29088506',
-      slotId: 'bot1-daily@2026-09-11T1800',
-      ...overrides,
-    },
-    nowMs
-  );
-}
+import { fakeBot, seedReview, NOW } from './reviews-helpers';
 
 describe('creating a review is idempotent per work', () => {
   it('returns the existing review when the runner reports the same work twice', async () => {
@@ -94,16 +41,16 @@ describe('decisions are write-once and side effects follow the winner', () => {
       NOW + 1000
     );
 
-    expect(outcome).toMatchObject({ status: 'approved', decided: true, published: true });
+    expect(outcome).toMatchObject({ status: 'published', decided: true, published: true });
     const copies = bot.calls.filter((call) => call.method === 'copyMessage');
     expect(copies).toHaveLength(1);
     expect(copies[0]!.payload).toMatchObject({
-      fromChatId: '-100review',
+      fromChatId: '-1004318193445',
       messageId: 42,
       toChatId: '-100channel',
     });
     const review = (await store.getReview('rv1'))!;
-    expect(review.status).toBe('approved');
+    expect(review.status).toBe('published');
     expect(review.publishedMessageId).toBe(555);
     expect(review.decidedBy).toBe('owner');
   });
@@ -121,7 +68,7 @@ describe('decisions are write-once and side effects follow the winner', () => {
     );
 
     expect(replay.decided).toBe(false);
-    expect(replay.status).toBe('approved');
+    expect(replay.status).toBe('published');
     expect(replay.published).toBe(true);
     expect(bot.calls.filter((call) => call.method === 'copyMessage')).toHaveLength(1);
   });
@@ -156,8 +103,8 @@ describe('decisions are write-once and side effects follow the winner', () => {
     expect(decided).toHaveLength(1);
     // Whatever won, the review is in exactly one terminal state.
     const review = (await store.getReview('rv1'))!;
-    expect(['approved', 'rejected']).toContain(review.status);
-    if (approve.decided && approve.status === 'approved') {
+    expect(['published', 'rejected']).toContain(review.status);
+    if (approve.decided && approve.status === 'published') {
       expect(bot.calls.filter((call) => call.method === 'copyMessage')).toHaveLength(1);
     } else {
       expect(bot.calls.filter((call) => call.method === 'copyMessage')).toHaveLength(0);
@@ -206,7 +153,7 @@ describe('an unconfirmed publish is never retried', () => {
     expect(bot.calls.filter((call) => call.method === 'copyMessage')).toHaveLength(1);
   });
 
-  it('a definitive rejection returns to pending so an operator can retry', async () => {
+  it('a definitive rejection becomes failed so an operator can retry', async () => {
     const store = new MemoryControlStore();
     const bot = fakeBot();
     bot.script = () => ({ ok: false, description: 'Bad Request: message to copy not found' });
@@ -218,9 +165,9 @@ describe('an unconfirmed publish is never retried', () => {
       NOW + 1000
     );
 
-    expect(outcome.status).toBe('pending');
+    expect(outcome.status).toBe('failed');
     expect(outcome.uncertain).toBeUndefined();
-    expect((await store.getReview('rv1'))!.status).toBe('pending');
+    expect((await store.getReview('rv1'))!.status).toBe('failed');
   });
 
   it('refuses to publish when the bot token or the publish target is missing', async () => {
@@ -231,7 +178,9 @@ describe('an unconfirmed publish is never retried', () => {
       { reviewId: 'no-bot', action: 'approve' },
       NOW + 1000
     );
-    expect(noBot).toMatchObject({ status: 'uncertain', uncertain: true });
+    // Nothing was sent, so this is retryable rather than ambiguous. Marking it
+    // uncertain would wedge the review behind a decision no operator can make.
+    expect(noBot).toMatchObject({ status: 'failed' });
 
     await seedReview(store, { id: 'no-target', workId: 'other', publishChatId: null });
     const noTarget = await decideReview(
@@ -239,7 +188,7 @@ describe('an unconfirmed publish is never retried', () => {
       { reviewId: 'no-target', action: 'approve' },
       NOW + 1000
     );
-    expect(noTarget).toMatchObject({ status: 'uncertain', uncertain: true });
+    expect(noTarget).toMatchObject({ status: 'failed' });
   });
 });
 
@@ -297,7 +246,7 @@ describe('webhook', () => {
       id: 'cb-1',
       data: buildCallbackData(reviewId, action),
       from: { id: 12345, username: 'owner' },
-      message: { message_id: 42, chat: { id: -100 } },
+      message: { message_id: 42, chat: { id: -1004318193445 } },
     },
   });
 
@@ -335,7 +284,7 @@ describe('webhook', () => {
       { TELEGRAM_WEBHOOK_SECRET: secret, getBot: () => bot }
     );
     const body = (await response!.json()) as Record<string, unknown>;
-    expect(body).toMatchObject({ ok: true, status: 'approved', decided: true, published: true });
+    expect(body).toMatchObject({ ok: true, status: 'published', decided: true, published: true });
     expect(bot.calls.some((call) => call.method === 'answerCallbackQuery')).toBe(true);
   });
 
@@ -388,7 +337,7 @@ describe('webhook', () => {
   it('ignores updates that are not review callbacks without failing them', async () => {
     const store = new MemoryControlStore();
     const response = await handleTelegramWebhook(
-      makeRequest('bot1', { update_id: 2, message: { message_id: 1, chat: { id: -100 } } }),
+      makeRequest('bot1', { update_id: 2, message: { message_id: 1, chat: { id: -1004318193445 } } }),
       store,
       new URL('https://control.example/telegram/webhook/bot1'),
       { TELEGRAM_WEBHOOK_SECRET: secret, getBot: () => fakeBot() }
@@ -442,7 +391,7 @@ describe('runner-side review endpoints', () => {
       post('/control/reviews', {
         review_id: 'rv_uncertain',
         bot_id: 'bot1',
-        chat_id: '-100review',
+        chat_id: '-1004318193445',
         publish_chat_id: '-100channel',
         status: 'uncertain',
         error: 'Telegram send outcome unconfirmed',

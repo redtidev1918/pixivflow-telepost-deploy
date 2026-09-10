@@ -16,6 +16,7 @@ import type {
   ProviderRunState,
 } from '../src/provider';
 import {
+  CLAIMABLE_REVIEW_STATUSES,
   isTerminalExecution,
   TERMINAL_ITEM_STATUSES,
   type ControlPlaneStore,
@@ -389,15 +390,60 @@ export class MemoryControlStore implements ControlPlaneStore {
     return true;
   }
 
+  /** Mirrors the D1 claim: one conditional UPDATE, stale branch included. */
+  async claimReviewForPublishing(input: {
+    reviewId: string;
+    nowMs: number;
+    staleMs: number;
+  }): Promise<{ claimed: boolean; record: ReviewRecord | null }> {
+    const review = this.reviews.get(input.reviewId);
+    if (!review) return { claimed: false, record: null };
+    const claimable =
+      CLAIMABLE_REVIEW_STATUSES.includes(review.status) ||
+      (review.status === 'publishing' && input.nowMs - review.updatedAt > input.staleMs);
+    if (claimable) {
+      review.status = 'publishing';
+      review.updatedAt = input.nowMs;
+    }
+    // D1 returns a snapshot, so the fake must hand back a copy for the same reason.
+    return { claimed: claimable, record: { ...review } };
+  }
+
+  async recordPublishedMessage(input: {
+    reviewId: string;
+    publishedMessageId: number | null;
+    nowMs: number;
+  }): Promise<boolean> {
+    const review = this.reviews.get(input.reviewId);
+    if (!review || review.status !== 'publishing') return false;
+    review.publishedMessageId = input.publishedMessageId;
+    review.updatedAt = input.nowMs;
+    return true;
+  }
+
+  async listStalePublishing(input: { olderThanMs: number; limit: number }): Promise<ReviewRecord[]> {
+    return [...this.reviews.values()]
+      .filter((review) => review.status === 'publishing' && review.updatedAt <= input.olderThanMs)
+      .sort((a, b) => a.updatedAt - b.updatedAt)
+      .slice(0, input.limit)
+      .map((review) => ({ ...review }));
+  }
+
   async markReviewPublished(input: {
     reviewId: string;
     publishedMessageId: number | null;
     nowMs: number;
-  }): Promise<void> {
+    actor?: string | null;
+  }): Promise<boolean> {
     const review = this.reviews.get(input.reviewId);
-    if (!review) return;
+    // Guarded: a late writer must not clobber a row another actor resolved.
+    if (!review || review.status !== 'publishing') return false;
+    review.status = 'published';
     review.publishedMessageId = input.publishedMessageId;
+    review.decidedAt = input.nowMs;
+    if (input.actor != null) review.decidedBy = input.actor;
     review.updatedAt = input.nowMs;
+    return true;
   }
 
   // ---- processed works ------------------------------------------------------

@@ -638,15 +638,92 @@ export class D1ControlStore implements ControlPlaneStore {
     return (result?.meta?.changes ?? 0) > 0;
   }
 
+  /**
+   * ONE conditional UPDATE, ported from TelePost's `claim_for_publishing`.
+   *
+   * The WHERE clause is the entire at-most-once mechanism: `pending`/`failed`
+   * always yield, and `publishing` yields only once it is stale. Two concurrent
+   * approvers therefore cannot both reach the Telegram copy, and a Telegram
+   * webhook replay re-enters harmlessly.
+   */
+  async claimReviewForPublishing(input: {
+    reviewId: string;
+    nowMs: number;
+    staleMs: number;
+  }): Promise<{ claimed: boolean; record: ReviewRecord | null }> {
+    const result = (await this.db
+      .prepare(
+        `UPDATE reviews
+            SET status = 'publishing', updated_at = ?
+          WHERE id = ?
+            AND (
+              status IN ('pending', 'failed')
+              OR (status = 'publishing' AND ? - updated_at > ?)
+            )`
+      )
+      .bind(input.nowMs, input.reviewId, input.nowMs, input.staleMs)
+      .run()) as { meta?: { changes?: number } } | undefined;
+
+    const claimed = (result?.meta?.changes ?? 0) > 0;
+    // Read back either way: the caller has to distinguish "someone else is
+    // already publishing" from "already published" from "terminal".
+    return { claimed, record: await this.getReview(input.reviewId) };
+  }
+
+  /**
+   * Records the created message id while the row is still `publishing`. Guarded
+   * by the claim, so a late writer cannot annotate a row it no longer owns.
+   */
+  async recordPublishedMessage(input: {
+    reviewId: string;
+    publishedMessageId: number | null;
+    nowMs: number;
+  }): Promise<boolean> {
+    const result = (await this.db
+      .prepare(
+        `UPDATE reviews SET published_message_id = ?, updated_at = ?
+          WHERE id = ? AND status = 'publishing'`
+      )
+      .bind(input.publishedMessageId, input.nowMs, input.reviewId)
+      .run()) as { meta?: { changes?: number } } | undefined;
+    return (result?.meta?.changes ?? 0) > 0;
+  }
+
+  async listStalePublishing(input: { olderThanMs: number; limit: number }): Promise<ReviewRecord[]> {
+    const { results } = await this.db
+      .prepare(
+        `SELECT ${REVIEW_COLUMNS} FROM reviews
+          WHERE status = 'publishing' AND updated_at <= ?
+          ORDER BY updated_at ASC LIMIT ?`
+      )
+      .bind(input.olderThanMs, input.limit)
+      .all<ReviewRowDb>();
+    return (results ?? []).map(toReview);
+  }
+
+  /** Guarded terminal transition; false means another actor already resolved it. */
   async markReviewPublished(input: {
     reviewId: string;
     publishedMessageId: number | null;
     nowMs: number;
-  }): Promise<void> {
-    await this.db
-      .prepare(`UPDATE reviews SET published_message_id = ?, updated_at = ? WHERE id = ?`)
-      .bind(input.publishedMessageId, input.nowMs, input.reviewId)
-      .run();
+    actor?: string | null;
+  }): Promise<boolean> {
+    const result = (await this.db
+      .prepare(
+        `UPDATE reviews
+            SET status = 'published', published_message_id = ?, updated_at = ?,
+                decided_at = ?, decided_by = COALESCE(?, decided_by)
+          WHERE id = ? AND status = 'publishing'`
+      )
+      .bind(
+        input.publishedMessageId,
+        input.nowMs,
+        input.nowMs,
+        input.actor ?? null,
+        input.reviewId
+      )
+      .run()) as { meta?: { changes?: number } } | undefined;
+    return (result?.meta?.changes ?? 0) > 0;
   }
 
   // ---- slot items -----------------------------------------------------------

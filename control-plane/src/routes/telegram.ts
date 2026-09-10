@@ -7,10 +7,16 @@
  * the proposal formatting and the review UI stay where they already are.
  *
  * Two invariants:
- *  - **bot isolation**: the bot in the URL must own the review. A bot2 webhook can
- *    never decide a bot1 review (and therefore can never publish to bot1's channel).
+ *  - **bot isolation**: the bot in the URL must own the review, AND the press must
+ *    have happened in that review's chat. A bot2 webhook can never decide a bot1
+ *    review (and therefore can never publish to bot1's channel).
  *  - **idempotent decisions**: a double tap, a Telegram replay or a retried webhook
  *    all converge on one decision, because the decision is a compare-and-set.
+ *
+ * The chat check is an addition, not a port. TelePost relies on the callback landing
+ * on the right per-bot webhook and on each bot having its own database; nothing
+ * verifies the press came from the review chat. With one shared database that is no
+ * longer sufficient, so the chat is checked explicitly.
  */
 
 import { decideReview, parseCallbackData } from '../reviews';
@@ -92,6 +98,15 @@ export async function handleTelegramWebhook(
     return json({ ok: false, error: 'bot mismatch' }, 403);
   }
 
+  // And the press must come from the chat that review lives in. A message id is
+  // only meaningful within its own chat, so a press relayed from elsewhere must
+  // never be able to decide this review.
+  const pressedIn = callback.message?.chat?.id;
+  if (pressedIn !== undefined && String(pressedIn) !== review.chatId) {
+    await answerSafe(env, botId, callback.id, 'Not your review');
+    return json({ ok: false, error: 'chat mismatch' }, 403);
+  }
+
   const actor = callback.from?.username ?? (callback.from?.id !== undefined ? String(callback.from.id) : 'unknown');
   const outcome = await decideReview(
     { store, getBot: env.getBot },
@@ -125,7 +140,7 @@ function acknowledgeText(
   if (status === 'expired') return '该审核已过期';
   if (!decided) return `已处理过：${status}`;
   if (action === 'reject') return '已拒绝';
-  if (status === 'approved') return '已发布';
+  if (status === 'published') return '已发布';
   if (status === 'pending' && description) return `发布被拒绝：${description}`;
   return '已处理';
 }
