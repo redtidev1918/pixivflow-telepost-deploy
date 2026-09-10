@@ -58,6 +58,11 @@ on:
         required: false
         type: string
         default: 'master'
+      job_timeout_minutes:
+        description: 'Hard job bound in minutes (default 90; ops/testing may lower it)'
+        required: false
+        type: string
+        default: '90'
 
 # Layer 2 of exactly-once: one concurrency group per canonical slot. A duplicate
 # dispatch queues behind the running one instead of racing it. Layer 1 is D1:
@@ -73,8 +78,11 @@ jobs:
   execute:
     runs-on: ubuntu-latest
     # Hard bound. A wedged Pixiv call cannot run forever: the runner dies here and
-    # the control plane converges the occurrence from provider state.
-    timeout-minutes: 90
+    # the control plane converges the occurrence from provider state. The value is
+    # an input so the timeout path itself can be exercised deliberately; it is
+    # bounded here so a dispatcher cannot turn the execution plane into an
+    # unbounded one.
+    timeout-minutes: ${{ min(fromJSON(inputs.job_timeout_minutes || '90'), 120) }}
     env:
       SLOT_ID: ${{ inputs.slot_id }}
       SCHEDULE_ID: ${{ inputs.schedule_id }}
