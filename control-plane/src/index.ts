@@ -42,6 +42,8 @@ export interface Env {
    * (see the control-plane README). Never logged.
    */
   GITHUB_DISPATCH_TOKEN?: string;
+  /** base64 of 32 bytes; encrypts stored credentials at rest. */
+  CREDENTIAL_MASTER_KEY?: string;
   /** Bearer the runner uses for the claim/result callbacks. */
   CALLBACK_SECRET?: string;
   /**
@@ -205,7 +207,9 @@ export default {
     const url = new URL(request.url);
     const store = new D1ControlStore(env.CONTROL_DB);
 
-    const controlResponse = await handleControl(request, store, url, env.CALLBACK_SECRET);
+    const controlResponse = await handleControl(request, store, url, env.CALLBACK_SECRET, {
+      ...(env.CREDENTIAL_MASTER_KEY ? { CREDENTIAL_MASTER_KEY: env.CREDENTIAL_MASTER_KEY } : {}),
+    });
     if (controlResponse) return controlResponse;
 
     // Telegram webhook: review decisions (see routes/telegram.ts). Handled before

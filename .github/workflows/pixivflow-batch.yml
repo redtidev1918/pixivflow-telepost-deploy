@@ -118,6 +118,10 @@ jobs:
       SCHEDULE_ID: ${{ inputs.schedule_id }}
       ATTEMPT: ${{ inputs.attempt }}
       BOT_ID: ${{ inputs.bot_id }}
+      # The credential this execution consumes, as the control plane named it. Both
+      # the concurrency group and the credential endpoints key on it, so a second
+      # Pixiv account is a new value rather than a code change.
+      CREDENTIAL_KEY: ${{ inputs.credential_key }}
       TARGETS: ${{ inputs.targets }}
       MODE: ${{ inputs.mode }}
       OCCURRENCE_AT: ${{ inputs.occurrence_at }}
@@ -144,7 +148,7 @@ jobs:
           token=""
           if response=$(curl -sS --max-time 20 -X POST \
               -H "authorization: Bearer $CONTROL_SECRET" \
-              "${CALLBACK_URL%/}/credentials/pixiv-refresh-token/read" 2>/dev/null); then
+              "${CALLBACK_URL%/}/credentials/${CREDENTIAL_KEY}/read" 2>/dev/null); then
             token=$(printf '%s' "$response" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("value",""))' 2>/dev/null || true)
           fi
           source="control-plane"
@@ -271,8 +275,10 @@ jobs:
 
           provided = os.environ.get('PIXIV_REFRESH_TOKEN', '').strip()
           candidates = ['control-plane/config/pixivflow.production.json']
-          candidates += glob.glob('**/.pixiv-refresh-token', recursive=True)
-          candidates += glob.glob('**/.pixiv-refresh-token.backup', recursive=True)
+          # The runner's own storage names these after the credential key.
+          key = os.environ.get('CREDENTIAL_KEY', 'pixiv-refresh-token')
+          candidates += glob.glob(f'**/.{key}', recursive=True)
+          candidates += glob.glob(f'**/.{key}.backup', recursive=True)
 
           for name in candidates:
               path = pathlib.Path(name)
@@ -307,7 +313,7 @@ jobs:
             code=$(curl -sS --max-time 20 -o "$RUNNER_TEMP/rotated.response" -w '%{http_code}' \
               -X PUT -H "authorization: Bearer $CONTROL_SECRET" -H 'content-type: application/json' \
               --data-binary "@$RUNNER_TEMP/rotated.body" \
-              "${CALLBACK_URL%/}/credentials/pixiv-refresh-token" || echo 000)
+              "${CALLBACK_URL%/}/credentials/${CREDENTIAL_KEY}" || echo 000)
             if [ "$code" = "200" ]; then
               echo "credential: rotated value stored durably (attempt $attempt)"
               rm -f "$RUNNER_TEMP/rotated.body" "$RUNNER_TEMP/rotated.response"

@@ -191,7 +191,20 @@ EXPECT_OWNER=worker scripts/cutover-preflight.sh
    `Read-only auth: skipping the boot-time refresh-token probe` 等守卫命中 18 次，而
    `Received updated refresh token` / `Refreshed Pixiv access token` / `Config file automatically updated` **均为 0 次**。
 
-   **仍需独立 Pixiv shadow 凭据**：真正的选题→下载→上传送审只能等有了独立凭据（或一份未过期的 access token）才能验证。
+   **串行验收已通过（判据见下）**
+
+| run | slot | slot | exec | attempts | duration | GitHub run | 429 |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| bot1 A | `bot1-daily@2026-09-11T0453` | success | success | 1 | 3.3m | 34529602811 | 0 |
+| bot2 A | `bot2-daily@2026-09-11T0457` | success | success | 1 | 4.3m | 34530038290 | 0 |
+| bot1 B | `bot1-daily@2026-09-11T0503` | success | success | 1 | 3.0m | 34530554720 | 0 |
+| bot2 B | `bot2-daily@2026-09-11T0507` | success | success | 1 | 3.3m | 34530978516 | 0 |
+
+门禁全过：4/4 terminal、4/4 exec success、每条 **attempt 1**、每 slot ≤1 execution、**0 production delivery**、**0 uncertain**、**0 duplicate**、**0 rate-limit hit**。bot2 = 4.3m / 3.3m（历史量级 3.5–6.4m），**<10min 通过**。
+
+串行下 0 次 429，反证此前 30 分钟阻塞纯属同一账号并发限流。四条串行意味着任何时刻只有一个 execution 持有凭据。
+
+**仍需独立 Pixiv shadow 凭据**：真正的选题→下载→上传送审只能等有了独立凭据（或一份未过期的 access token）才能验证。
 3. 故障注入：job 超时、上报丢失、重复 dispatch、D1 写失败、runner 崩溃 —— 每次都要证明恰好一个 terminal 状态，且没有第二次执行
 
    **已在真实基础设施上验证**（无需凭据）：

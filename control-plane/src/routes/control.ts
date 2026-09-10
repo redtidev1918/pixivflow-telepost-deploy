@@ -11,6 +11,7 @@
  */
 
 import { applyExecutionResult, claimExecution } from '../execution';
+import { decryptSecret, encryptSecret } from '../credentials';
 import { secretsMatch } from '../secrets';
 import { buildCallbackData } from '../reviews';
 import type { ControlPlaneStore, ExecutionStatus, ItemStatus } from '../store';
@@ -64,7 +65,8 @@ export async function handleControl(
   request: Request,
   store: ControlPlaneStore,
   url: URL,
-  callbackSecret: string | undefined
+  callbackSecret: string | undefined,
+  env: { CREDENTIAL_MASTER_KEY?: string } = {}
 ): Promise<Response | null> {
   // ---- the execution plane's shared credential ------------------------------
   //
@@ -76,6 +78,7 @@ export async function handleControl(
   // The value never appears in a GET: metadata is one endpoint and reading the
   // secret is an explicit POST, so a probe, a dashboard or a log line cannot leak
   // it by accident.
+  const masterKey = env.CREDENTIAL_MASTER_KEY;
   const credentialPath = /^\/control\/credentials\/([^/]+)$/.exec(url.pathname);
   if (credentialPath) {
     const name = decodeURIComponent(credentialPath[1] ?? '');
@@ -109,7 +112,14 @@ export async function handleControl(
         return json({ error: 'value does not look like a credential' }, 400);
       }
       const before = await store.getRunnerCredential(name);
-      const result = await store.putRunnerCredential({ name, value, nowMs: Date.now() });
+      // Stored encrypted whenever a master key exists: the value is the account, and
+      // "the API does not return it" is not the same property as "the database does
+      // not contain it".
+      const stored = masterKey ? await encryptSecret(value, masterKey) : value;
+      if (!masterKey) {
+        console.warn('CREDENTIAL_MASTER_KEY is not set; storing the credential unencrypted');
+      }
+      const result = await store.putRunnerCredential({ name, value: stored, nowMs: Date.now() });
       // Durable evidence of the rotation, without the value: who changed it, and
       // what it replaced, is enough to audit this.
       if (result.changed) {
@@ -140,7 +150,18 @@ export async function handleControl(
     const name = decodeURIComponent(credentialRead[1] ?? '');
     const secret = await store.readRunnerCredentialSecret(name);
     if (!secret) return json({ error: 'no credential stored' }, 404);
-    return json({ ok: true, name, value: secret.value, updatedAt: secret.updatedAt, rotations: secret.rotations });
+    let value: string;
+    try {
+      value = masterKey ? await decryptSecret(secret.value, masterKey) : secret.value;
+    } catch (error) {
+      // Never hand back a value that cannot authenticate: that would surface as a
+      // confusing Pixiv auth failure instead of a configuration error.
+      return json(
+        { error: `stored credential cannot be decrypted: ${error instanceof Error ? error.message : String(error)}` },
+        500
+      );
+    }
+    return json({ ok: true, name, value, updatedAt: secret.updatedAt, rotations: secret.rotations });
   }
 
   // Durable duplicate history for a runner that starts with an empty local
