@@ -56,6 +56,29 @@ RUN ln -s /opt/pixivflow/node_modules/.bin/pixivflow /usr/local/bin/pixivflow \
     && node --version \
     && pixivflow --version
 
+# 临时热补丁：2.15.x 的 _compress_photo 对超大 PNG（如 7000x5400 RGBA）全幅
+# Pillow 解码会 OOM（512 MiB 单机）。补丁按文件头估算解码内存，超预算直接走
+# document 兜底而不解码。上游发布含此修复的版本后删除本层。
+COPY docker/overlay/handlers/publish.py /app/handlers/publish.py
+RUN python3 -m py_compile /app/handlers/publish.py \
+    && BOT_TOKEN=123:build-check CHANNEL_ID=-1001234567890 python3 - <<'PY'
+from unittest.mock import patch
+from handlers import publish
+
+class Head:
+    def __init__(self, size, mode):
+        self.size, self.mode = size, mode
+    def __enter__(self):
+        return self
+    def __exit__(self, *_):
+        pass
+
+with patch("PIL.Image.open", return_value=Head((7000, 5400), "RGBA")):
+    assert publish._decode_would_oom("unused")
+with patch("PIL.Image.open", return_value=Head((2000, 2000), "RGB")):
+    assert not publish._decode_would_oom("unused")
+PY
+
 LABEL org.opencontainers.image.title="PixivFlow + TelePost" \
       org.opencontainers.image.description="Low-memory multi-bot PixivFlow and TelePost deployment runtime" \
       org.opencontainers.image.source="https://github.com/redtidev1918/pixivflow-telepost-deploy" \
