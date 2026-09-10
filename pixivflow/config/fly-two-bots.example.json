@@ -87,6 +87,7 @@
         "type": "httpMultipart",
         "url": "${TELEPOST_API_BASE_URL}/api/bot1/v1/submissions",
         "notificationUrl": "${TELEPOST_API_BASE_URL}/api/bot1/v1/notifications",
+        "readinessUrl": "${TELEPOST_API_BASE_URL}/ready",
         "headers": {
           "Authorization": "Bearer ${TELEPOST_BOT1_SUBMIT_TOKEN}"
         },
@@ -123,6 +124,7 @@
         "type": "httpMultipart",
         "url": "${TELEPOST_API_BASE_URL}/api/bot2/v1/submissions",
         "notificationUrl": "${TELEPOST_API_BASE_URL}/api/bot2/v1/notifications",
+        "readinessUrl": "${TELEPOST_API_BASE_URL}/ready",
         "headers": {
           "Authorization": "Bearer ${TELEPOST_BOT2_SUBMIT_TOKEN}"
         },
