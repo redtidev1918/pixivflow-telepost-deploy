@@ -4,7 +4,7 @@ import { join } from 'node:path';
 
 import { botTokens, clockHealth } from '../src/index';
 import { reconcileAll } from '../src/reconciliation';
-import { SCHEDULES } from '../src/schedules';
+import { CREDENTIAL_ADMISSION, PIXIV_CREDENTIAL, SCHEDULES } from '../src/schedules';
 import { FakeProvider, MemoryControlStore } from './memory-store';
 import {
   SWEEP_INTERVAL_MINUTES,
@@ -151,5 +151,29 @@ describe('concurrent sweeps are each recorded', () => {
     for (const run of runs) {
       expect(run.startedAt).toBe(nowMs);
     }
+  });
+});
+
+/**
+ * The credential alias is an identity, not a description.
+ *
+ * It is what admission, the GitHub concurrency group, rotation, remote login and
+ * status queries all key on, and it must survive every token rotation behind it. A
+ * name like `pixiv-refresh-token` encodes the stored field; `-1`/`-2` would extend
+ * that mistake to a second account, which is exactly what this pins against.
+ */
+describe('credential identity', () => {
+  it('names the account, never the stored field', () => {
+    expect(PIXIV_CREDENTIAL).toBe('pixiv-main');
+    expect(PIXIV_CREDENTIAL).not.toMatch(/token|secret|refresh|credential/i);
+  });
+
+  it('is a stable alias: the schedules and the admission table agree on it', () => {
+    for (const schedule of SCHEDULES) {
+      expect(schedule.credential).toBe(PIXIV_CREDENTIAL);
+    }
+    // One identity, one admission limit — the backstop and the queue must not
+    // disagree about which resource they are protecting.
+    expect(Object.keys(CREDENTIAL_ADMISSION)).toEqual([PIXIV_CREDENTIAL]);
   });
 });

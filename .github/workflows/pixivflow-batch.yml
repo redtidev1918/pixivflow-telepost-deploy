@@ -65,7 +65,7 @@ on:
       credential_key:
         description: 'Shared credential this execution consumes (concurrency group)'
         required: true
-        default: 'pixiv-refresh-token'
+        default: 'pixiv-main'
         type: string
       job_timeout_minutes:
         description: 'Hard job bound. 1 is for validating the timeout path only.'
@@ -275,10 +275,12 @@ jobs:
 
           provided = os.environ.get('PIXIV_REFRESH_TOKEN', '').strip()
           candidates = ['control-plane/config/pixivflow.production.json']
-          # The runner's own storage names these after the credential key.
-          key = os.environ.get('CREDENTIAL_KEY', 'pixiv-refresh-token')
-          candidates += glob.glob(f'**/.{key}', recursive=True)
-          candidates += glob.glob(f'**/.{key}.backup', recursive=True)
+          # PixivFlow's OWN storage filenames, which are a library detail and must
+          # not be derived from the credential alias: the alias names the account,
+          # the file is wherever the tool happens to keep its token. Coupling them
+          # meant renaming an account silently stopped rotation detection.
+          candidates += glob.glob('**/.pixiv-refresh-token', recursive=True)
+          candidates += glob.glob('**/.pixiv-refresh-token.backup', recursive=True)
 
           for name in candidates:
               path = pathlib.Path(name)

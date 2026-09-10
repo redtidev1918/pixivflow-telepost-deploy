@@ -17,7 +17,7 @@ import { MemoryControlStore } from './memory-store';
  * call that was only asking about state.
  */
 const SECRET = 'callback-secret';
-const NAME = 'pixiv-refresh-token';
+const NAME = 'pixiv-main';
 
 function request(
   store: MemoryControlStore,

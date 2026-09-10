@@ -121,7 +121,21 @@ shadow 全部通过 -> 一次 cutover -> 正式 bot1/bot2 webhook -> Worker
 - 本地 `~/.pixivflow/config/standalone.config.json` 里存的**就是** Fly 生产 refresh token（已比对一致）。任何本地 PixivFlow 运行都会把它从 unified storage 解析进内存。
 - 唯一可以避免刷新的路径是使用缓存中的 access token。实测本机缓存已过期：`expiresAt = 2026-08-29 21:07:46`（写入 169 字节 JSON，`bearer`）。
 
-### 4.2.1 轮换不变式：先持久化，才允许成功
+### 4.2.1 credential identity：稳定 alias，而不是字段名
+
+```text
+credential_key = pixiv-main        ← 永久稳定的逻辑 alias，永不改变
+provider       = pixiv
+secret         = refresh token     ← 可无限轮换，alias 不变
+```
+
+- `credential_key` 表示**哪一个账号/外部资源**，不表示"里面存的是什么"。旧名 `pixiv-refresh-token` 把实现细节写进了 identity；第二个账号一来就会变成 `pixiv-refresh-token-1/-2`，而 admission、GitHub concurrency、轮换写回、远程登录、状态查询全都要围绕这个 key 工作。
+- 多账号命名：`pixiv-main` / `pixiv-alt` / `pixiv-backup` / `pixiv-r18`。
+- **不为了改 key 重写已完成的 slot / execution / review 历史**：只有 `runner_credentials` 把 credential 作为当前语义持久化。`event_log` 里 4 条历史提及**故意保留** —— 审计日志记录的是当时发生了什么，改掉它是销毁证据而不是整理。
+- 迁移方式为**无损**：0007 复制新 alias（先验证新 key 能读到真实 token）→ 切换所有引用 → 确认无代码依赖旧名 → 0008 才删除旧行。复制不会丢凭据，中途失败的改名会。
+- **一个反例教训**：workflow 曾把轮换检测的 glob 参数化成 `.{credential_key}`，那会让 alias 与 **PixivFlow 自己的 token 文件名**（`.pixiv-refresh-token`）耦合 —— 改个账号名就会静默停掉轮换检测。现在 glob 用库自己的固定文件名，alias 只管账号身份。
+
+### 4.2.2 轮换不变式：先持久化，才允许成功
 
 共享一套凭据意味着"拿到新 token 就地丢掉"是单向门：runner 随 job 销毁，丢掉的 token 谁也拿不回来，账号访问一起失去。所以 cutover 前必须锁死：
 
@@ -141,7 +155,7 @@ runner 收到 rotated refresh token
 
 | 位置 | 机制 |
 | --- | --- |
-| D1 `runner_credentials` | 存当前值；记录 `previous_hash`（被替换值的摘要，**不是** token 历史）与 `rotations` 计数 |
+| D1 `runner_credentials` | 每个 alias 一行（现为 `pixiv-main`）；值以 AES-GCM 加密存储（`v1:` 前缀 + 每次写入新 IV，`CREDENTIAL_MASTER_KEY`）；记录 `previous_hash`（被替换值的摘要，**不是** token 历史）与 `rotations` 计数 |
 | `PUT /control/credentials/:name` | 写入；拒绝空/过短/仍是 `${...}` 占位符的值；轮换时写 `runner_credential_rotated` 审计事件（只含 name/计数/前一次时间） |
 | `GET /control/credentials/:name` | **只返回元数据**，绝不含明文 |
 | `POST /control/credentials/:name/read` | 唯一能读到明文的方式（显式 POST，避免被缓存/进 URL/进日志） |

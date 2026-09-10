@@ -53,7 +53,22 @@ export interface ScheduleDefinition {
  * holder is terminal. GitHub's per-slot concurrency group remains as a second line
  * of defence, but it cannot see across slots and is not the queue.
  */
-export const PIXIV_CREDENTIAL = 'pixiv-refresh-token';
+export const PIXIV_CREDENTIAL = 'pixiv-main';
+
+/**
+ * `credential_key` names WHICH account, never what is inside it.
+ *
+ * `pixiv-main` is a permanent logical alias: the refresh token behind it rotates
+ * indefinitely and the key never changes. Naming it after the stored field
+ * (`pixiv-refresh-token`, then `-1`, `-2`) would encode an implementation detail
+ * into the identity that admission, the GitHub concurrency group, rotation, remote
+ * login and status queries all key on.
+ *
+ *   credential_key = pixiv-main   provider = pixiv   secret = refresh token
+ *
+ * A second account is `pixiv-alt`, `pixiv-backup`, `pixiv-r18` — never
+ * `pixiv-refresh-token-2`.
+ */
 
 /** Concurrent executions allowed per credential. One account, one runner. */
 export const CREDENTIAL_ADMISSION: Record<string, number> = {

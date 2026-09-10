@@ -27,7 +27,7 @@ GITHUB_WORKFLOW = "pixivflow-batch.yml"
 GITHUB_REF = "feat/serverless-control-plane"
 # Which PixivFlow ref runners execute. Pin a released tag once PixivFlow ships
 # the batch command; until then the feature branch under test.
-PIXIVFLOW_REF = "feat/execute-slot"
+PIXIVFLOW_REF = "master"
 
 # Secrets (set with `wrangler secret put`, never committed):
 #   GITHUB_DISPATCH_TOKEN  TEMPORARY MIGRATION AUTH (replace with a GitHub App)

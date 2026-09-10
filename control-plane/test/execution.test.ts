@@ -20,7 +20,7 @@ import { SCHEDULES } from '../src/schedules';
 import { FakeProvider, MemoryControlStore } from './memory-store';
 
 const CALLBACK = 'https://control.example/control';
-const CREDENTIAL = 'pixiv-refresh-token';
+const CREDENTIAL = 'pixiv-main';
 const schedule = SCHEDULES.find((s) => s.id === 'bot1-daily')!;
 
 /** Seed one due occurrence (18:00 Shanghai == 10:00Z). */
@@ -686,7 +686,7 @@ describe('retry backoff', () => {
         mode: 'shadow',
         callbackUrl: 'https://cp.test/control',
         pixivflowRef: 'feat/execute-slot',
-        credentialKey: 'pixiv-refresh-token',
+        credentialKey: 'pixiv-main',
       } as never,
       NOW
     );
@@ -700,7 +700,7 @@ describe('retry backoff', () => {
         mode: 'shadow',
         callbackUrl: 'https://cp.test/control',
         pixivflowRef: 'feat/execute-slot',
-        credentialKey: 'pixiv-refresh-token',
+        credentialKey: 'pixiv-main',
       } as never,
       NOW + 11 * 60_000
     );
@@ -769,6 +769,6 @@ describe('the credential travels with the dispatch', () => {
     }, NOW);
 
     expect(provider.dispatches[0]!.credentialKey).toBe(schedule.credential);
-    expect(schedule.credential).toBe('pixiv-refresh-token');
+    expect(schedule.credential).toBe('pixiv-main');
   });
 });
