@@ -63,10 +63,18 @@ esac
 
 # --- the gates that decide whether a webhook may move -----------------------------
 open_exec=$(printf '%s' "$status" | jq -r '[.recentExecutions[]? | select(.status | IN("dispatching","dispatched","running"))] | length' 2>/dev/null)
-[ "$open_exec" = "0" ] && ok open-exec "0 running executions" || bad open-exec "${open_exec:-?} execution(s) still open; pause dispatch and wait for terminal"
+if [ "$open_exec" = "0" ]; then
+  ok open-exec "0 running executions"
+else
+  bad open-exec "${open_exec:-?} execution(s) still open; pause dispatch and wait for terminal"
+fi
 
 uncertain=$(printf '%s' "$status" | jq -r '.reviewsByStatus.uncertain // 0' 2>/dev/null)
-[ "$uncertain" = "0" ] && ok reviews "0 uncertain" || bad reviews "$uncertain uncertain review(s) need a human; each may or may not be in the channel"
+if [ "$uncertain" = "0" ]; then
+  ok reviews "0 uncertain"
+else
+  bad reviews "$uncertain uncertain review(s) need a human; each may or may not be in the channel"
+fi
 note reviews "$(printf '%s' "$status" | jq -rc '.reviewsByStatus // {}' 2>/dev/null)"
 
 if printf '%s' "$status" | jq -e '.providerConfigured == true' >/dev/null 2>&1; then
@@ -121,7 +129,11 @@ if command -v flyctl >/dev/null 2>&1; then
   # thing this gate must never do.
   pending=$(flyctl ssh console -a "$FLY_APP" -C "python3 -c \"import sqlite3,glob;print(sum(sqlite3.connect(p).execute('select count(*) from pending_reviews where status in (\\\"preparing\\\",\\\"pending\\\",\\\"publishing\\\",\\\"failed\\\")').fetchone()[0] for p in glob.glob('/app/data/bot*/submissions.db')))\"" 2>/dev/null | grep -E '^[0-9]+$' | tail -1)
   if [ -n "${pending:-}" ]; then
-    [ "$pending" = "0" ] && ok telepost "0 open TelePost reviews" || bad telepost "$pending TelePost review(s) still open; decide them before moving the webhook"
+    if [ "$pending" = "0" ]; then
+      ok telepost "0 open TelePost reviews"
+    else
+      bad telepost "$pending TelePost review(s) still open; decide them before moving the webhook"
+    fi
   else
     bad telepost "could not read TelePost's review tables"
   fi
