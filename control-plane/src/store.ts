@@ -297,6 +297,20 @@ export const TERMINAL_REVIEW_STATUSES: readonly ReviewStatus[] = [
 export const CLAIMABLE_REVIEW_STATUSES: readonly ReviewStatus[] = ['pending', 'failed'];
 
 /**
+ * A later occurrence may re-open these.
+ *
+ * Both are terminal without having published anything, so the work is still
+ * unpublished and a fresh decision is legitimate — TelePost scopes its work-level
+ * dedupe to published rows for the same reason. Everything else blocks: `pending`
+ * and `failed` already have a live decision, `publishing` may be mid-send, and
+ * `published`/`uncertain` may already be in the channel.
+ *
+ * Without this, a re-selected work uploads fresh media that no button can act on:
+ * the create returns the old terminal row, and the press is refused as expired.
+ */
+export const RESETTABLE_REVIEW_STATUSES: readonly ReviewStatus[] = ['expired', 'rejected'];
+
+/**
  * A stale claim is recomputed from these, never re-published blindly.
  *
  * TelePost reclaims a stale `publishing` row after 300s and re-runs the publish.

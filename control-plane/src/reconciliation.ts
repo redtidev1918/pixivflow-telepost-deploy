@@ -26,10 +26,27 @@ import {
   type ReconciliationSummary,
 } from './store';
 
+/**
+ * A sweep id that is unique per invocation.
+ *
+ * `reconcile-${nowMs}` collides when two sweeps start in the same millisecond, and
+ * `recordReconciliation` is an INSERT OR REPLACE — so the second sweep silently
+ * replaced the first one's row, losing the record of a dispatch that really
+ * happened. Overlapping sweeps are a feature here (that is what makes a lost cron
+ * survivable), so every sweep must be recorded rather than deduplicated.
+ */
+function newRunId(nowMs: number): string {
+  const suffix =
+    typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+      ? crypto.randomUUID().slice(0, 8)
+      : Math.random().toString(36).slice(2, 10);
+  return `reconcile-${nowMs}-${suffix}`;
+}
+
 export interface ReconcileOptions {
   /** Overrides the configured lookback (used by tests and by ops tooling). */
   lookbackHours?: number;
-  /** Correlation id for the sweep record; defaults to a timestamp-based id. */
+  /** Correlation id for the sweep record; defaults to a per-invocation id. */
   runId?: string;
 }
 
@@ -77,7 +94,7 @@ export async function reconcile(
   options: ReconcileOptions = {}
 ): Promise<ReconciliationSummary> {
   const lookbackHours = options.lookbackHours ?? RECONCILIATION_LOOKBACK_HOURS;
-  const runId = options.runId ?? `reconcile-${nowMs}`;
+  const runId = options.runId ?? newRunId(nowMs);
   const summary = emptySummary();
   const events: EventRecord[] = [];
 
@@ -235,7 +252,7 @@ export async function reconcileAll(
       );
     }
     await store.recordReconciliation({
-      id: deps.runId ?? `reconcile-${nowMs}`,
+      id: deps.runId ?? newRunId(nowMs),
       startedAt: nowMs,
       finishedAt: nowMs,
       summary,
@@ -293,7 +310,7 @@ export async function reconcileAll(
   if (events.length > 0) await store.logEvents(events);
 
   await store.recordReconciliation({
-    id: deps.runId ?? `reconcile-${nowMs}`,
+    id: deps.runId ?? newRunId(nowMs),
     startedAt: nowMs,
     finishedAt: nowMs,
     summary,

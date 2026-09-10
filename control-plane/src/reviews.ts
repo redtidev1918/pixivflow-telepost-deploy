@@ -349,12 +349,19 @@ function extractMessageId(result: Record<string, unknown> | undefined): number |
  *
  * An expired review is terminal: the media stays in the review chat but will never
  * be published automatically, which is exactly what "expire" means in TelePost.
+ *
+ * TelePost deletes the preview and control messages here. This keeps the media
+ * (evidence survives a mistake) but clears the keyboard, which is the part that
+ * matters: a dead button on a terminal review is indistinguishable from a live one
+ * to the reviewer. The state moves first and the Telegram call second, so a failed
+ * call can never leave a review that is still decidable but has lost its buttons.
  */
 export async function expirePendingReviews(
   store: ControlPlaneStore,
   nowMs: number,
   ttlMs: number = DEFAULT_REVIEW_TTL_MS,
-  limit = 50
+  limit = 50,
+  getBot?: (botId: string) => BotApiClient | null
 ): Promise<number> {
   const pending = await store.listPendingReviews(limit);
   let expired = 0;
@@ -367,7 +374,23 @@ export async function expirePendingReviews(
       nowMs,
       error: 'review expired without a decision',
     });
-    if (won) expired += 1;
+    if (!won) continue;
+    expired += 1;
+
+    const bot = getBot?.(review.botId);
+    if (!bot) continue;
+    // Best effort: the decision above is already durable, so a failure here must
+    // not surface as an expiry that did not happen.
+    const ids = review.messageIds && review.messageIds.length > 0
+      ? review.messageIds
+      : review.messageId !== null
+        ? [review.messageId]
+        : [];
+    for (const messageId of ids) {
+      await bot
+        .editMessageReplyMarkup({ chatId: review.chatId, messageId })
+        .catch(() => undefined);
+    }
   }
   return expired;
 }

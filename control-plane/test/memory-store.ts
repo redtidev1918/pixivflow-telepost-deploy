@@ -17,6 +17,7 @@ import type {
 } from '../src/provider';
 import {
   CLAIMABLE_REVIEW_STATUSES,
+  RESETTABLE_REVIEW_STATUSES,
   isTerminalExecution,
   TERMINAL_ITEM_STATUSES,
   type ControlPlaneStore,
@@ -329,7 +330,28 @@ export class MemoryControlStore implements ControlPlaneStore {
         review.targetId === (input.targetId ?? null) &&
         review.workId === (input.workId ?? null)
     );
-    if (existing) return { record: existing, created: false };
+    if (existing) {
+      // Mirrors D1: only a review that ended without publishing may be re-opened.
+      if (!RESETTABLE_REVIEW_STATUSES.includes(existing.status)) {
+        return { record: { ...existing }, created: false };
+      }
+      existing.status = 'pending';
+      existing.slotId = input.slotId ?? null;
+      existing.messageId = input.messageId ?? null;
+      existing.messageIds = input.messageIds ?? null;
+      existing.mediaGroupId = input.mediaGroupId ?? null;
+      existing.fileIds = input.fileIds ?? null;
+      existing.caption = input.caption ?? null;
+      existing.publishChatId = input.publishChatId ?? null;
+      existing.publishThreadId = input.publishThreadId ?? null;
+      existing.createdAt = input.nowMs;
+      existing.updatedAt = input.nowMs;
+      existing.decidedAt = null;
+      existing.decidedBy = null;
+      existing.publishedMessageId = null;
+      existing.lastError = null;
+      return { record: { ...existing }, created: false };
+    }
 
     const record: ReviewRecord = {
       id: input.id,

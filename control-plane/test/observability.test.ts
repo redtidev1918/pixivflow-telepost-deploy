@@ -3,6 +3,9 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { botTokens, clockHealth } from '../src/index';
+import { reconcileAll } from '../src/reconciliation';
+import { SCHEDULES } from '../src/schedules';
+import { FakeProvider, MemoryControlStore } from './memory-store';
 import {
   SWEEP_INTERVAL_MINUTES,
   SWEEP_LATE_MINUTES,
@@ -104,5 +107,49 @@ describe('bot discovery', () => {
         PATH: '/usr/bin',
       } as never)
     ).toEqual({});
+  });
+});
+
+/**
+ * Overlapping sweeps are a feature: the whole architecture is built so that a lost
+ * cron tick is survivable and a second sweep converges. That only holds if each
+ * sweep is *recorded* — the record is what answers "did the clock run?".
+ *
+ * The id used to be `reconcile-${nowMs}`, and recordReconciliation is an INSERT OR
+ * REPLACE, so two sweeps starting inside the same millisecond collapsed into one
+ * row and the second sweep's counts were lost. Found by firing three concurrent
+ * sweeps at the live worker: three sweeps, two rows.
+ */
+describe('concurrent sweeps are each recorded', () => {
+  it('gives two sweeps in the same millisecond distinct ids', async () => {
+    const store = new MemoryControlStore();
+    const nowMs = Date.UTC(2026, 8, 11, 4, 0, 0);
+    const provider = new FakeProvider();
+
+    const deps = {
+      store,
+      provider,
+      schedules: SCHEDULES,
+      mode: 'shadow' as const,
+      triggerSource: 'cron' as const,
+      callbackUrl: 'https://example.test/control',
+      pixivflowRef: 'feat/execute-slot',
+    };
+
+    await Promise.all([
+      reconcileAll(deps, nowMs),
+      reconcileAll(deps, nowMs),
+      reconcileAll(deps, nowMs),
+    ]);
+
+    // Each sweep records its create/expire phase and its dispatch phase as
+    // separate rows, so three sweeps leave six rows — and every id must be
+    // distinct, which is the whole point.
+    const runs = await store.listRecentReconciliations(20);
+    expect(runs).toHaveLength(6);
+    expect(new Set(runs.map((run) => run.id)).size).toBe(6);
+    for (const run of runs) {
+      expect(run.startedAt).toBe(nowMs);
+    }
   });
 });

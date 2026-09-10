@@ -176,7 +176,10 @@ async function sweep(
 
   // Undecided reviews expire on the same sweep: an old review must never be
   // published days later because a human finally tapped the button.
-  await expirePendingReviews(store, nowMs);
+  // One registry for the sweep: building it per expired review would re-read the
+  // environment on every iteration.
+  const bots = new BotRegistry(botTokens(env));
+  await expirePendingReviews(store, nowMs, undefined, undefined, (botId) => bots.get(botId));
 
   // Claims abandoned mid-publish converge here instead of sitting invisible. With
   // the copy recorded they resolve as published; without it they become uncertain,

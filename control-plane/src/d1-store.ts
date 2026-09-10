@@ -21,7 +21,11 @@ import type {
   SlotItemRow,
   SlotStatus,
 } from './store';
-import { isTerminalExecution, TERMINAL_ITEM_STATUSES } from './store';
+import {
+  isTerminalExecution,
+  RESETTABLE_REVIEW_STATUSES,
+  TERMINAL_ITEM_STATUSES,
+} from './store';
 
 /**
  * The subset of the D1 API this worker uses, declared structurally so the store
@@ -577,14 +581,66 @@ export class D1ControlStore implements ControlPlaneStore {
       )
       .run()) as { meta?: { changes?: number } } | undefined;
 
-    const row = await this.db
+    let row = await this.db
       .prepare(
         `SELECT ${REVIEW_COLUMNS} FROM reviews WHERE bot_id = ? AND target_id IS ? AND work_id IS ?`
       )
       .bind(input.botId, input.targetId ?? null, input.workId ?? null)
       .first<ReviewRowDb>();
     if (!row) throw new Error(`review row not found after insert: ${input.id}`);
-    return { record: toReview(row), created: (inserted?.meta?.changes ?? 0) > 0 };
+
+    const created = (inserted?.meta?.changes ?? 0) > 0;
+    if (created) return { record: toReview(row), created: true };
+
+    // The work already has a review. Re-open it only when it ended without
+    // publishing anything: the runner has just uploaded NEW media for this
+    // occurrence, and leaving the row terminal would leave that media with a
+    // button that refuses to act. `created_at` restarts too, or the expiry sweep
+    // would retire the reopened review on its next pass.
+    if (!RESETTABLE_REVIEW_STATUSES.includes(row.status as ReviewStatus)) {
+      return { record: toReview(row), created: false };
+    }
+
+    const reset = (await this.db
+      .prepare(
+        `UPDATE reviews
+            SET status = 'pending', slot_id = ?, message_id = ?, message_ids = ?,
+                media_group_id = ?, file_ids = ?, caption = ?, publish_chat_id = ?,
+                publish_thread_id = ?, created_at = ?, updated_at = ?,
+                decided_at = NULL, decided_by = NULL, published_message_id = NULL,
+                last_error = NULL
+          WHERE id = ? AND status = ?`
+      )
+      .bind(
+        input.slotId ?? null,
+        input.messageId ?? null,
+        input.messageIds ? JSON.stringify(input.messageIds) : null,
+        input.mediaGroupId ?? null,
+        input.fileIds ? JSON.stringify(input.fileIds) : null,
+        input.caption ?? null,
+        input.publishChatId ?? null,
+        input.publishThreadId ?? null,
+        input.nowMs,
+        input.nowMs,
+        row.id,
+        row.status
+      )
+      .run()) as { meta?: { changes?: number } } | undefined;
+
+    if ((reset?.meta?.changes ?? 0) === 0) {
+      // Another actor moved it while we were looking; report what is there now.
+      row = await this.db
+        .prepare(`SELECT ${REVIEW_COLUMNS} FROM reviews WHERE id = ?`)
+        .bind(row.id)
+        .first<ReviewRowDb>();
+      return { record: toReview(row!), created: false };
+    }
+
+    const reopened = await this.db
+      .prepare(`SELECT ${REVIEW_COLUMNS} FROM reviews WHERE id = ?`)
+      .bind(row.id)
+      .first<ReviewRowDb>();
+    return { record: toReview(reopened!), created: false };
   }
 
   async getReview(reviewId: string): Promise<ReviewRecord | null> {

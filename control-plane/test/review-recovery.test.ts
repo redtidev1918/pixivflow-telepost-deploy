@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 
 import { MemoryControlStore, fakeBot, seedReview, NOW } from './reviews-helpers';
-import { reapStalePublishing } from '../src/reviews';
+import { createReview, decideReview, expirePendingReviews, reapStalePublishing } from '../src/reviews';
+import { DEFAULT_REVIEW_TTL_MS } from '../src/reviews';
 import { PUBLISHING_STALE_MS } from '../src/store';
 
 /**
@@ -234,3 +235,137 @@ describe('a failed publish stays retryable', () => {
 // Keep the helper imports honest: the fake bot is part of the fixture the other
 // review tests share, and this file must fail loudly if it disappears.
 expect(fakeBot).toBeTypeOf('function');
+
+/**
+ * A work whose review ended without publishing must be reviewable again.
+ *
+ * The runner keys its review id on the WORK, so a later occurrence re-uploads the
+ * media and posts a button carrying that same id. While the row stayed terminal,
+ * createReview returned it unchanged and the press hit a dead button: the media sat
+ * in the review chat and nobody could publish it. Observed by reading the create
+ * path, not by a test, which is why these exist.
+ */
+describe('a work can be reviewed again after a review ends unpublished', () => {
+  it('re-opens an expired review onto the new media', async () => {
+    const store = new MemoryControlStore();
+    await seedReview(store, { id: 'rv1', messageId: 100, messageIds: [100] });
+    await store.transitionReview({
+      reviewId: 'rv1',
+      from: 'pending',
+      to: 'expired',
+      nowMs: NOW + 1_000,
+    });
+
+    const again = await createReview(
+      store,
+      {
+        id: 'rv1',
+        botId: 'bot1',
+        chatId: '-1004318193445',
+        messageId: 200,
+        messageIds: [200, 201],
+        publishChatId: '-100channel',
+        targetId: 'bot1-illust-botefuku',
+        workId: '29088506',
+        slotId: 'bot1-daily@2026-09-12T1800',
+      },
+      NOW + 30 * 24 * 60 * 60 * 1000
+    );
+
+    expect(again.created).toBe(false);
+    expect(again.record.status).toBe('pending');
+    expect(again.record.messageIds).toEqual([200, 201]);
+    expect(again.record.messageId).toBe(200);
+    // The clock restarts, or the next sweep would retire it immediately.
+    expect(again.record.createdAt).toBe(NOW + 30 * 24 * 60 * 60 * 1000);
+    expect(again.record.publishedMessageId).toBeNull();
+    expect(again.record.decidedAt).toBeNull();
+  });
+
+  it('re-opens a rejected review, matching TelePost, which only dedupes published works', async () => {
+    const store = new MemoryControlStore();
+    await seedReview(store, { id: 'rv1' });
+    await store.transitionReview({ reviewId: 'rv1', from: 'pending', to: 'rejected', nowMs: NOW + 1 });
+    const decide = await decideReview(
+      { store, getBot: () => fakeBot() },
+      { reviewId: 'rv1', action: 'approve' },
+      NOW + 2
+    );
+    // A rejected review is still re-openable, but only a create can do it.
+    expect(decide.decided).toBe(false);
+  });
+
+  it.each(['published', 'uncertain', 'publishing'] as const)(
+    'refuses to re-open a %s review: it may already be in the channel',
+    async (status) => {
+      const store = new MemoryControlStore();
+      await seedReview(store, { id: 'rv1' });
+      if (status === 'publishing') {
+        await store.claimReviewForPublishing({
+          reviewId: 'rv1',
+          nowMs: NOW + 1,
+          staleMs: PUBLISHING_STALE_MS,
+        });
+      } else {
+        await store.transitionReview({ reviewId: 'rv1', from: 'pending', to: status, nowMs: NOW + 1 });
+      }
+
+      const again = await createReview(
+        store,
+        {
+          id: 'rv1',
+          botId: 'bot1',
+          chatId: '-1004318193445',
+          messageId: 999,
+          publishChatId: '-100channel',
+          targetId: 'bot1-illust-botefuku',
+          workId: '29088506',
+        },
+        NOW + 5_000
+      );
+
+      expect(again.created).toBe(false);
+      expect(again.record.status).toBe(status);
+      expect(again.record.messageId).not.toBe(999);
+    }
+  );
+});
+
+describe('expiring a review', () => {
+  it('clears the keyboard so a dead button cannot look live', async () => {
+    const store = new MemoryControlStore();
+    const bot = fakeBot();
+    await seedReview(store, { id: 'rv1', messageId: 100, messageIds: [100, 101] });
+
+    const expired = await expirePendingReviews(store, NOW + DEFAULT_REVIEW_TTL_MS + 1, undefined, 50, () => bot);
+
+    expect(expired).toBe(1);
+    const cleared = bot.calls.filter((call) => call.method === 'editMessageReplyMarkup');
+    expect(cleared).toHaveLength(2);
+    expect(cleared.map((call) => (call.payload as { messageId: number }).messageId)).toEqual([100, 101]);
+  });
+
+  it('expires the review even when Telegram cannot be reached', async () => {
+    const store = new MemoryControlStore();
+    const bot = fakeBot();
+    bot.editMessageReplyMarkup = async () => {
+      throw new Error('telegram down');
+    };
+    await seedReview(store, { id: 'rv1' });
+
+    const expired = await expirePendingReviews(store, NOW + DEFAULT_REVIEW_TTL_MS + 1, undefined, 50, () => bot);
+
+    // The state is the decision; the keyboard is cosmetic.
+    expect(expired).toBe(1);
+    expect((await store.getReview('rv1'))!.status).toBe('expired');
+  });
+
+  it('still expires when no bot is available at all', async () => {
+    const store = new MemoryControlStore();
+    await seedReview(store, { id: 'rv1' });
+
+    const expired = await expirePendingReviews(store, NOW + DEFAULT_REVIEW_TTL_MS + 1);
+
+    expect(expired).toBe(1);
+  });
+});
