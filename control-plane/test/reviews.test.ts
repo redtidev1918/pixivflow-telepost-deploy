@@ -415,3 +415,117 @@ describe('runner-side review endpoints', () => {
     expect(bot.calls).toHaveLength(0);
   });
 });
+
+/**
+ * The channel must end up with the same shape the reviewer saw:
+ *
+ *   [file1 | file2 | file3]   <- media, kept together
+ *   正文                       <- the text, copied on its own after the media
+ *
+ * and the control card is review UI, not content, so it is never published.
+ */
+describe('publishing keeps the media and the text apart', () => {
+  it('copies the album with copyMessages, then the caption as its own message', async () => {
+    const store = new MemoryControlStore();
+    const bot = fakeBot();
+    await seedReview(store, {
+      id: 'rv_layout',
+      messageId: 100,
+      messageIds: [100, 101],
+      mediaMessageIds: [100, 101],
+      captionMessageId: 102,
+      controlMessageId: 103,
+      caption: '正文',
+    });
+
+    const outcome = await decideReview(
+      { store, getBot: () => bot },
+      { reviewId: 'rv_layout', action: 'approve' },
+      NOW + 1000
+    );
+
+    expect(outcome).toMatchObject({ status: 'published', published: true });
+    const copies = bot.calls.filter((call) => call.method === 'copyMessages' || call.method === 'copyMessage');
+    expect(copies.map((call) => call.method)).toEqual(['copyMessages', 'copyMessage']);
+    // The album carries no caption; the text is its own copy.
+    expect(copies[0]!.payload).toMatchObject({ messageIds: [100, 101] });
+    expect(copies[1]!.payload).toMatchObject({ messageId: 102 });
+    // The control card is not published.
+    expect(copies.some((call) => (call.payload as { messageId?: number }).messageId === 103)).toBe(false);
+  });
+
+  it('copies a single file and its text as two messages too', async () => {
+    const store = new MemoryControlStore();
+    const bot = fakeBot();
+    await seedReview(store, {
+      id: 'rv_layout_one',
+      messageId: 200,
+      messageIds: [200],
+      mediaMessageIds: [200],
+      captionMessageId: 201,
+      controlMessageId: 202,
+      caption: '正文',
+    });
+
+    await decideReview({ store, getBot: () => bot }, { reviewId: 'rv_layout_one', action: 'approve' }, NOW + 1);
+
+    const copies = bot.calls.filter((call) => call.method === 'copyMessage');
+    expect(copies.map((call) => (call.payload as { messageId: number }).messageId)).toEqual([200, 201]);
+    // The text must NOT ride along as a caption on the file: that is the layout this
+    // replaces.
+    expect((copies[0]!.payload as { caption?: string }).caption).toBeUndefined();
+  });
+
+  it('clears the keyboard on the control card, never on a file', async () => {
+    const store = new MemoryControlStore();
+    const bot = fakeBot();
+    await seedReview(store, {
+      id: 'rv_layout_reject',
+      messageId: 300,
+      mediaMessageIds: [300, 301],
+      captionMessageId: 302,
+      controlMessageId: 303,
+    });
+
+    await decideReview({ store, getBot: () => bot }, { reviewId: 'rv_layout_reject', action: 'reject' }, NOW + 1);
+
+    const edits = bot.calls.filter((call) => call.method === 'editMessageReplyMarkup');
+    expect((edits[0]!.payload as { messageId: number }).messageId).toBe(303);
+  });
+
+  it('does not report success when the media landed but the caption did not', async () => {
+    const store = new MemoryControlStore();
+    const bot = fakeBot();
+    let copy = 0;
+    bot.script = (method) => {
+      if (method === 'copyMessages') {
+        copy += 1;
+        return { ok: true, result: { message_id: 900 } };
+      }
+      if (method === 'copyMessage') {
+        // The text copy is refused outright.
+        return { ok: false, description: 'Bad Request: message to copy not found' };
+      }
+      return undefined;
+    };
+    await seedReview(store, {
+      id: 'rv_partial',
+      messageId: 400,
+      mediaMessageIds: [400, 401],
+      captionMessageId: 402,
+      controlMessageId: 403,
+    });
+
+    const outcome = await decideReview(
+      { store, getBot: () => bot },
+      { reviewId: 'rv_partial', action: 'approve' },
+      NOW + 1
+    );
+
+    // A half-published review must never look like a clean success.
+    expect(outcome.published).toBe(false);
+    expect(outcome.status).toBe('failed');
+    expect((await store.getReview('rv_partial'))!.status).toBe('failed');
+    expect(copy).toBe(1);
+  });
+});

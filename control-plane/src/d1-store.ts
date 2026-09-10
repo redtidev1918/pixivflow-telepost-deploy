@@ -113,6 +113,9 @@ interface ReviewRowDb {
   message_id: number | null;
   message_ids: string | null;
   media_group_id: string | null;
+  media_message_ids: string | null;
+  caption_message_id: number | null;
+  control_message_id: number | null;
   file_ids: string | null;
   caption: string | null;
   publish_chat_id: string | null;
@@ -127,7 +130,8 @@ interface ReviewRowDb {
 }
 
 const REVIEW_COLUMNS = `id, bot_id, slot_id, target_id, work_id, chat_id, message_id, message_ids,
-  media_group_id, file_ids, caption, publish_chat_id, publish_thread_id, status, created_at, updated_at,
+  media_group_id, media_message_ids, caption_message_id, control_message_id,
+  file_ids, caption, publish_chat_id, publish_thread_id, status, created_at, updated_at,
   decided_at, decided_by, published_message_id, last_error`;
 
 function parseNumberArray(raw: string | null): number[] | null {
@@ -158,6 +162,11 @@ function toReview(row: ReviewRowDb): ReviewRecord {
     targetId: row.target_id,
     workId: row.work_id,
     chatId: row.chat_id,
+    // The named fields are the source of truth; the legacy pair only backfills rows
+    // written before migration 0009.
+    mediaMessageIds: parseNumberArray(row.media_message_ids) ?? parseNumberArray(row.message_ids),
+    captionMessageId: row.caption_message_id,
+    controlMessageId: row.control_message_id,
     messageId: row.message_id,
     messageIds: parseNumberArray(row.message_ids),
     mediaGroupId: row.media_group_id,
@@ -668,6 +677,10 @@ export class D1ControlStore implements ControlPlaneStore {
     targetId?: string | null;
     workId?: string | null;
     chatId: string;
+    /** Ordered media ids. The text and the control card are separate messages. */
+    mediaMessageIds?: number[] | null;
+    captionMessageId?: number | null;
+    controlMessageId?: number | null;
     messageId?: number | null;
     messageIds?: number[] | null;
     mediaGroupId?: string | null;
@@ -691,8 +704,9 @@ export class D1ControlStore implements ControlPlaneStore {
       .prepare(
         `INSERT OR IGNORE INTO reviews
            (id, bot_id, slot_id, target_id, work_id, chat_id, message_id, message_ids, media_group_id,
+            media_message_ids, caption_message_id, control_message_id,
             file_ids, caption, publish_chat_id, publish_thread_id, status, created_at, updated_at, last_error)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
       )
       .bind(
         input.id,
@@ -701,9 +715,14 @@ export class D1ControlStore implements ControlPlaneStore {
         input.targetId ?? null,
         input.workId ?? null,
         input.chatId,
-        input.messageId ?? null,
+        // Legacy mirrors: the first media message and the media list. Publishing reads
+        // the named fields below, not these.
+        input.messageId ?? input.mediaMessageIds?.[0] ?? null,
         input.messageIds ? JSON.stringify(input.messageIds) : null,
         input.mediaGroupId ?? null,
+        input.mediaMessageIds ? JSON.stringify(input.mediaMessageIds) : null,
+        input.captionMessageId ?? null,
+        input.controlMessageId ?? null,
         input.fileIds ? JSON.stringify(input.fileIds) : null,
         input.caption ?? null,
         input.publishChatId ?? null,

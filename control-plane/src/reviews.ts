@@ -52,6 +52,18 @@ export interface CreateReviewInput {
   id: string;
   botId: string;
   chatId: string;
+  /**
+   * Ordered media message ids: one album or several consecutive groups.
+   *
+   * Separate from the text and the control card because publishing has to reproduce
+   * the reviewer's layout in the channel, and the keyboard belongs to the control
+   * card rather than to a file.
+   */
+  mediaMessageIds?: number[] | null;
+  /** The one message carrying the work's text, sent after ALL media. */
+  captionMessageId?: number | null;
+  /** The approve/reject card. Never published. */
+  controlMessageId?: number | null;
   messageId?: number | null;
   messageIds?: number[] | null;
   mediaGroupId?: string | null;
@@ -130,9 +142,11 @@ export async function decideReview(
         description: current ? `already ${current.status}` : undefined,
       };
     }
+    // The keyboard lives on the control card, never on a file. Rows written before the
+    // card existed fall back to the first media message.
     await deps.getBot(review.botId)?.editMessageReplyMarkup({
       chatId: review.chatId,
-      messageId: review.messageId ?? 0,
+      messageId: review.controlMessageId ?? review.messageId ?? review.mediaMessageIds?.[0] ?? 0,
     });
     return { status: 'rejected', decided: true, published: false };
   }
@@ -181,32 +195,61 @@ export async function decideReview(
     };
   }
 
-  // Server-side copy: Telegram moves the already-uploaded media, so the Worker
-  // never handles bytes.
-  const ids = review.messageIds && review.messageIds.length > 0
-    ? review.messageIds
-    : review.messageId !== null
-      ? [review.messageId]
-      : [];
-  if (ids.length === 0) {
-    await failPublish(store, review.id, nowMs, 'review has no message to copy');
+  // Server-side copy: Telegram moves the already-uploaded media, so the Worker never
+  // handles bytes. The channel must end up with the SAME shape the reviewer saw:
+  //
+  //   [file1 | file2 | file3]   <- the media, kept together as an album
+  //   正文                       <- the text, copied on its own afterwards
+  //
+  // The control card is deliberately not published: it is review UI, not content.
+  const media = review.mediaMessageIds && review.mediaMessageIds.length > 0
+    ? review.mediaMessageIds
+    : review.messageIds && review.messageIds.length > 0
+      ? review.messageIds
+      : review.messageId !== null
+        ? [review.messageId]
+        : [];
+  if (media.length === 0) {
+    await failPublish(store, review.id, nowMs, 'review has no media to copy');
     return { status: 'failed', decided: true, published: false };
   }
 
-  const copyResult = ids.length > 1
-    ? await bot.copyMessages({
-        fromChatId: review.chatId,
-        messageIds: ids,
-        toChatId: review.publishChatId,
-        ...(review.publishThreadId !== null ? { messageThreadId: review.publishThreadId } : {}),
-      })
+  const thread = review.publishThreadId !== null ? { messageThreadId: review.publishThreadId } : {};
+  // copyMessages keeps album grouping; copyMessage would split it into loose files.
+  const copyResult = media.length > 1
+    ? await bot.copyMessages({ fromChatId: review.chatId, messageIds: media, toChatId: review.publishChatId, ...thread })
     : await bot.copyMessage({
         fromChatId: review.chatId,
-        messageId: ids[0]!,
+        messageId: media[0]!,
         toChatId: review.publishChatId,
-        ...(review.publishThreadId !== null ? { messageThreadId: review.publishThreadId } : {}),
-        ...(review.caption ? { caption: review.caption } : {}),
+        ...thread,
+        // A single-file review has no separate text message to copy, so the text rides
+        // along here. With an album the text is its own message (below) and a caption
+        // here would visually belong to one file.
+        ...(review.caption && review.captionMessageId === null ? { caption: review.caption } : {}),
       });
+
+  // The text, after all media. An album cannot carry a caption per message without it
+  // appearing to belong to the first file, which is exactly the layout being replaced.
+  if (copyResult.ok && review.captionMessageId !== null) {
+    const captionCopy = await bot.copyMessage({
+      fromChatId: review.chatId,
+      messageId: review.captionMessageId,
+      toChatId: review.publishChatId,
+      ...thread,
+    });
+    if (!captionCopy.ok) {
+      // The media IS in the channel but the text is not. That is a partial publish and
+      // must never be recorded as a clean success.
+      await failPublish(store, review.id, nowMs, `media published but the caption was not: ${captionCopy.description ?? 'unknown'}`);
+      return {
+        status: 'failed',
+        decided: true,
+        published: false,
+        description: 'media published but the caption was not; the review is retryable',
+      };
+    }
+  }
 
   if (copyResult.ok) {
     const publishedId = extractMessageId(copyResult.result);
@@ -225,7 +268,12 @@ export async function decideReview(
       nowMs,
       actor: input.actor ?? null,
     });
-    await bot.editMessageReplyMarkup({ chatId: review.chatId, messageId: review.messageId ?? ids[0]! });
+    // The keyboard lives on the control card, not on a file. Fall back to the first
+    // media message only for rows written before the control card existed.
+    await bot.editMessageReplyMarkup({
+      chatId: review.chatId,
+      messageId: review.controlMessageId ?? review.messageId ?? media[0]!,
+    });
     if (!marked) {
       // Another actor resolved the claim while we were copying. We must not
       // overwrite their result; the copy did happen, so this is reported as such.
@@ -381,12 +429,14 @@ export async function expirePendingReviews(
     if (!bot) continue;
     // Best effort: the decision above is already durable, so a failure here must
     // not surface as an expiry that did not happen.
-    const ids = review.messageIds && review.messageIds.length > 0
-      ? review.messageIds
-      : review.messageId !== null
-        ? [review.messageId]
-        : [];
-    for (const messageId of ids) {
+    // The keyboard is on the control card. Older rows carried it on the first media
+    // message, so both are cleared; a file with no keyboard is a harmless no-op.
+    const ids = [
+      ...(review.controlMessageId !== null ? [review.controlMessageId] : []),
+      ...(review.messageIds ?? []),
+      ...(review.messageId !== null ? [review.messageId] : []),
+    ];
+    for (const messageId of new Set(ids)) {
       await bot
         .editMessageReplyMarkup({ chatId: review.chatId, messageId })
         .catch(() => undefined);

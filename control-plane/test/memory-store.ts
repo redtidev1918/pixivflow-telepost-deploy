@@ -329,6 +329,9 @@ export class MemoryControlStore implements ControlPlaneStore {
   async createReview(input: {
     id: string;
     botId: string;
+    mediaMessageIds?: number[] | null;
+    captionMessageId?: number | null;
+    controlMessageId?: number | null;
     slotId?: string | null;
     targetId?: string | null;
     workId?: string | null;
@@ -358,7 +361,10 @@ export class MemoryControlStore implements ControlPlaneStore {
       }
       existing.status = 'pending';
       existing.slotId = input.slotId ?? null;
-      existing.messageId = input.messageId ?? null;
+      existing.mediaMessageIds = input.mediaMessageIds ?? input.messageIds ?? null;
+      existing.captionMessageId = input.captionMessageId ?? null;
+      existing.controlMessageId = input.controlMessageId ?? null;
+      existing.messageId = input.messageId ?? input.mediaMessageIds?.[0] ?? null;
       existing.messageIds = input.messageIds ?? null;
       existing.mediaGroupId = input.mediaGroupId ?? null;
       existing.fileIds = input.fileIds ?? null;
@@ -381,7 +387,10 @@ export class MemoryControlStore implements ControlPlaneStore {
       targetId: input.targetId ?? null,
       workId: input.workId ?? null,
       chatId: input.chatId,
-      messageId: input.messageId ?? null,
+      mediaMessageIds: input.mediaMessageIds ?? input.messageIds ?? null,
+      captionMessageId: input.captionMessageId ?? null,
+      controlMessageId: input.controlMessageId ?? null,
+      messageId: input.messageId ?? input.mediaMessageIds?.[0] ?? null,
       messageIds: input.messageIds ?? null,
       mediaGroupId: input.mediaGroupId ?? null,
       fileIds: input.fileIds ?? null,

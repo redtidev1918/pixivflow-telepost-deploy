@@ -262,6 +262,11 @@ export async function handleControl(
       slotId: typeof body.slot_id === 'string' ? body.slot_id : null,
       targetId: typeof body.target_id === 'string' ? body.target_id : null,
       workId: typeof body.work_id === 'string' ? body.work_id : null,
+      // The three kinds of message, explicitly. The legacy pair is still accepted so
+      // a runner that predates migration 0009 keeps working.
+      mediaMessageIds: numberArray(body.media_message_ids) ?? numberArray(body.message_ids),
+      captionMessageId: typeof body.caption_message_id === 'number' ? body.caption_message_id : null,
+      controlMessageId: typeof body.control_message_id === 'number' ? body.control_message_id : null,
       messageId: typeof body.message_id === 'number' ? body.message_id : null,
       messageIds: numberArray(body.message_ids),
       mediaGroupId: typeof body.media_group_id === 'string' ? body.media_group_id : null,

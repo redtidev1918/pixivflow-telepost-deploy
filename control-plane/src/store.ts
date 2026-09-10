@@ -392,8 +392,21 @@ export interface ReviewRecord {
   workId: string | null;
   /** Chat the review message lives in (media stays in Telegram, never here). */
   chatId: string;
+  /**
+   * The media, in order: one album or several consecutive groups.
+   *
+   * Kept apart from the text and the control card on purpose — publishing has to
+   * reproduce `media -> text` in the channel, which an ambiguous id list cannot
+   * express, and the keyboard lives on the control card, not on a file.
+   */
+  mediaMessageIds: number[] | null;
+  /** The one message carrying the work's text, sent after ALL media. */
+  captionMessageId: number | null;
+  /** The approve/reject card. Never published. */
+  controlMessageId: number | null;
+  /** @deprecated Legacy mirror of the first media message; use the fields above. */
   messageId: number | null;
-  /** A review can be an album: every message id of the media group. */
+  /** @deprecated Legacy mirror of the media ids; use `mediaMessageIds`. */
   messageIds: number[] | null;
   mediaGroupId: string | null;
   fileIds: string[] | null;
@@ -445,6 +458,10 @@ export interface ReviewStore {
   createReview(input: {
     id: string;
     botId: string;
+    /** Ordered media ids; the caption and control message are separate. */
+    mediaMessageIds?: number[] | null;
+    captionMessageId?: number | null;
+    controlMessageId?: number | null;
     slotId?: string | null;
     targetId?: string | null;
     workId?: string | null;
