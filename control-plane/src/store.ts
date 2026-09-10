@@ -220,6 +220,14 @@ export const TERMINAL_ITEM_STATUSES: readonly ItemStatus[] = [
 export interface SlotItemInput {
   targetId: string;
   status: ItemStatus;
+  /**
+   * The execution attempt this outcome came from.
+   *
+   * A terminal item may only be superseded by a STRICTLY later attempt: a retry
+   * that succeeds must be able to correct the record, while a late report from an
+   * older attempt must never clobber a newer result.
+   */
+  attempt?: number;
   workType?: string;
   workId?: string | null;
   error?: string;

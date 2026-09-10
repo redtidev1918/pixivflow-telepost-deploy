@@ -270,7 +270,14 @@ export class MemoryControlStore implements ControlPlaneStore {
   }): Promise<'created' | 'updated' | 'skipped-terminal'> {
     const key = `${input.slotId}::${input.item.targetId}`;
     const existing = this.items.get(key);
-    if (existing && TERMINAL_ITEM_STATUSES.includes(existing.status)) return 'skipped-terminal';
+    // Mirrors D1: a terminal item is protected unless a STRICTLY later attempt
+    // reports it, so a successful retry can correct the record.
+    const terminal = existing !== undefined && TERMINAL_ITEM_STATUSES.includes(existing.status);
+    if (terminal) {
+      const supersedes =
+        input.item.attempt !== undefined && input.item.attempt > existing!.attemptCount;
+      if (!supersedes) return 'skipped-terminal';
+    }
 
     if (!existing) {
       this.items.set(key, {
@@ -280,7 +287,7 @@ export class MemoryControlStore implements ControlPlaneStore {
         workType: input.item.workType ?? 'unknown',
         workId: input.item.workId ?? null,
         status: input.item.status,
-        attemptCount: 1,
+        attemptCount: input.item.attempt ?? 1,
         lastError: input.item.error ?? null,
         errorClass: input.item.errorClass ?? null,
         createdAt: input.nowMs,
@@ -292,7 +299,7 @@ export class MemoryControlStore implements ControlPlaneStore {
 
     existing.status = input.item.status;
     existing.workId = input.item.workId ?? existing.workId;
-    existing.attemptCount += 1;
+    existing.attemptCount = input.item.attempt ?? existing.attemptCount;
     existing.lastError = input.item.error ?? null;
     existing.errorClass = input.item.errorClass ?? null;
     existing.updatedAt = input.nowMs;

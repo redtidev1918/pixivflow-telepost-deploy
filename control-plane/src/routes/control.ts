@@ -329,6 +329,8 @@ export async function handleControl(
       item: {
         targetId,
         status,
+        // The attempt decides whether this may supersede a terminal item.
+        attempt: existing.attempt,
         ...(typeof item.work_type === 'string' ? { workType: item.work_type } : {}),
         ...(typeof item.work_id === 'string' ? { workId: item.work_id } : {}),
         ...(typeof item.error === 'string' ? { error: item.error } : {}),

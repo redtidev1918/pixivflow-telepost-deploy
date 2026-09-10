@@ -888,9 +888,13 @@ export class D1ControlStore implements ControlPlaneStore {
 
     const terminal = existing ? TERMINAL_ITEM_STATUSES.includes(existing.status as ItemStatus) : false;
     if (terminal) {
-      // Never overwrite a target that already reached a terminal state: a retry
-      // of the sibling target, or a later execution attempt, must not erase it.
-      return 'skipped-terminal';
+      // A terminal item is protected from a writer that is not newer. A retry that
+      // succeeds MUST be able to correct it: found in shadow validation, where
+      // attempt 1 died on a rate limit, attempt 2 stored both works, and the ledger
+      // kept reporting `failed` because this guard refused the correction outright.
+      const supersedes =
+        input.item.attempt !== undefined && input.item.attempt > existing!.attempt_count;
+      if (!supersedes) return 'skipped-terminal';
     }
 
     const completedAt = existing && TERMINAL_ITEM_STATUSES.includes(input.item.status) ? input.nowMs : null;
@@ -901,7 +905,7 @@ export class D1ControlStore implements ControlPlaneStore {
           `INSERT INTO slot_items
              (slot_id, target_id, bot_id, work_type, work_id, status, attempt_count, last_error, error_class,
               created_at, updated_at, completed_at)
-           VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?)`
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
         )
         .bind(
           input.slotId,
@@ -910,6 +914,9 @@ export class D1ControlStore implements ControlPlaneStore {
           input.item.workType ?? 'unknown',
           input.item.workId ?? null,
           input.item.status,
+          // The attempt that produced this outcome, not a write counter: the
+          // terminal guard compares it against the incoming attempt.
+          input.item.attempt ?? 1,
           input.item.error ?? null,
           input.item.errorClass ?? null,
           input.nowMs,
@@ -923,13 +930,14 @@ export class D1ControlStore implements ControlPlaneStore {
     await this.db
       .prepare(
         `UPDATE slot_items
-            SET status = ?, work_id = COALESCE(?, work_id), attempt_count = attempt_count + 1,
+            SET status = ?, work_id = COALESCE(?, work_id), attempt_count = ?,
                 last_error = ?, error_class = ?, updated_at = ?, completed_at = COALESCE(?, completed_at)
           WHERE slot_id = ? AND target_id = ?`
       )
       .bind(
         input.item.status,
         input.item.workId ?? null,
+        input.item.attempt ?? existing.attempt_count,
         input.item.error ?? null,
         input.item.errorClass ?? null,
         input.nowMs,

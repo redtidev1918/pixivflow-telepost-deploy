@@ -570,3 +570,77 @@ describe('a job-level timeout is a retryable outcome, not a stranded occurrence'
     expect((await store.getOccurrence(slot.id))!.status).toBe('pending');
   });
 });
+
+/**
+ * Found in shadow validation, not by a test: attempt 1 of a slot died on a Pixiv
+ * rate limit and wrote `failed` for both targets, attempt 2 succeeded and stored
+ * both works — and the ledger kept reporting `failed`, because a terminal item
+ * refused every later write outright. The rollup said success while its own item
+ * detail contradicted it.
+ */
+describe('a terminal item can only be corrected by a later attempt', () => {
+  async function seedSlot(store: MemoryControlStore, slotId: string) {
+    await store.insertOccurrenceIfAbsent(
+      {
+        slotId,
+        scheduleId: 'bot1-daily',
+        botId: 'bot1',
+        occurrenceAt: Date.now(),
+        dispatchDeadline: Date.now() + 3_600_000,
+      } as never,
+      Date.now()
+    );
+    return slotId;
+  }
+
+  it('lets attempt 2 replace attempt 1 failure', async () => {
+    const store = new MemoryControlStore();
+    const slotId = await seedSlot(store, 'bot1-daily@retry');
+
+    await store.upsertSlotItem({
+      slotId,
+      botId: 'bot1',
+      item: { targetId: 't1', status: 'failed', attempt: 1, error: 'rate limited' },
+      nowMs: Date.now(),
+    });
+    const second = await store.upsertSlotItem({
+      slotId,
+      botId: 'bot1',
+      item: { targetId: 't1', status: 'submitted', workId: '123', attempt: 2 },
+      nowMs: Date.now() + 1,
+    });
+
+    expect(second).toBe('updated');
+    const items = await store.listSlotItems(slotId);
+    expect(items[0]!.status).toBe('submitted');
+    expect(items[0]!.workId).toBe('123');
+  });
+
+  it('refuses a late report from the same or an older attempt', async () => {
+    const store = new MemoryControlStore();
+    const slotId = await seedSlot(store, 'bot1-daily@late');
+
+    await store.upsertSlotItem({
+      slotId,
+      botId: 'bot1',
+      item: { targetId: 't1', status: 'failed', attempt: 2 },
+      nowMs: Date.now(),
+    });
+    const stale = await store.upsertSlotItem({
+      slotId,
+      botId: 'bot1',
+      item: { targetId: 't1', status: 'submitted', workId: '999', attempt: 1 },
+      nowMs: Date.now() + 1,
+    });
+    const same = await store.upsertSlotItem({
+      slotId,
+      botId: 'bot1',
+      item: { targetId: 't1', status: 'submitted', workId: '999', attempt: 2 },
+      nowMs: Date.now() + 2,
+    });
+
+    expect(stale).toBe('skipped-terminal');
+    expect(same).toBe('skipped-terminal');
+    expect((await store.listSlotItems(slotId))[0]!.workId).not.toBe('999');
+  });
+});
