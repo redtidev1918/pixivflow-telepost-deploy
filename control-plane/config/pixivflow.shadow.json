@@ -78,7 +78,7 @@
       "type": "illustration",
       "mode": "topic",
       "limit": 1,
-      "storageMode": "cache",
+      "storageMode": "persistent",
       "topic": "ボテ腹",
       "date": "YESTERDAY",
       "topicDiscovery": {
@@ -89,7 +89,7 @@
       "maxPageCount": 30,
       "noMatchPolicy": {
         "lookbackDays": 3,
-        "notify": true
+        "notify": false
       }
     },
     {
@@ -97,7 +97,7 @@
       "type": "novel",
       "mode": "topic",
       "limit": 1,
-      "storageMode": "cache",
+      "storageMode": "persistent",
       "topic": "ボテ腹",
       "date": "YESTERDAY",
       "topicDiscovery": {
@@ -108,7 +108,7 @@
       "strictLanguageFilter": true,
       "noMatchPolicy": {
         "lookbackDays": 3,
-        "notify": true
+        "notify": false
       }
     },
     {
@@ -116,7 +116,7 @@
       "type": "illustration",
       "mode": "topic",
       "limit": 1,
-      "storageMode": "cache",
+      "storageMode": "persistent",
       "topic": "丸呑み",
       "date": "YESTERDAY",
       "topicDiscovery": {
@@ -127,7 +127,7 @@
       "maxPageCount": 30,
       "noMatchPolicy": {
         "lookbackDays": 3,
-        "notify": true
+        "notify": false
       }
     },
     {
@@ -135,7 +135,7 @@
       "type": "novel",
       "mode": "topic",
       "limit": 1,
-      "storageMode": "cache",
+      "storageMode": "persistent",
       "topic": "丸呑み",
       "date": "YESTERDAY",
       "topicDiscovery": {
@@ -146,7 +146,7 @@
       "strictLanguageFilter": true,
       "noMatchPolicy": {
         "lookbackDays": 3,
-        "notify": true
+        "notify": false
       }
     }
   ],

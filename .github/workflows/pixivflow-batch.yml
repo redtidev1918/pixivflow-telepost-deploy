@@ -143,7 +143,11 @@ jobs:
         id: execute
         working-directory: pixivflow-src
         run: |
-          set -uo pipefail
+          # The runner starts this script with `bash -e`, which would abort the
+          # step on a non-zero batch exit before the code could be recorded. A
+          # non-zero exit here is DATA (partial/failed/uncertain), not a step
+          # failure, so -e must be turned off explicitly.
+          set +e
           CONFIG="$GITHUB_WORKSPACE/control-plane/config/pixivflow.shadow.json"
           ARGS=(--config "$CONFIG" --schedule-id "$SCHEDULE_ID" --slot-id "$SLOT_ID"
                 --attempt "$ATTEMPT" --mode "$MODE" --result-file "$GITHUB_WORKSPACE/slot-result.json")
