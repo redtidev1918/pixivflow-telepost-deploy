@@ -1,0 +1,21 @@
+{
+  "name": "pixivflow-control-plane",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Cloudflare Worker + D1 durable control plane for the PixivFlow/TelePost production architecture",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "migrate:local": "wrangler d1 migrations apply CONTROL_DB --local",
+    "migrate:remote": "wrangler d1 migrations apply CONTROL_DB --remote"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^5.20260910.1",
+    "typescript": "^5.6.3",
+    "vitest": "^2.1.8",
+    "wrangler": "^4.42.0"
+  }
+}

@@ -1,0 +1,27 @@
+name = "pixivflow-control-plane"
+main = "src/index.ts"
+compatibility_date = "2025-09-01"
+# Control plane only: JSON in, JSON out. Media never passes through the Worker.
+workers_dev = true
+
+# A single periodic reconciliation sweep is the clock. Not four one-shot crons:
+# a tick that never fires must not lose the day's work, so each sweep recomputes
+# which occurrences exist and creates what is missing.
+[triggers]
+crons = ["*/10 * * * *"]
+
+[[d1_databases]]
+binding = "CONTROL_DB"
+database_name = "pixivflow-control"
+database_id = "1fa00cbc-6dcc-4a89-ba8f-30cf79cc286b"
+
+[vars]
+# Shadow until cutover: dispatch is planned and recorded but never executed.
+EXECUTION_MODE = "shadow"
+RECONCILIATION_LOOKBACK_HOURS = "24"
+
+# Secrets (set with `wrangler secret put`, never committed):
+#   GITHUB_DISPATCH_TOKEN  TEMPORARY MIGRATION AUTH (replace with a GitHub App)
+#   GITHUB_REPO            owner/repo that hosts the batch workflow
+#   CALLBACK_SECRET        bearer the GitHub job uses to report its result
+#   TELEGRAM_WEBHOOK_SECRET
