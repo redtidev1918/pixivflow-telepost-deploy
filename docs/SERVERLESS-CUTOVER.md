@@ -69,6 +69,8 @@ Fly 生产            telesubmit-multi-bot · machine 683032ec6617e8 · 未改�
 
 ## 4. 两个硬约束
 
+> 门禁脚本：`scripts/cutover-preflight.sh`（只读，见 §5）。
+
 ### 4.1 审核域归属：已裁定
 
 **终态 = 控制平面接管本部署的 Telegram 审核域**；**迁移期 = 正式 bot 不动，shadow 用独立 bot**。
@@ -125,6 +127,19 @@ shadow 全部通过 -> 一次 cutover -> 正式 bot1/bot2 webhook -> Worker
 
 ## 5. 上线步骤（凭据齐备后）
 
+**每一步之前先跑门禁**（只读，绝不改 webhook）：
+
+```bash
+# 切换前：正式 bot 必须仍归 TelePost
+TELEGRAM_BOT1_TOKEN=... TELEGRAM_BOT2_TOKEN=... scripts/cutover-preflight.sh
+# 或直接从 Fly 机器读 token：scripts/cutover-preflight.sh --from-fly
+
+# 切换后（含回滚后复原确认）：正式 bot 必须归 Worker
+EXPECT_OWNER=worker scripts/cutover-preflight.sh
+```
+
+它检查：Worker 健康、`EXECUTION_MODE=shadow`、**时钟是否还在走**（`clock.state`）、**是否存在 `uncertain` 审核**（有则逐条列出 id，必须人工对着频道确认）、provider 是否配置、以及每个 bot 的 webhook 归属与积压。任一项不满足即非零退出。
+
 1. 配 GitHub secrets：`TELEGRAM_BOT1_TOKEN`、`TELEGRAM_BOT2_TOKEN`、`CALLBACK_SECRET`、`CONTROL_PLANE_URL`
 2. Shadow 实跑一次完整 occurrence（`--mode shadow`，`EXECUTION_MODE=shadow`）：验证选题、去重、下载、上报、`processed_works` 落库，且**不发布任何内容**
 3. 故障注入：job 超时、上报丢失、重复 dispatch、D1 写失败、runner 崩溃 —— 每次都要证明恰好一个 terminal 状态，且没有第二次执行
@@ -135,7 +150,25 @@ shadow 全部通过 -> 一次 cutover -> 正式 bot1/bot2 webhook -> Worker
 
 ## 6. 回滚
 
-- Fly 生产**全程不动**，因此回滚 = 停止 Cloudflare cron 派发。不需要恢复数据。
+**Webhook 层可回滚**（Telegram 每个 bot 只能有一个 webhook，切换与回滚都是同一条命令）：
+
+```bash
+# 切到 Worker（cutover）
+curl -sS "https://api.telegram.org/bot$TOKEN/setWebhook" \
+  -d "url=$WORKER/telegram/webhook/$BOT" \
+  -d "secret_token=$TELEGRAM_WEBHOOK_SECRET" \
+  -d 'allowed_updates=["callback_query"]'
+EXPECT_OWNER=worker scripts/cutover-preflight.sh      # 确认生效
+
+# 回滚：把 webhook 还原给仍在运行的 TelePost
+curl -sS "https://api.telegram.org/bot$TOKEN/setWebhook" \
+  -d "url=$TELEPOST_WEBHOOK_BASE/$BOT"
+TELEGRAM_BOT1_TOKEN=... scripts/cutover-preflight.sh   # 确认已复原
+```
+
+回滚只需这一条命令，因为 **Fly 生产在最终验收前不删除、不降级**：旧 TelePost 进程仍在监听原路径，webhook 一指回去就恢复接收更新。
+
+- 其余部分：停止 Cloudflare cron 派发即可，不需要恢复数据。
 - D1 中只有影子数据（合成 slot / review / `99999999` 作品），删除无影响。
 - 任何时刻只要 `PIXIVFLOW_ENABLED` / watchdog 仍指向 Fly，生产就还在原路径上。
 - 绝不可移动已发布的 tag；重建镜像走独立的 rebuild workflow。
