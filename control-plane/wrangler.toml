@@ -1,0 +1,35 @@
+name = "pixivflow-control-plane"
+main = "src/index.ts"
+compatibility_date = "2025-09-01"
+# Control plane only: JSON in, JSON out. Media never passes through the Worker.
+workers_dev = true
+
+# A single periodic reconciliation sweep is the clock. Not four one-shot crons:
+# a tick that never fires must not lose the day's work, so each sweep recomputes
+# which occurrences exist and creates what is missing.
+[triggers]
+crons = ["*/10 * * * *"]
+
+[[d1_databases]]
+binding = "CONTROL_DB"
+database_name = "pixivflow-control"
+database_id = "1fa00cbc-6dcc-4a89-ba8f-30cf79cc286b"
+
+[vars]
+# Shadow until cutover: dispatch is planned and recorded but never executed.
+EXECUTION_MODE = "shadow"
+RECONCILIATION_LOOKBACK_HOURS = "24"
+# This Worker's public base URL (a cron trigger has no request URL, so the runner
+# would otherwise have nowhere to report back).
+CONTROL_PLANE_URL = "https://pixivflow-control-plane.redtidev1918.workers.dev"
+GITHUB_REPO = "redtidev1918/pixivflow-telepost-deploy"
+GITHUB_WORKFLOW = "pixivflow-batch.yml"
+GITHUB_REF = "feat/serverless-control-plane"
+# Which PixivFlow ref runners execute. Pin a released tag once PixivFlow ships
+# the batch command; until then the feature branch under test.
+PIXIVFLOW_REF = "master"
+
+# Secrets (set with `wrangler secret put`, never committed):
+#   GITHUB_DISPATCH_TOKEN  TEMPORARY MIGRATION AUTH (replace with a GitHub App)
+#   CALLBACK_SECRET        bearer the GitHub job uses to report claim/result
+#   TELEGRAM_WEBHOOK_SECRET
