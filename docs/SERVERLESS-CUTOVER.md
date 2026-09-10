@@ -205,7 +205,26 @@ EXPECT_OWNER=worker scripts/cutover-preflight.sh
    `Read-only auth: skipping the boot-time refresh-token probe` 等守卫命中 18 次，而
    `Received updated refresh token` / `Refreshed Pixiv access token` / `Config file automatically updated` **均为 0 次**。
 
-   **串行验收已通过（判据见下）**
+   **Telegram 审核链路：已在真实 Telegram 上验证（2026-09-10）**
+
+用正式 bot1（`@xgdPost_bot`，审核群管理员）对**真实审核群** `西瓜肚审核群` 跑通了 Worker 侧的完整审核域。发布目标刻意指向操作者私聊，**`@xgdShare` 正式频道全程未被触碰**。
+
+| 验证项 | 结果 |
+| --- | --- |
+| 真实媒体 + 内联键盘进正式审核群 | ✅ `message_id 454` |
+| claim → **真实 `copyMessage`** | ✅ `published_message_id 15270`（真实 Telegram 消息，事后可删除验证） |
+| 记录 `decided_by` | ✅ `owner` |
+| **重放** approve | ✅ `decided:false, published:true`，D1 未变，**无第二次副本** |
+| reject | ✅ `rejected`，无副本，键盘被清除 |
+| 异地 chat 回调 | ✅ 403 `chat mismatch` |
+| bot2 webhook 打 bot1 review | ✅ 403 `bot mismatch` |
+| 非 callback 更新 | ✅ 被忽略而非报错 |
+
+测试痕迹已全部清除（群内 2 条消息、私聊副本、D1 合成行），群恢复原状。
+
+**仍未验证：Telegram 是否真的把按键投递到 Worker 的 URL。** 一个 bot 只能有一个 webhook，bot1/bot2 现在归 TelePost，所以按键送到的是 TelePost 而不是 Worker。这一步只能靠：① 独立 shadow bot，或 ② 第 5 步 cutover 时正式翻转 webhook。**不会为了测试去动正式 webhook。**
+
+**串行验收已通过（判据见下）**
 
 | run | slot | slot | exec | attempts | duration | GitHub run | 429 |
 | --- | --- | --- | --- | --- | --- | --- | --- |
