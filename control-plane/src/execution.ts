@@ -318,8 +318,14 @@ export function statusFromConclusion(conclusion: ProviderConclusion): {
     case 'success':
       return { status: 'success', errorClass: 'none' };
     case 'cancelled':
+      // Measured against real GitHub: a JOB-level timeout (`timeout-minutes`) is
+      // reported as `cancelled`, not `timed_out`, and the killed job never runs its
+      // reporting steps — this conclusion is the only signal we get. It maps to a
+      // retryable state, which is what keeps a timed-out runner from stranding the
+      // occurrence.
       return { status: 'cancelled', errorClass: 'cancelled' };
     case 'timed_out':
+      // Providers (or a future execution plane) that do report a timeout explicitly.
       return { status: 'timeout', errorClass: 'timeout' };
     case 'failure':
       return { status: 'failed', errorClass: 'infrastructure_error' };

@@ -534,3 +534,39 @@ describe('durable duplicate history for disposable runners', () => {
     expect(await other!.json()).toMatchObject({ count: 0, works: {} });
   });
 });
+
+describe('a job-level timeout is a retryable outcome, not a stranded occurrence', () => {
+  it('maps the conclusion GitHub really reports for a timed-out job', () => {
+    // Measured: a job killed by `timeout-minutes` reports `cancelled`, and its
+    // reporting steps never run — so the provider conclusion is the only signal.
+    expect(statusFromConclusion('cancelled')).toEqual({ status: 'cancelled', errorClass: 'cancelled' });
+    expect(statusFromConclusion('timed_out').status).toBe('timeout');
+    // Both keep the attempt retryable while attempts remain.
+    expect(slotRollup('cancelled', 1, 3)).toBe('pending');
+    expect(slotRollup('timeout', 1, 3)).toBe('pending');
+    // ...and only exhaust the occurrence once the attempts are spent.
+    expect(slotRollup('timeout', 3, 3)).toBe('failed');
+  });
+
+  it('recovers a timed-out execution from provider state alone (no callback)', async () => {
+    const store = new MemoryControlStore();
+    const provider = new FakeProvider();
+    const slot = await seedDueSlot(store, NOW);
+    const { executionId } = await startAttempt(
+      store,
+      provider,
+      { slot, scheduleId: schedule.id, botId: schedule.botId, attempt: 1, targets: [], callbackUrl: CALLBACK, pixivflowRef: 'test-ref', mode: 'shadow' },
+      NOW
+    );
+    await claimExecution(store, { executionId, providerRunId: '1' }, NOW + 500);
+    provider.concludeLastRun('completed', 'cancelled');
+
+    const outcome = await reconcileExecution(store, (await store.getExecution(executionId))!, provider, 3, NOW + 60_000);
+
+    expect(outcome).toBe('reconciled');
+    expect((await store.getExecution(executionId))!.status).toBe('cancelled');
+    // The occurrence is retryable, so the next sweep dispatches attempt 2 — the
+    // timed-out runner is replaced, never waited on.
+    expect((await store.getOccurrence(slot.id))!.status).toBe('pending');
+  });
+});
