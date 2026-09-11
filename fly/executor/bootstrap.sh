@@ -61,8 +61,10 @@ if [ "$history_code" != "200" ]; then
 fi
 
 # --- 3. Read the Pixiv credential from the control plane ------------------------
+# NOTE: the credential routes live under the /control prefix (CALLBACK_URL is
+# CONTROL_PLANE_URL + /control) — the same base every other callback uses.
 token=$(curl -sS --max-time 30 -X POST \
-  "$CONTROL_PLANE_URL/credentials/${CREDENTIAL_KEY}/read" \
+  "$CALLBACK_URL/credentials/${CREDENTIAL_KEY}/read" \
   -H "Authorization: Bearer $CONTROL_SECRET" 2>/dev/null \
   | python3 -c 'import json,sys; print(json.load(sys.stdin).get("value",""))' 2>/dev/null || true)
 if [ -z "$token" ]; then
@@ -132,7 +134,7 @@ if [ -n "$rotated" ]; then
     persist_code=$(curl -sS -o /tmp/rotated.response -w '%{http_code}' --max-time 20 \
       -X PUT -H "authorization: Bearer $CONTROL_SECRET" -H 'content-type: application/json' \
       --data-binary @/tmp/rotated.body \
-      "$CONTROL_PLANE_URL/credentials/${CREDENTIAL_KEY}" 2>/dev/null || echo 000)
+      "$CALLBACK_URL/credentials/${CREDENTIAL_KEY}" 2>/dev/null || echo 000)
     log "credential persist attempt $attempt -> HTTP $persist_code"
     if [ "$persist_code" = "200" ]; then
       persisted=1
