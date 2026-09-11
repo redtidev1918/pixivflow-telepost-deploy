@@ -120,6 +120,11 @@ Content-Type: application/json
   Secret：`SCHEDULE_TRIGGER_URL`（**base URL**，worker 自动追加路径）、`SCHEDULE_TRIGGER_TOKEN`。
 - **GitHub Actions（可选看门狗）**：`scheduler/github/slot-watchdog.yml`，每次计划时刻 +10 分钟用同样的
   cron→id 映射再 POST 一次。成功则 `already_completed`，失败则 resume。不是正确性依赖，只是备份。
+
+  > ⚠️ **只适用于时钟与执行平面都在同一套常驻部署（autosleep）的场景。**
+  > 一旦生产时钟已交给 Cloudflare Worker / D1，**不能**再部署任何 watchdog：它会唤醒旧平面，
+  > 让两个平面抢同一个 Pixiv 凭据。2026-09-11 就是这样把当天两次投稿打成 0/3 + 0/3，
+  > 详见 `docs/SERVERLESS-CUTOVER.md` §8.1。Cloudflare reconciliation 自带丢 tick 恢复，不需要看门狗。
 - 也可以用 cron-job.org / EasyCron / 自己 VPS 的 cron：任何能发带 Bearer 的 POST 的东西都行；
   替换时钟**不需要**改 PixivFlow Core。
 

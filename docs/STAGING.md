@@ -60,7 +60,7 @@ curl -i -X POST -H "Authorization: Bearer $TOK" \
 ## 4. 窗口内触发 → 精确跑一次 + 幂等
 把 staging 的某个 schedule cron 临时改成“当前时刻后几分钟”（热重载即可，无需重启），到点附近：
 ```bash
-# 立即连发 3 次（模拟 watchdog + 网络重试）
+# 立即连发 3 次（模拟网络重试；不要为生产部署 watchdog，见 docs/SERVERLESS-CUTOVER.md §8.1）
 for i in 1 2 3; do
   curl -s -X POST -H "Authorization: Bearer $TOK" \
     -H "Content-Type: application/json" -d '{"label":"staging 早班"}' \
