@@ -50,10 +50,10 @@ go test ./...                                  # 部署工具
 
 - `docker-compose.yml` + `docker/combined.Dockerfile` 是单机自托管路径，仍是「一个容器内所有角色」；
   是否需要按同样的边界拆分尚未决定，暂按 `docs/ARCHITECTURE.md` 末节说明。
-- `deploy.go` 的 `split` / `source` 子命令属于拆分前的源码构建路径，已被
-  `docker/pixivflow-scheduler.Dockerfile`（按提交号构建）取代，待删除。
-  （它们会重新生成 `fly/*-split.toml`，与「只有两份 Fly 配置」的契约冲突，删除前不要运行。）
 - PixivFlow 生命周期提交合入并发布后，把 `PIXIVFLOW_REF` 从提交号改为发布 tag。
+- `deploy.go` 的 `split` / `source` 子命令已删除（终局决定 = DELETE）。它们属于拆分前的
+  源码构建路径，会重新生成 `fly/*-split.toml`，与「只有两份 Fly 配置」的契约冲突；生产镜像
+  一律走 `docker/pixivflow-scheduler.Dockerfile`（按提交号构建）或发布 tag。请勿重新引入。
 - 描述旧的无服务器控制面（Worker + D1 账本、GitHub Actions 执行平面、Fly 合一台）的
   文档与门禁脚本已删除：`docs/SERVERLESS-CUTOVER.md`、`docs/en/SERVERLESS-*.md`、
   `scripts/cutover-preflight.sh`、`scripts/prod-acceptance*.{sh,js}`。
