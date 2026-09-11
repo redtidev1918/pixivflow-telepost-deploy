@@ -67,7 +67,7 @@ export async function handleControl(
   store: ControlPlaneStore,
   url: URL,
   callbackSecret: string | undefined,
-  env: { CREDENTIAL_MASTER_KEY?: string } = {}
+  env: { CREDENTIAL_MASTER_KEY?: string; FLY_EXECUTOR_SECRET?: string } = {}
 ): Promise<Response | null> {
   // ---- the execution plane's shared credential ------------------------------
   //
@@ -80,6 +80,17 @@ export async function handleControl(
   // secret is an explicit POST, so a probe, a dashboard or a log line cannot leak
   // it by accident.
   const masterKey = env.CREDENTIAL_MASTER_KEY;
+
+  // Two bearer audiences, deliberately separate: the GitHub runner keeps
+  // CALLBACK_SECRET (the surface it always had), while a Fly executor carries
+  // its OWN secret whose reach is limited to the runner routes. An executor can
+  // never reach operator recovery, credential metadata, alias retirement or the
+  // schedule/occurrence admin endpoints — one leaked executor secret must not
+  // become a control-plane key.
+  const isCallback = authorized(request, callbackSecret);
+  const isExecutor =
+    !isCallback && !!env.FLY_EXECUTOR_SECRET && authorized(request, env.FLY_EXECUTOR_SECRET);
+  const denied = !isCallback && !isExecutor;
 
   // The collection, so an operator can see which accounts exist without reading
   // D1 by hand. Values are never part of it.
@@ -102,7 +113,13 @@ export async function handleControl(
   if (credentialPath) {
     const name = decodeURIComponent(credentialPath[1] ?? '');
     if (!name) return json({ error: 'name is required' }, 400);
-    if (!authorized(request, callbackSecret)) return json({ error: 'unauthorized' }, 401);
+    if (!authorized(request, callbackSecret)) {
+      // A Fly executor may ONLY persist a rotated credential (PUT) — the one
+      // write its own survival requires. Credential metadata and alias
+      // retirement stay operator-only.
+      const executorMayRotate = isExecutor && request.method === 'PUT';
+      if (!executorMayRotate) return json({ error: 'unauthorized' }, 401);
+    }
 
     if (request.method === 'GET') {
       const row = await store.getRunnerCredential(name);
@@ -173,7 +190,7 @@ export async function handleControl(
   // by an intermediary, or captured in a URL, and this value is the whole account.
   const credentialRead = /^\/control\/credentials\/([^/]+)\/read$/.exec(url.pathname);
   if (credentialRead) {
-    if (!authorized(request, callbackSecret)) return json({ error: 'unauthorized' }, 401);
+    if (denied) return json({ error: 'unauthorized' }, 401);
     if (request.method !== 'POST') return json({ error: 'method not allowed' }, 405);
     const name = decodeURIComponent(credentialRead[1] ?? '');
     const secret = await store.readRunnerCredentialSecret(name);
@@ -196,7 +213,7 @@ export async function handleControl(
   // database: the list of works this bot has already handled.
   if (url.pathname === '/control/processed-works') {
     if (request.method !== 'GET') return json({ error: 'method not allowed' }, 405);
-    if (!authorized(request, callbackSecret)) return json({ error: 'unauthorized' }, 401);
+    if (denied) return json({ error: 'unauthorized' }, 401);
     const botId = url.searchParams.get('bot_id') ?? '';
     if (!botId) return json({ error: 'bot_id is required' }, 400);
     const requested = Number(url.searchParams.get('limit') ?? '500');
@@ -216,7 +233,7 @@ export async function handleControl(
   const reviewLookup = /^\/control\/reviews\/([^/]+)$/.exec(url.pathname);
   if (reviewLookup) {
     if (request.method !== 'GET') return json({ error: 'method not allowed' }, 405);
-    if (!authorized(request, callbackSecret)) return json({ error: 'unauthorized' }, 401);
+    if (denied) return json({ error: 'unauthorized' }, 401);
     const review = await store.getReview(decodeURIComponent(reviewLookup[1] ?? ''));
     if (!review) return json({ error: 'unknown review' }, 404);
     return json({
@@ -236,7 +253,7 @@ export async function handleControl(
   // decision can be taken and the publish can be a server-side copy.
   if (url.pathname === '/control/reviews') {
     if (request.method !== 'POST') return json({ error: 'method not allowed' }, 405);
-    if (!authorized(request, callbackSecret)) return json({ error: 'unauthorized' }, 401);
+    if (denied) return json({ error: 'unauthorized' }, 401);
 
     let body: Record<string, unknown>;
     try {
@@ -363,7 +380,7 @@ export async function handleControl(
   if (!match) return null;
 
   if (request.method !== 'POST') return json({ error: 'method not allowed' }, 405);
-  if (!authorized(request, callbackSecret)) return json({ error: 'unauthorized' }, 401);
+  if (denied) return json({ error: 'unauthorized' }, 401);
 
   const executionId = decodeURIComponent(match[1] ?? '');
   const action = match[2];

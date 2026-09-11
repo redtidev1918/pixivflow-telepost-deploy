@@ -43,6 +43,22 @@ database_id = "1fa00cbc-6dcc-4a89-ba8f-30cf79cc286b"
 # webhook and review decisions stay live — only new attempts are withheld.
 EXECUTION_MODE = "live"
 DISPATCH_PAUSED = "true"
+# Which provider opens NEW production executions. `github` until the Fly
+# executor passes its real E2E; then this flips to `fly` in ONE commit —
+# exactly one configured production provider at any moment, never two
+# (SERVERLESS-CUTOVER.md §8.1).
+EXECUTION_PROVIDER = "github"
+# Fly executor (consumed when EXECUTION_PROVIDER = "fly"): one ephemeral
+# 512 MB machine per admitted execution — auto-destroyed, no volume, no
+# public service, no scheduler.
+FLY_APP = "pixivflow-executor"
+FLY_REGION = "iad"
+FLY_IMAGE = "registry.fly.io/pixivflow-executor:v1"
+# Secrets (set with `wrangler secret put`, never committed):
+#   FLY_API_TOKEN         Machines API token, app-scoped to pixivflow-executor
+#   FLY_EXECUTOR_SECRET   bearer for Fly executor routes ONLY (claim/items/
+#                         result/credential read+rotation persist); the GitHub
+#                         runner keeps CALLBACK_SECRET unchanged
 RECONCILIATION_LOOKBACK_HOURS = "24"
 # This Worker's public base URL (a cron trigger has no request URL, so the runner
 # would otherwise have nowhere to report back).
