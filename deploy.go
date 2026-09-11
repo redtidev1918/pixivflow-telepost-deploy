@@ -1,6 +1,7 @@
 // deploy — TelePost/PixivFlow 多平台一键部署工具（Go 单二进制）。
 //
-// 平台：Fly.io（telesubmit.fly.toml）与 Docker Compose（.env）。
+// 平台：Fly.io（fly/deploy.telepost.toml + fly/deploy.pixivflow.toml 两个平面）
+// 与 Docker Compose（.env）。
 // Windows / macOS / Linux 通用，静态编译，零运行时依赖。
 package main
 
@@ -24,10 +25,27 @@ import (
 var appVersion = "dev"
 
 const (
-	telepostRepo      = "ghcr.io/redtidev1918/telepost"
-	pixivflowRepo     = "ghcr.io/redtidev1918/pixivflow"
-	kitRepo           = "ghcr.io/redtidev1918/pixivflow-telepost-deploy"
-	defaultFlyCfg     = "telesubmit.fly.toml"
+	telepostRepo  = "ghcr.io/redtidev1918/telepost"
+	pixivflowRepo = "ghcr.io/redtidev1918/pixivflow"
+	kitRepo       = "ghcr.io/redtidev1918/pixivflow-telepost-deploy"
+
+	// 两个平面（plane）各自是独立的 app / machine / 配置文件，生命周期也不同。
+	planeTelepost  = "telepost"
+	planePixivflow = "pixivflow"
+	planeAll       = "all"
+
+	// 仓库跟踪的规范拓扑源：正常命令只允许用这两份。
+	//
+	// 为什么要把它们写死：这里过去是 defaultFlyCfg = "telesubmit.fly.toml"，而那份
+	// 文件是 init 给用户目录生成的脚手架（app 名是占位符）且被 .gitignore 忽略。于是
+	// 在仓库自身跑 `deploy tp` 会读到旁边残留的旧「合一拓扑」配置（combined Dockerfile
+	// + PIXIVFLOW_ENABLED），把已经拆开的生产重新混部。规范文件存在的场合必须优先。
+	canonicalTelepostCfg  = "fly/deploy.telepost.toml"
+	canonicalPixivflowCfg = "fly/deploy.pixivflow.toml"
+	// init 写进用户自有部署目录的脚手架文件名（app 名是占位符，故不能当规范源）。
+	scaffoldedTelepostCfg  = "telesubmit.fly.toml"
+	scaffoldedPixivflowCfg = "pixivflow.fly.toml"
+
 	defaultEnv        = ".env"
 	healthTimeout     = 240 * time.Second
 	healthStep        = 6 * time.Second
@@ -149,7 +167,8 @@ func flyBin() string {
 // 等标记文件），先沿 cwd 向上找，再回退到可执行文件所在目录，让用户在任何
 // 位置运行都能定位配置。
 func enterRepoDir() {
-	candidates := []string{"docker-compose.yml", "compose.yaml", defaultFlyCfg, defaultEnv}
+	candidates := []string{"docker-compose.yml", "compose.yaml", defaultEnv,
+		canonicalTelepostCfg, canonicalPixivflowCfg, scaffoldedTelepostCfg, scaffoldedPixivflowCfg}
 	isRepo := func(dir string) bool {
 		for _, f := range candidates {
 			if _, err := os.Stat(filepath.Join(dir, f)); err == nil {
@@ -194,11 +213,9 @@ func detectPlatform(platform, config string) string {
 		return platform
 	}
 	fb := flyBin()
-	if fb != "" {
-		if _, err := os.Stat(defaultFlyCfg); err == nil {
-			if run([]string{fb, "auth", "whoami"}, false) == 0 {
-				return "fly"
-			}
+	if fb != "" && anyFlyCfg() {
+		if run([]string{fb, "auth", "whoami"}, false) == 0 {
+			return "fly"
 		}
 	}
 	for _, f := range []string{"docker-compose.yml", "compose.yaml"} {
@@ -214,13 +231,13 @@ func detectPlatform(platform, config string) string {
 	return "" // 未检测到；调用方决定是报错还是兜底（如 version）
 }
 
-func configFor(platform, config string) string {
+func configFor(platform, config, plane string) string {
 	if config != "" {
 		return config
 	}
 	switch platform {
 	case "fly":
-		return defaultFlyCfg
+		return flyCfgFor(plane)
 	case "systemd":
 		return filepath.Join(systemdInstallDir, ".env")
 	default:
@@ -228,8 +245,82 @@ func configFor(platform, config string) string {
 	}
 }
 
+// flyCfgCandidates 返回某个平面的 Fly 配置候选：仓库跟踪的规范文件优先，init
+// 生成的脚手架兜底。
+func flyCfgCandidates(plane string) []string {
+	if plane == planePixivflow {
+		return []string{canonicalPixivflowCfg, scaffoldedPixivflowCfg}
+	}
+	return []string{canonicalTelepostCfg, scaffoldedTelepostCfg}
+}
+
+// flyCfgFor 返回某个平面的权威 Fly 配置路径。只要规范文件在，就永远优先：这样在
+// 仓库里跑命令绝不会读到旁边残留的脚手架/旧合一配置。
+func flyCfgFor(plane string) string {
+	cands := flyCfgCandidates(plane)
+	for _, c := range cands {
+		if _, err := os.Stat(c); err == nil {
+			return c
+		}
+	}
+	return cands[0] // 规范文件：失败信息理应指向仓库跟踪的那份
+}
+
+// anyFlyCfg 报告当前目录是否存在任一 Fly 配置。
+func anyFlyCfg() bool {
+	for _, p := range append(flyCfgCandidates(planeTelepost), flyCfgCandidates(planePixivflow)...) {
+		if _, err := os.Stat(p); err == nil {
+			return true
+		}
+	}
+	return false
+}
+
+func planeLabel(plane string) string {
+	if plane == planePixivflow {
+		return "PixivFlow（执行端）"
+	}
+	return "TelePost（常驻服务）"
+}
+
+// resolvePlane 决定子命令作用于哪个平面。默认 TelePost（常驻服务，也是历史默认）；
+// doctor / version 默认同时覆盖两个平面；--plane 可显式指定。
+func resolvePlane(cmd, explicit string) string {
+	if explicit != "" {
+		switch explicit {
+		case planeTelepost, planePixivflow, planeAll:
+			return explicit
+		default:
+			die("未知的 --plane %q（可选：telepost|pixivflow|all）", explicit)
+		}
+	}
+	switch cmd {
+	case "pf":
+		return planePixivflow
+	case "doctor", "version":
+		return planeAll
+	default:
+		return planeTelepost
+	}
+}
+
+// doctorPlanes 展开成具体的平面列表。
+func doctorPlanes(plane string) []string {
+	if plane == planeAll {
+		return []string{planeTelepost, planePixivflow}
+	}
+	return []string{plane}
+}
+
 // ---- toml / env 文本读写 ----
-var tomlKV = regexp.MustCompile(`^([ \t]*)([A-Za-z_][A-Za-z0-9_]*)[ \t]*=[ \t]*"([^"]*)"[ \t]*$`)
+// 值可以是单引号或双引号：仓库里的规范配置统一用单引号，而 init 生成的脚手架用
+// 双引号，两者都必须能读、能写。写入时保留该行原有的引号风格。
+//
+// 捕获组：1=缩进 2=键 3=双引号值 4=单引号值（用交替而非反向引用，RE2 不支持 \3）。
+var tomlKV = regexp.MustCompile(`^([ \t]*)([A-Za-z_][A-Za-z0-9_]*)[ \t]*=[ \t]*(?:"([^"]*)"|'([^']*)')[ \t]*$`)
+
+// tomlScalarKV 额外匹配不带引号的标量（布尔/数字），例如 auto_stop_machines = false。
+var tomlScalarKV = regexp.MustCompile(`^[ \t]*([A-Za-z_][A-Za-z0-9_]*)[ \t]*=[ \t]*(.*?)[ \t]*$`)
 var tomlKey = regexp.MustCompile(`^[ \t]*([A-Za-z_][A-Za-z0-9_]*)[ \t]*=`)
 var tomlSection = regexp.MustCompile(`^[ \t]*\[([^]]+)\][ \t]*$`)
 var envKV = regexp.MustCompile(`^([A-Za-z_][A-Za-z0-9_]*)=(.*)$`)
@@ -249,11 +340,27 @@ func readLines(path string) []string {
 	return lines
 }
 
+func tomlValue(m []string) string {
+	if m[3] != "" {
+		return m[3]
+	}
+	return m[4]
+}
+
 func tomlGet(path, key string) string {
 	for _, line := range readLines(path) {
-		m := tomlKV.FindStringSubmatch(line)
-		if m != nil && m[2] == key {
-			return m[3]
+		if m := tomlKV.FindStringSubmatch(line); m != nil && m[2] == key {
+			return tomlValue(m)
+		}
+	}
+	return ""
+}
+
+// tomlScalar 读取键的标量值（去掉引号），用于布尔/数字这类不带引号的写法。
+func tomlScalar(path, key string) string {
+	for _, line := range readLines(path) {
+		if m := tomlScalarKV.FindStringSubmatch(line); m != nil && m[1] == key {
+			return strings.Trim(strings.TrimSpace(m[2]), `"'`)
 		}
 	}
 	return ""
@@ -264,10 +371,15 @@ func tomlSet(path, key, val string) {
 	found := false
 	for i, line := range lines {
 		m := tomlKV.FindStringSubmatch(line)
-		if m != nil && m[2] == key {
-			lines[i] = m[1] + key + ` = "` + val + `"`
-			found = true
+		if m == nil || m[2] != key {
+			continue
 		}
+		q := `"`
+		if m[4] != "" || strings.Contains(line, "'") {
+			q = "'"
+		}
+		lines[i] = m[1] + key + " = " + q + val + q
+		found = true
 	}
 	if !found {
 		die("%s 里没有键 %s", path, key)
@@ -284,9 +396,8 @@ func flyProfileIsAutosleep(path string) bool {
 // for diagnostics that want to show exactly what the file contains.
 func tomlRawValue(path, key string) string {
 	for _, line := range readLines(path) {
-		m := tomlKV.FindStringSubmatch(line)
-		if m != nil && m[2] == key {
-			return strings.TrimSpace(m[3])
+		if m := tomlScalarKV.FindStringSubmatch(line); m != nil && m[1] == key {
+			return strings.TrimSpace(m[2])
 		}
 	}
 	return ""
@@ -308,21 +419,95 @@ func flyConfigHasBuildImage(path string) bool {
 	return false
 }
 
-// flyRuntimeConfig removes every build section so that a stale [build] image
-// cannot silently win over the configured image (or over --dockerfile).
-func flyRuntimeConfig(data string) string {
-	lines := strings.Split(data, "\n")
-	result := make([]string, 0, len(lines))
-	skip := false
-	for _, line := range lines {
-		if m := tomlSection.FindStringSubmatch(line); m != nil {
-			skip = m[1] == "build" || strings.HasPrefix(m[1], "build.")
-		}
-		if !skip {
-			result = append(result, line)
+// ---- 平面隔离（拓扑护栏）----
+//
+// 合并拓扑（一个 app 里既跑 TelePost 又跑 PixivFlow）已经废弃：两个进程共享一个
+// 生命周期，谁也没法独立停机或独立扩缩容。护栏在这里硬拦，保证任何正常命令都无法
+// 把它再造出来——包括被人用 --config 指回旧配置。
+
+var telepostForbiddenKeys = []string{
+	"PIXIVFLOW_ENABLED", "PIXIVFLOW_COMMAND", "PIXIVFLOW_TRIGGER_PORT",
+	"PIXIV_CONFIG", "PIXIV_REFRESH_TOKEN", "PIXIV_DOWNLOADER_CONFIG",
+	"PIXIV_DB_CACHE_KB", "NODE_OPTIONS",
+}
+
+var pixivflowForbiddenKeys = []string{
+	"TELEPOST_IMAGE", "BOT1_TOKEN", "BOT2_TOKEN", "RUN_MODE", "WEBHOOK_PATH", "WEBHOOK_URL",
+}
+
+func planeForbiddenKeys(plane string) []string {
+	if plane == planePixivflow {
+		return pixivflowForbiddenKeys
+	}
+	return telepostForbiddenKeys
+}
+
+func canonicalDockerfileFor(plane string) string {
+	if plane == planePixivflow {
+		return "docker/pixivflow-scheduler.Dockerfile"
+	}
+	return "docker/telepost.Dockerfile"
+}
+
+func tomlHasKey(lines []string, key string) bool {
+	for _, ln := range lines {
+		if m := tomlKey.FindStringSubmatch(ln); m != nil && m[1] == key {
+			return true
 		}
 	}
-	return strings.Join(result, "\n")
+	return false
+}
+
+// planeTopologyError 返回配置里的平面混用问题；空字符串表示合格。
+// 文件不存在/为空时返回空：那是各调用方自己的存在性检查要报的事。
+func planeTopologyError(plane, cfg string) string {
+	lines := readLines(cfg)
+	if len(lines) == 0 {
+		return ""
+	}
+	for _, ln := range lines {
+		if strings.Contains(ln, "combined.Dockerfile") {
+			return fmt.Sprintf("%s 指向已废弃的合并拓扑（combined.Dockerfile）：%s 平面必须用 %s 构建，权威配置是 %s",
+				cfg, planeLabel(plane), canonicalDockerfileFor(plane), flyCfgFor(plane))
+		}
+	}
+	for _, key := range planeForbiddenKeys(plane) {
+		if tomlHasKey(lines, key) {
+			return fmt.Sprintf("%s 出现 %s：这是另一个平面的键，说明两个平面被混用。%s 的权威配置是 %s",
+				cfg, key, planeLabel(plane), flyCfgFor(plane))
+		}
+	}
+	return ""
+}
+
+// assertPlaneTopology 在部署前硬拦平面混用。
+func assertPlaneTopology(plane, cfg string) {
+	if msg := planeTopologyError(plane, cfg); msg != "" {
+		die("%s", msg)
+	}
+}
+
+// flyMachineStates 用结构化 JSON 读机器状态，不解析 flyctl 的人类表格。
+func flyMachineStates(app string) []string {
+	fb := flyBin()
+	if fb == "" || app == "" {
+		return nil
+	}
+	out, err := exec.Command(fb, "machine", "list", "-a", app, "--json").Output()
+	if err != nil {
+		return nil
+	}
+	var machines []struct {
+		State string `json:"state"`
+	}
+	if json.Unmarshal(out, &machines) != nil {
+		return nil
+	}
+	states := make([]string, 0, len(machines))
+	for _, m := range machines {
+		states = append(states, m.State)
+	}
+	return states
 }
 
 func envGet(path, key string) string {
@@ -463,12 +648,98 @@ func fetchHealth(url string, timeout time.Duration) map[string]any {
 }
 
 // ---- 子命令 ----
-func cmdDoctor(platform, cfg string) {
+// flyPlaneVersion 返回该平面在权威配置里固定的版本。报版本时必须把配置来源一起
+// 说明：过去 doctor 读了旁边残留的旧配置，报出一个线上并不存在的「套件 2.17.1」。
+func flyPlaneVersion(plane string) string {
+	if plane == planePixivflow {
+		return pfVersion("fly", flyCfgFor(plane))
+	}
+	return tpVersion("fly", flyCfgFor(plane))
+}
+
+type tomlExpect struct{ key, want string }
+
+// doctorFlyPlane 核对单个平面：权威配置存在、没有平面混用、app 可解析、生命周期
+// 参数符合该平面的语义。
+func doctorFlyPlane(plane string, problems *int) {
+	cfg := flyCfgFor(plane)
+	infof("— %s", planeLabel(plane))
+	if _, err := os.Stat(cfg); err != nil {
+		failf("%s 不存在", cfg)
+		*problems++
+		return
+	}
+	okf("配置：%s", cfg)
+	if flyConfigHasBuildImage(cfg) {
+		failf("%s 使用已禁用的 [build].image；请迁移到透传 Dockerfile", cfg)
+		*problems++
+	}
+	if app := tomlGet(cfg, "app"); app == "" {
+		failf("%s 无法解析 app", cfg)
+		*problems++
+	} else {
+		okf("app = %s", app)
+	}
+	if msg := planeTopologyError(plane, cfg); msg != "" {
+		failf("%s", msg)
+		*problems++
+		return
+	}
+
+	// 生命周期：两个平面的期望值不同，这正是它们必须分成两个 app 的理由。
+	expected := []tomlExpect{{"auto_stop_machines", "false"}}
+	if plane == planePixivflow {
+		expected = append(expected,
+			tomlExpect{"auto_start_machines", "true"},
+			tomlExpect{"min_machines_running", "0"},
+			tomlExpect{"policy", "never"},
+		)
+	} else {
+		expected = append(expected,
+			tomlExpect{"min_machines_running", "1"},
+			tomlExpect{"policy", "always"},
+		)
+	}
+	for _, e := range expected {
+		if got := tomlScalar(cfg, e.key); got == e.want {
+			okf("%s = %s", e.key, got)
+		} else {
+			failf("%s 期望 %s，实际 %q", e.key, e.want, got)
+			*problems++
+		}
+	}
+}
+
+// doctorStaleFlyConfigs 点名残留的脚手架/旧配置。它们已不再被任何命令读取，但旧版
+// doctor 正是读了它们才误报版本，所以这里显式报出来；旧混部拓扑直接判为问题。
+func doctorStaleFlyConfigs(problems *int) {
+	for _, stale := range []string{scaffoldedTelepostCfg, scaffoldedPixivflowCfg} {
+		if _, err := os.Stat(stale); err != nil {
+			continue
+		}
+		if _, err := os.Stat(canonicalTelepostCfg); err != nil {
+			continue // 用户自有部署目录：脚手架就是权威形态，不是残留
+		}
+		plane := planeTelepost
+		if stale == scaffoldedPixivflowCfg {
+			plane = planePixivflow
+		}
+		if msg := planeTopologyError(plane, stale); msg != "" {
+			failf("残留的 %s 是旧/混部拓扑：%s", stale, msg)
+			*problems++
+			continue
+		}
+		warnf("残留的 %s 已不再被任何命令读取（权威配置：%s），建议删除", stale, flyCfgFor(plane))
+	}
+}
+
+func cmdDoctor(platform, plane, cfg string) {
+	planes := doctorPlanes(plane)
+
 	stepf("1/3", "平台")
 	okf("使用平台：%s", platform)
-	autosleep := platform == "fly" && flyProfileIsAutosleep(cfg)
-	if autosleep {
-		okf("生命周期：autosleep（停机=健康省钱的 idle，外部时钟唤醒）")
+	if platform == "fly" && plane == planeAll {
+		infof("两个平面各查一遍；用 --plane telepost|pixivflow 只看一个")
 	}
 
 	if platform == "systemd" {
@@ -483,51 +754,23 @@ func cmdDoctor(platform, cfg string) {
 	problems := 0
 	if platform == "fly" {
 		fb := flyBin()
-		if fb != "" {
-			okf("%s 可用", fb)
-		} else {
+		if fb == "" {
 			failf("缺 flyctl/fly")
 			problems++
-		}
-		if _, err := os.Stat(cfg); err == nil {
-			okf("%s 存在", cfg)
-			if flyConfigHasBuildImage(cfg) {
-				failf("%s 使用已禁用的 [build].image；请迁移到透传 Dockerfile", cfg)
-				problems++
-			}
-			if autosleep {
-				// Autosleep invariant checks on the Fly lifecycle settings.
-				stop := tomlGet(cfg, "auto_stop_machines")
-				minMachines := tomlGet(cfg, "min_machines_running")
-				if stop == "stop" {
-					okf("auto_stop_machines = stop（空闲停机）")
-				} else {
-					warnf("autosleep 期望 auto_stop_machines = \"stop\"（当前 %q）", stop)
-				}
-				if minMachines == "0" || minMachines == "" {
-					okf("min_machines_running = 0（允许完全停机）")
-				} else {
-					warnf("autosleep 期望 min_machines_running = 0（当前 %q）", minMachines)
-				}
-				okf("调度：schedulerRuntime.mode=external（在 data/pixivflow/config.json；外部时钟 POST /internal/schedules/<id>/run）")
-			}
 		} else {
-			failf("%s 不存在", cfg)
-			problems++
-		}
-		if app := tomlGet(cfg, "app"); app != "" {
-			okf("app = %s", app)
-		} else {
-			failf("无法解析 app")
-			problems++
-		}
-		if fb != "" {
+			okf("%s 可用", fb)
 			if run([]string{fb, "auth", "whoami"}, false) == 0 {
 				okf("fly 已登录")
 			} else {
 				failf("fly 未登录（运行 %s auth login）", fb)
 				problems++
 			}
+		}
+		for _, p := range planes {
+			doctorFlyPlane(p, &problems)
+		}
+		if plane == planeAll {
+			doctorStaleFlyConfigs(&problems)
 		}
 	} else {
 		if have("docker") {
@@ -556,30 +799,46 @@ func cmdDoctor(platform, cfg string) {
 	}
 
 	stepf("3/3", "当前版本")
-	okf("TelePost/套件 : %s", tpVersion(platform, cfg))
-	okf("PixivFlow    : %s", pfVersion(platform, cfg))
+	if platform == "fly" {
+		for _, p := range planes {
+			okf("%s: %s", planeLabel(p), flyPlaneVersion(p))
+		}
+	} else {
+		okf("TelePost/套件 : %s", tpVersion(platform, cfg))
+		okf("PixivFlow    : %s", pfVersion(platform, cfg))
+	}
 	if problems > 0 {
 		die("自检存在 %d 个未满足项", problems)
 	}
 	okf("自检通过")
 }
 
-func cmdVersion(platform, cfg string) {
+func cmdVersion(platform, cfg, plane string) {
 	fmt.Printf(clr.wrap("1", "deploy v"+appVersion) + "\n")
 	fmt.Printf("  platform      : %s\n", platform)
+	if platform == "fly" {
+		// 报版本必须连带报来源：否则「读了一份旧配置」会被误当成版本不一致。
+		for _, p := range doctorPlanes(plane) {
+			fmt.Printf("  %s: %s\n     配置: %s\n", planeLabel(p), flyPlaneVersion(p), flyCfgFor(p))
+		}
+		return
+	}
 	fmt.Printf("  TelePost/套件 : %s\n", tpVersion(platform, cfg))
 	fmt.Printf("  PixivFlow     : %s\n", pfVersion(platform, cfg))
 }
 
-func cmdStatus(platform, cfg string) {
+func cmdStatus(platform, cfg, plane string) {
 	autosleep := platform == "fly" && flyProfileIsAutosleep(cfg)
+	app := ""
 	if platform == "fly" {
 		fb := flyBin()
 		if fb == "" {
 			die("未找到 flyctl/fly")
 		}
-		infof("app = %s", tomlGet(cfg, "app"))
-		run([]string{fb, "status", "-a", tomlGet(cfg, "app")}, true)
+		app = tomlGet(cfg, "app")
+		infof("平台=%s  平面=%s  app=%s", platform, planeLabel(plane), app)
+		infof("配置：%s", cfg)
+		run([]string{fb, "status", "-a", app}, true)
 	} else if platform == "systemd" {
 		systemdStatus()
 		return
@@ -587,17 +846,16 @@ func cmdStatus(platform, cfg string) {
 		run([]string{"docker", "compose", "ps"}, true)
 	}
 	fmt.Println()
-	// A stopped autosleep machine is the healthy, cost-saving idle state — it
-	// only answers /health while awake. Don't report that as "down": hint that
-	// a wake trigger (Telegram webhook or the schedule clock) brings it up.
-	if autosleep {
-		infof("健康端点（autosleep：仅在机器被唤醒后可达）：")
-		if h := fetchHealth(healthURL(platform, cfg), 15*time.Second); h != nil {
-			b, _ := json.MarshalIndent(h, "", "  ")
-			fmt.Println(string(b))
+
+	// 执行端平时就是 stopped：那是健康的空闲态，不是「挂了」。它的 /health 只在被
+	// 唤醒期间可达，所以这里绝不拿健康检查去判成败。
+	if platform == "fly" && (plane == planePixivflow || autosleep) {
+		if states := flyMachineStates(app); len(states) > 0 {
+			infof("机器状态：%s", strings.Join(states, ", "))
 		} else {
-			okf("机器当前停机（healthy idle）。Telegram webhook 或外部时钟 POST /internal/schedules/<id>/run 会自动拉起。")
+			warnf("读不到 %s 的机器状态（用 %s machine list -a %s --json 确认）", app, flyBin(), app)
 		}
+		okf("stopped 是正常空闲态：外部时钟 POST 触发后由 Fly Proxy 自动拉起，ledger 空了进程自行 exit(0)，restart=never 保证不会被重启。")
 		return
 	}
 	infof("健康端点：")
@@ -636,6 +894,9 @@ func cmdLogs(platform, cfg string, n int) {
 	fmt.Println(strings.Join(lines, "\n"))
 }
 
+// releaseTagRe 匹配发布 tag（如 2.19.0 / v2.19.0），用来决定是否顺带刷新显示版本。
+var releaseTagRe = regexp.MustCompile(`^v?\d+\.\d+\.\d+$`)
+
 func cmdUpgrade(platform, cfg, kind, target string, dryRun bool) {
 	if target == "" {
 		die("缺少版本参数（用法：deploy %s <版本|latest>）", kind)
@@ -651,7 +912,14 @@ func cmdUpgrade(platform, cfg, kind, target string, dryRun bool) {
 	}
 	cur := tpVersion(platform, cfg)
 	if kind == "pf" {
-		cur = pfVersion(platform, cfg)
+		// 执行端的部署 pin 是构建引用（PIXIVFLOW_REF）：烘进镜像的就是它，也是
+		// scripts/verify-images.sh 与启动日志核对的字段。只改显示版本会让
+		// 「部署成功」和「跑的是新代码」脱钩。
+		if ref := tomlGet(cfg, "PIXIVFLOW_REF"); ref != "" {
+			cur = ref
+		} else {
+			cur = pfVersion(platform, cfg)
+		}
 	}
 	if dryRun {
 		infof("[dry-run] 将 %s 从 %s 升级到 %s（不写配置）", kind, cur, target)
@@ -662,8 +930,11 @@ func cmdUpgrade(platform, cfg, kind, target string, dryRun bool) {
 			tomlSet(cfg, "TELEPOST_IMAGE", telepostRepo+":"+target)
 			infof("TelePost: %s → %s", cur, target)
 		} else {
-			tomlSet(cfg, "PIXIVFLOW_VERSION", target)
-			infof("PixivFlow: %s → %s", cur, target)
+			tomlSet(cfg, "PIXIVFLOW_REF", target)
+			if releaseTagRe.MatchString(target) {
+				tomlSet(cfg, "PIXIVFLOW_VERSION", target)
+			}
+			infof("PixivFlow 构建引用: %s → %s", cur, target)
 		}
 	} else {
 		if kind == "tp" {
@@ -927,7 +1198,7 @@ func showHealth(url string) {
 	}
 }
 
-func cmdDeploy(platform, cfg string, dryRun, build bool, retries int) {
+func cmdDeploy(platform, cfg string, dryRun, build bool, retries int, plane string) {
 	if platform == "systemd" {
 		systemdInstall(cfg, dryRun)
 		// 健康检查
@@ -959,8 +1230,13 @@ func cmdDeploy(platform, cfg string, dryRun, build bool, retries int) {
 		if flyConfigHasBuildImage(cfg) {
 			die("%s 包含已禁用的 [build].image；它会静默覆盖 --dockerfile，请改用透传 Dockerfile", cfg)
 		}
-		infof("平台=fly  app=%s", tomlGet(cfg, "app"))
-		infof("TelePost=%s:%s  PixivFlow=%s", telepostRepo, tpVersion(platform, cfg), pfVersion(platform, cfg))
+		infof("平台=fly  平面=%s  app=%s", planeLabel(plane), tomlGet(cfg, "app"))
+		infof("配置：%s", cfg)
+		if plane == planePixivflow {
+			infof("执行端构建引用=%s（镜像 %s）", tomlGet(cfg, "PIXIVFLOW_REF"), pixivflowRepo)
+		} else {
+			infof("TelePost=%s:%s", telepostRepo, tpVersion(platform, cfg))
+		}
 	} else {
 		if !have("docker") {
 			die("未找到 docker")
@@ -1009,7 +1285,20 @@ func cmdDeploy(platform, cfg string, dryRun, build bool, retries int) {
 		}
 	}
 
-	stepf("3/3", "等待健康检查")
+	stepf("3/3", "部署后确认")
+	if platform == "fly" && plane == planePixivflow {
+		// 执行端平时就是 stopped，而且没有 /health：在这里等健康检查必然超时，
+		// 会把一次成功的部署报成失败。改为确认机器处于期望的空闲态。
+		app := tomlGet(cfg, "app")
+		if states := flyMachineStates(app); len(states) > 0 {
+			infof("%s 机器状态：%s", app, strings.Join(states, ", "))
+			okf("执行端部署完成：stopped 是期望的空闲态（等外部时钟唤醒）")
+		} else {
+			warnf("读不到 %s 的机器状态；用 %s status -a %s 确认", app, flyBin(), app)
+		}
+		return
+	}
+
 	url := healthURL(platform, cfg)
 	deadline := time.Now().Add(healthTimeout)
 	waited := 0
@@ -1037,19 +1326,22 @@ func usage() {
 可在任意目录运行：自动定位仓库配置（当前目录 → 上级目录 → 可执行文件所在目录）。
 
 用法：
-  deploy [--platform fly|compose|systemd|auto] [全局选项] <子命令> [参数]
+  deploy [--platform fly|compose|systemd|auto] [--plane ...] [全局选项] <子命令> [参数]
 
 子命令：
   init [目录]        全新部署：从内嵌模板生成目录并引导填写 Bot 信息（默认当前目录）
-  deploy            部署当前配置（保持现有版本）
-  tp <版本|latest>  升级 TelePost 镜像 tag 并部署
-  pf <版本>         升级 PixivFlow 镜像 tag（或 npm 包）并部署
+  deploy            部署当前配置（保持现有版本；默认 telepost 平面）
+  tp <版本|latest>  TelePost 平面：升级镜像 tag（TELEPOST_IMAGE）并部署
+  pf <提交号|tag>   PixivFlow 平面：升级构建引用（PIXIVFLOW_REF）并部署
   status            状态 / 健康
   logs [行数]       最近日志
-  doctor            环境自检
-  version           显示工具与当前配置版本
+  doctor            环境自检（默认两个平面各查一遍）
+  version           显示工具与各平面固定的版本及其配置来源
 
 全局选项：
+  --plane telepost|pixivflow|all
+                                作用平面。默认：tp/deploy/status/logs 是 telepost，
+                                pf 是 pixivflow，doctor/version 是 all
   --platform fly|compose|systemd|auto
                                 部署平台（默认 auto 自动检测）
   --config FILE                配置文件（fly: toml；compose: env）
@@ -1061,6 +1353,12 @@ func usage() {
   --force                      init：目标目录已有配置时强制重新生成
 
 说明：
+  两个平面各自是独立的 app / machine / 配置文件，权威配置固定是仓库跟踪的
+  fly/deploy.telepost.toml（常驻）与 fly/deploy.pixivflow.toml（跑完自行退出）；
+  init 生成的 telesubmit.fly.toml / pixivflow.fly.toml 只属于用户自有部署目录。
+  已废弃的「合一拓扑」（一个 app 里同时跑 TelePost 与 PixivFlow）会被硬拦，正常
+  命令不会再用 combined Dockerfile 部署。
+
   --platform systemd 面向“无 Docker 的 Linux VPS”裸机直跑：首次 deploy 自动
   clone TelePost 源码到 /opt/telepost、创建 venv、安装依赖与 telepost.service
   （写 /etc/systemd 与 /opt 需要 root/sudo，非 root 自动用 sudo）。
@@ -1071,6 +1369,7 @@ func usage() {
 // ---- 参数解析 ----
 type opts struct {
 	platform string
+	plane    string
 	config   string
 	dryRun   bool
 	verbose  bool
@@ -1091,6 +1390,9 @@ func parseArgs(args []string) opts {
 		case a == "--platform" || a == "-p":
 			i++
 			o.platform = args[i]
+		case a == "--plane":
+			i++
+			o.plane = args[i]
 		case a == "--config" || a == "-c":
 			i++
 			o.config = args[i]
@@ -1156,7 +1458,8 @@ func main() {
 	// 允许在任意目录运行：cwd 不是仓库时回退到可执行文件所在目录。
 	enterRepoDir()
 
-	logf("invoke: platform=%s cmd=%s arg=%s", o.platform, o.cmd, o.arg)
+	logf("invoke: platform=%s plane=%s cmd=%s arg=%s", o.platform, o.plane, o.cmd, o.arg)
+	plane := resolvePlane(o.cmd, o.plane)
 	platform := detectPlatform(o.platform, o.config)
 	if platform == "" {
 		if o.cmd == "version" {
@@ -1165,23 +1468,28 @@ func main() {
 			die("无法自动检测部署平台，用 --platform fly|compose|systemd 指定")
 		}
 	}
-	cfg := configFor(platform, o.config)
+	cfg := configFor(platform, o.config, plane)
+	if platform == "fly" && o.cmd != "doctor" {
+		// 部署/状态之前先把平面混用拦掉：任何正常命令都不该能重新造出合并拓扑。
+		// doctor 例外：它自己逐平面检查并把问题汇总成「未满足项」，不该提前 die。
+		assertPlaneTopology(plane, cfg)
+	}
 
 	switch o.cmd {
 	case "deploy":
-		cmdDeploy(platform, cfg, o.dryRun, o.build, o.retries)
+		cmdDeploy(platform, cfg, o.dryRun, o.build, o.retries, plane)
 	case "tp", "pf":
 		cmdUpgrade(platform, cfg, o.cmd, o.arg, o.dryRun)
-		cmdDeploy(platform, cfg, o.dryRun, o.build, o.retries)
+		cmdDeploy(platform, cfg, o.dryRun, o.build, o.retries, plane)
 	case "status":
-		cmdStatus(platform, cfg)
+		cmdStatus(platform, cfg, plane)
 	case "logs":
 		n, _ := atoi(o.arg)
 		cmdLogs(platform, cfg, n)
 	case "doctor":
-		cmdDoctor(platform, cfg)
+		cmdDoctor(platform, plane, cfg)
 	case "version":
-		cmdVersion(platform, cfg)
+		cmdVersion(platform, cfg, plane)
 	default:
 		failf("未知子命令：%s", o.cmd)
 		usage()

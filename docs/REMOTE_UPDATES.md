@@ -10,8 +10,12 @@
 ```
 
 不要用 `docker/combined.Dockerfile` 部署未发布代码；它明确只安装固定的 npm Release。
-`source` 会剥离 Fly 配置的构建段，传入当前 Git SHA，并在部署后校验镜像与运行进程，
-因此旧 npm 包或 `[build].image` 都不能伪装成成功的源码部署。
+执行端要跑未发布代码，唯一入口是把 `fly/deploy.pixivflow.toml` 的 `PIXIVFLOW_REF`
+换成 40 位提交号（`docker/pixivflow-scheduler.Dockerfile` 按该引用构建），再执行
+`deploy pf <提交号>`；`scripts/verify-images.sh` 会用镜像里的 `PIXIVFLOW_REVISION`
+核对线上跑的就是这个提交，所以旧 npm 包或 `[build].image` 都无法伪装成源码部署。
+旧的 `source` 子命令已删除：它会重新引入源码构建路径，与「只有两份权威 Fly 配置、
+镜像一律按不可变引用构建」的契约冲突，请勿重新引入。
 
 ## PixivFlow：真正热重载
 
