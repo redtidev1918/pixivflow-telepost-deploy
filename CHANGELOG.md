@@ -3,6 +3,21 @@
 > 发布说明面向普通用户：写「对用户有什么改变」，不写内部实现细节（模块名、CI job、配置键）；
 > 技术细节放进代码注释或 `docs/`。每个 Release 的正文由本文件对应版本段自动生成。
 
+## [1.12.0](https://github.com/redtidev1918/pixivflow-telepost-deploy/compare/v1.11.0...v1.12.0) (2026-09-11)
+
+
+### Features
+
+* **cutover:** live mode needs the production config, main, and the bot tokens ([#31](https://github.com/redtidev1918/pixivflow-telepost-deploy/issues/31)) ([68f45db](https://github.com/redtidev1918/pixivflow-telepost-deploy/commit/68f45dba4ab3f447ef3e50cb0b7c9f0e29e479ee))
+* **recovery:** an operator can grant a fourth attempt without rewriting history ([#34](https://github.com/redtidev1918/pixivflow-telepost-deploy/issues/34)) ([d3b8aff](https://github.com/redtidev1918/pixivflow-telepost-deploy/commit/d3b8afff29319dd8dc53fc1e79b7a77be77e2927))
+* serverless scheduler control plane (Cloudflare + D1 + GitHub Actions execution) ([#23](https://github.com/redtidev1918/pixivflow-telepost-deploy/issues/23)) ([539befd](https://github.com/redtidev1918/pixivflow-telepost-deploy/commit/539befd43d2eeaeb48d8955302cf00ee626540ae))
+
+
+### Bug Fixes
+
+* **fly:** stop the retired plane from re-entering production ([#35](https://github.com/redtidev1918/pixivflow-telepost-deploy/issues/35)) ([ba7a8c9](https://github.com/redtidev1918/pixivflow-telepost-deploy/commit/ba7a8c944d45cacb8fd5e1766c61c5ba928a3b42))
+* **preflight:** the mode gate follows the phase, not a hardcoded shadow ([#32](https://github.com/redtidev1918/pixivflow-telepost-deploy/issues/32)) ([f285e4c](https://github.com/redtidev1918/pixivflow-telepost-deploy/commit/f285e4c9e3cc78100d79c1ac0f4b0bbf51dbdf6e))
+
 ## [1.11.0](https://github.com/redtidev1918/pixivflow-telepost-deploy/compare/v1.10.2...v1.11.0) (2026-09-10)
 
 
