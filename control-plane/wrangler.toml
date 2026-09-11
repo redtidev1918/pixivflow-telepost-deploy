@@ -34,7 +34,15 @@ database_id = "1fa00cbc-6dcc-4a89-ba8f-30cf79cc286b"
 # bots), while the same work finished in ~3 minutes at 2026-09-10T21:19Z. Dispatch
 # was paused at 05:21Z and lifted once the account had ~3 hours of cooldown with no
 # second plane running: one credential, one active execution.
+# P0 2026-09-11 (GitHub egress starvation): GitHub-hosted runners are NOT
+# production-qualified for the Pixiv data plane — production-like workloads
+# repeatedly starve in rate-limit cooldown and die on the 30-minute watchdog
+# (runs 34558034050, 34577070256, 34594382953; every review-less slot today).
+# Production moves to a Fly execution provider; until that lands, no new
+# GitHub production dispatch may open. Scheduling, reconciliation, the Telegram
+# webhook and review decisions stay live — only new attempts are withheld.
 EXECUTION_MODE = "live"
+DISPATCH_PAUSED = "true"
 RECONCILIATION_LOOKBACK_HOURS = "24"
 # This Worker's public base URL (a cron trigger has no request URL, so the runner
 # would otherwise have nowhere to report back).
