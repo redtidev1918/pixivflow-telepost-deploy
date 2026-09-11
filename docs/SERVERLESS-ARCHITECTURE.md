@@ -114,10 +114,72 @@ media twice.
 The Pixiv account is rate-limited **per account**, so single-slot idempotency is not
 enough: two different schedules sharing one credential must not run together.
 
-A schedule declares `credential: pixiv-main`; admission refuses to dispatch a due
-occurrence while that credential is held by a non-terminal execution, keeps it
-`pending`, and logs `dispatch_held`. The same identity keys the GitHub concurrency
-group, so the backstop cannot disagree with the queue it backs up.
+A schedule declares `credential: pixiv-main`, and the control plane treats that as a
+**credential execution lock**: at most `maxConcurrentExecutions` occurrences may hold
+it, across *all* schedules, because the limit belongs to the account and not to a slot.
+
+```
+                    D1  (the only admission authority)
+                     │
+        ┌────────────┴────────────┐
+   occurrence queue          execution state
+                     │
+              credential admission
+                     │
+                 pixiv-main            maxConcurrentExecutions = 1
+                     │
+            one active execution
+```
+
+Responsibilities, in layers:
+
+| Layer | Role |
+| --- | --- |
+| D1 credential admission | **the lock authority.** The queue and the lock are the same decision, taken before a runner exists |
+| GitHub `concurrency: pixivflow-<credential_key>` | a second line of defence if D1 ever dispatches twice; never the queue |
+| PixivFlow process | the worker. It asserts nothing about ownership |
+
+**The lock is derived, not stored.** There is no `locked=true` row, no lease to renew
+and no fencing token. A credential is held while an execution consuming it is in
+`dispatching`/`dispatched`/`running`; it is released the moment that execution reaches
+a terminal status. That removes the failure mode where the execution says terminal and
+a separate lock row still says locked.
+
+**Acquisition is atomic.** The credential rides on the execution row and the guard is
+part of the `INSERT` that opens it:
+
+```sql
+INSERT ... WHERE ? IS NULL
+  OR (SELECT COUNT(*) FROM executions
+       WHERE credential_key = ? AND status IN ('dispatching','dispatched','running')) < ?
+```
+
+A read followed by a separate write would let two reconcilers both observe a free
+credential and both dispatch different occurrences — from a single control plane. A
+losing sweep reports the occurrence as `held` with
+`{"reason":"credential_busy"}`, and it stays `pending` in D1; nothing is parked in a
+GitHub pending queue where visibility is poor and reconciliation is guesswork.
+
+**A lost runner cannot deadlock the account.** Admission is evaluated *after* provider
+reconciliation, so an execution whose run has finished is already terminal and its
+credential is already released. Release never depends on the runner reporting.
+`CREDENTIAL_HOLD_MAX_MS` bounds the pathological case.
+
+**No lease, and no fencing token, on purpose.** One control plane, one provider whose
+run state is authoritative, and a per-attempt execution id already ordered by
+`attempt` — the existing terminal-write guard and the "a strictly later attempt may
+supersede a terminal item, an older one may not" rule carry the fencing the current
+architecture needs. A lease subsystem earns its complexity only with self-hosted
+runners, multiple providers, or genuinely unqueryable executors. See
+`docs/SERVERLESS-CUTOVER.md` §8.2 for the incident that made the lock non-negotiable.
+
+Rate limiting is a **separate** mechanism and stays: the lock stops the control plane
+from contending with itself, while `pixiv_rate_limit`, `Retry-After`,
+`retry_not_before` and bounded backoff handle Pixiv limiting us. Raising the watchdog
+from 30 minutes would treat neither.
+
+The same identity keys the GitHub concurrency group, so the backstop cannot disagree
+with the queue it backs up.
 
 Found the hard way, in shadow validation: four occurrences dispatched at once put the
 account into rate-limit cooldown, two slots burned their whole run budget waiting, and
