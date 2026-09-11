@@ -23,15 +23,39 @@ skip() { echo "[SKIP] $*"; }
 note() { echo "[INFO] $*"; }
 
 echo "== 1/7 Fly 应用状态 =="
-if ! fly apps list 2>/dev/null | grep -q "^${pixivflow_app}"; then
-  fail "Fly 应用 ${pixivflow_app} 不存在：执行端尚未创建（见 docs/ARCHITECTURE.md 拓扑）"
-else
+# 不要用 `fly apps list | grep -q "^${app}"`：那是人类表格（列有前导空格），而且
+# 前缀会把别的 app 误命中（pixivflow-scheduler-x 会匹配 pixivflow-scheduler）。
+# 这里只信结构化来源：优先 `fly apps list --json` 精确比对 Name；老版 flyctl 没有
+# --json 时退化为 `fly status -a <app>` 的退出码。
+app_present() {
+  local app=$1
+  if fly apps list --json 2>/dev/null | python3 -c '
+import json, sys
+try:
+    apps = json.load(sys.stdin)
+except Exception:
+    sys.exit(2)
+apps = apps if isinstance(apps, list) else [apps]
+sys.exit(0 if any((a.get("Name") == sys.argv[1]) for a in apps) else 1)
+' "$app"; then
+    return 0
+  fi
+  fly status -a "$app" >/dev/null 2>&1
+}
+
+pixivflow_exists=false
+telepost_exists=false
+if app_present "$pixivflow_app"; then
+  pixivflow_exists=true
   ok "Fly 应用 ${pixivflow_app} 存在"
-fi
-if ! fly apps list 2>/dev/null | grep -q "^${telepost_app}"; then
-  fail "Fly 应用 ${telepost_app} 不存在"
 else
+  fail "Fly 应用 ${pixivflow_app} 不存在：执行端尚未创建（见 docs/ARCHITECTURE.md 拓扑）"
+fi
+if app_present "$telepost_app"; then
+  telepost_exists=true
   ok "Fly 应用 ${telepost_app} 存在"
+else
+  fail "Fly 应用 ${telepost_app} 不存在"
 fi
 
 echo "== 2/7 停机/唤醒参数（以部署中的配置为准，不读仓库文件）=="
@@ -54,6 +78,9 @@ svc = cfg.get("http_service", {})
 env = cfg.get("env") or {}
 problems = []
 
+# force_https 只做「显式写了就必须是什么」的源配置检查。Fly 对未显式声明的默认值
+# 可能根本不返回这个键（实测 TelePost 的 http_service 里就没有 force_https），
+# 缺字段 != 值不对；运行期行为由 HTTP 探测单独核对，见 force_https_behavior_check。
 if role == "telepost":
     if svc.get("auto_stop_machines") is not False:
         problems.append("auto_stop_machines != false（冷启动对用户可见）")
@@ -61,8 +88,8 @@ if role == "telepost":
         problems.append("min_machines_running != 1")
     if not (svc.get("checks") or []):
         problems.append("缺少长期健康检查")
-    if svc.get("force_https") is not False:
-        problems.append("force_https != false（Flycast 私网投递会被 301 打断）")
+    if "force_https" in svc and svc.get("force_https") is not False:
+        problems.append("源配置 force_https != false（Flycast 私网投递会被 301 打断）")
     for key in ("PIXIVFLOW_ENABLED", "PIXIV_CONFIG", "PIXIV_REFRESH_TOKEN", "NODE_OPTIONS", "PIXIVFLOW_TRIGGER_PORT"):
         if key in env:
             problems.append("环境变量残留执行端配置: " + key)
@@ -75,9 +102,19 @@ else:
         problems.append("min_machines_running != 0（无法回到 stopped）")
     if svc.get("checks") or (cfg.get("checks") or []):
         problems.append("存在健康检查（探测会重新唤醒刚收工的机器）")
-    policy = (cfg.get("restart") or {}).get("policy")
-    if policy != "no":
-        problems.append("restart policy != no（跑完退出后会被平台重新拉起）")
+    if "force_https" in svc and svc.get("force_https") is not True:
+        problems.append("源配置 force_https != true（触发器必须走 HTTPS）")
+    # restart.policy 的运行期权威来源是机器配置（见第 3 节），这里只在配置显式
+    # 声明且值不对时报警：fly.toml 的 "never" 会被规范化成 "no"，两种拼写都收。
+    raw = cfg.get("restart")
+    if isinstance(raw, list):
+        policies = [x.get("policy") for x in raw if isinstance(x, dict)]
+    elif isinstance(raw, dict):
+        policies = [raw.get("policy")]
+    else:
+        policies = []
+    if policies and any(p not in ("no", "never") for p in policies):
+        problems.append("restart policy 不是 never/no（跑完退出后会被平台重新拉起）")
     if not (env.get("PIXIV_DOWNLOADER_CONFIG") or "").endswith(".json"):
         problems.append("PIXIV_DOWNLOADER_CONFIG 未指向运行配置")
 
@@ -86,9 +123,9 @@ print("OK" if not problems else "BAD " + "; ".join(problems))
   case "$result" in
     OK)
       if [[ "$role" == "telepost" ]]; then
-        ok "TelePost 常驻参数正确（auto_stop=false / min_running=1 / 健康检查 / force_https=false）"
+        ok "TelePost 常驻参数正确（auto_stop=false / min_running=1 / 健康检查）"
       else
-        ok "PixivFlow 生命周期参数正确（自动唤醒 / 不自动停止 / 无探测 / restart=no）"
+        ok "PixivFlow 生命周期参数正确（自动唤醒 / 不自动停止 / 无探测；restart 见第 3 节运行期核对）"
       fi
       ;;
     "")
@@ -103,18 +140,76 @@ print("OK" if not problems else "BAD " + "; ".join(problems))
 app_config_check "$telepost_app" telepost
 app_config_check "$pixivflow_app" pixivflow
 
-echo "== 3/7 执行端状态与触发鉴权 =="
+# force_https 的另一半是运行期行为：`fly config show` 不返回未显式声明的默认值，
+# 所以「缺字段」绝不能当成「值不对」。只有明文 HTTP 探测能回答「Flycast 投递会不会
+# 被 301 打断」——force_https=false 时明文应被直接服务，只有 =true 才 301/308。
+# 执行端不做这个探测：请求会唤醒刚收工的机器（AGENTS.md 禁止用探测打扰它）。
+force_https_behavior_check() {
+  local app=$1 origin=$2
+  local code
+  code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 20 "${origin}/health" 2>/dev/null || echo 000)
+  case "$code" in
+    301|308)
+      fail "${app} 明文 HTTP 被强制跳转（${origin}/health → HTTP ${code}）：force_https 运行期实际为 on，Flycast 私网投递会被 301 打断" ;;
+    000)
+      note "${app} 明文 HTTP 探测不可达（force_https 运行期行为未能核对）" ;;
+    2*|3*|4*)
+      ok "${app} 明文 HTTP 未被强制跳转（${origin}/health → HTTP ${code}）：force_https 运行期行为为 off" ;;
+    *)
+      note "${app} 明文 HTTP 返回 HTTP ${code}（未判定 force_https）" ;;
+  esac
+}
+if [[ "$telepost_exists" == true ]]; then
+  force_https_behavior_check "$telepost_app" "http://${telepost_app}.fly.dev"
+else
+  note "跳过 ${telepost_app} 的 force_https 运行期核对（应用不存在）"
+fi
+
+echo "== 3/7 执行端状态、生命周期与触发鉴权 =="
 machine_json=$(fly machine list -a "$pixivflow_app" --json 2>/dev/null)
+machine_summary=""
 if [[ -n "$machine_json" ]]; then
-  printf '%s' "$machine_json" | python3 -c '
+  machine_summary=$(printf '%s' "$machine_json" | python3 -c '
 import json, sys
 machines = json.load(sys.stdin)
-states = [m.get("state") for m in (machines if isinstance(machines, list) else [machines])]
-print("状态：" + ", ".join(states))
-'
-  ok "执行端机器存在（stopped 是正常状态）"
-else
+if isinstance(machines, dict):
+    machines = [machines]
+
+def policies(cfg):
+    r = cfg.get("restart")
+    if isinstance(r, list):
+        return [x.get("policy") for x in r if isinstance(x, dict)]
+    if isinstance(r, dict):
+        return [r.get("policy")]
+    return []
+
+states = []
+bad = []
+for m in machines:
+    states.append(m.get("state") or "?")
+    ps = [p for p in policies(m.get("config") or {})]
+    if not ps or any(p not in ("no", "never") for p in ps):
+        bad.append("%s restart.policy=%s" % (
+            m.get("id") or "?",
+            ",".join(str(p) for p in ps) if ps else "缺失(平台默认=always)"))
+print(json.dumps({"states": states, "bad": bad}))
+' 2>/dev/null)
+fi
+if [[ "$pixivflow_exists" != true ]]; then
+  note "跳过 ${pixivflow_app} 的机器核对（应用不存在）"
+elif [[ -z "$machine_summary" ]]; then
   fail "无法列出 ${pixivflow_app} 的机器"
+else
+  ok "执行端机器存在（stopped 是正常状态）：$(printf '%s' "$machine_summary" | python3 -c 'import json, sys; print(", ".join(json.load(sys.stdin)["states"]))')"
+  # 生命周期契约的运行期一半：进程 exit(0) 后平台不得把它拉回来。Machines API 把
+  # fly.toml 的 "never" 规范化成 "no"（源拼写 != 运行期拼写），所以按运行期值判定，
+  # 且只读结构化 JSON，不 grep 人类表格。
+  bad_policy=$(printf '%s' "$machine_summary" | python3 -c 'import json, sys; print("; ".join(json.load(sys.stdin)["bad"]))')
+  if [[ -n "$bad_policy" ]]; then
+    fail "执行端机器 restart.policy 不是 no（进程退出后会被平台重新拉起）：${bad_policy}"
+  else
+    ok "执行端机器 restart.policy = no（进程 exit(0) 后不会被重启）"
+  fi
 fi
 
 code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 20 \
@@ -139,7 +234,16 @@ echo "== 6/7 镜像与提交号 =="
 "$repo_dir/scripts/verify-images.sh" || failures=$((failures + 1))
 
 echo "== 7/7 Cloudflare 时钟 =="
-python3 "$repo_dir/scripts/cf-clock-readonly.py" "$worker_name" || note "跳过 Cloudflare 时钟核对（缺少只读凭据）"
+# 退出码约定：0 = 已核对一致，2 = 无法核对（缺凭据/无权）→ SKIP，其余 = 真的核对失败。
+# 「无法核对」必须与「失败」区分开，否则输出里会出现一行 [FAIL] 而整轮却算通过，
+# 逼着人手工解释——那正是这个脚本要消灭的东西。
+cf_rc=0
+python3 "$repo_dir/scripts/cf-clock-readonly.py" "$worker_name" || cf_rc=$?
+case "$cf_rc" in
+  0) ;;
+  2) note "跳过 Cloudflare 时钟核对（缺只读凭据或凭据无权）" ;;
+  *) failures=$((failures + 1)) ;;
+esac
 
 echo
 if [[ $failures -gt 0 ]]; then

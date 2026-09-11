@@ -24,7 +24,8 @@ RUN test -n "${PIXIVFLOW_REF}" \
     && git init -q . \
     && git remote add origin https://github.com/redtidev1918/PixivFlow.git \
     && git fetch -q --depth 1 origin "${PIXIVFLOW_REF}" \
-    && git checkout -q FETCH_HEAD
+    && git checkout -q FETCH_HEAD \
+    && git rev-parse HEAD > /PIXIVFLOW_COMMIT
 
 FROM ${NODE_IMAGE} AS build
 RUN apt-get update \
@@ -32,8 +33,12 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 WORKDIR /build
 COPY --from=pixivflow-src /src /build
-RUN (git rev-parse HEAD || echo unknown) > /tmp/PIXIVFLOW_COMMIT
-RUN npm ci --no-audit --no-fund && npm run build
+COPY --from=pixivflow-src /PIXIVFLOW_COMMIT /tmp/PIXIVFLOW_COMMIT
+# GIT_COMMIT is what scripts/write-version.js bakes into src/version.ts, and the runtime
+# prints it at startup. Without it every image, pinned or not, reports commit "dev" --
+# i.e. the machine could not answer "which code is running?" at all.
+RUN npm ci --no-audit --no-fund \
+    && GIT_COMMIT="$(cat /tmp/PIXIVFLOW_COMMIT)" npm run build
 
 FROM ${NODE_IMAGE}
 ARG PIXIVFLOW_REF
@@ -59,6 +64,12 @@ COPY --from=build /tmp/PIXIVFLOW_COMMIT /app/PIXIVFLOW_COMMIT
 # The single authoritative config: external clock, run-to-completion lifecycle and
 # delivery into TelePost's submission API. It holds no Telegram token and no
 # channel id, so an execution machine cannot post to a channel at all.
+#
+# Its storage paths stay RELATIVE (./data/...), never absolute: the config loader
+# auto-"fixes" absolute paths that fall outside the config directory (/app/config) and
+# rewrites the file in place. Relative paths resolve against the project root /app, so
+# ./data/... lands on the mounted volume /app/data -- and off-volume paths such as
+# /app/downloads never appear.
 COPY pixivflow/config/production.json /app/config/pixivflow.production.json
 
 ENV NODE_ENV=production
@@ -69,4 +80,7 @@ ENV NODE_ENV=production
 ENV PIXIVFLOW_REVISION=${PIXIVFLOW_VERSION}+${PIXIVFLOW_REF}
 EXPOSE 8090
 # `scheduler` mounts the authenticated trigger server and the durable slot runner.
-CMD ["node", "dist/index.js", "scheduler"]
+# The echo is not decoration: verify-images.sh reads PIXIVFLOW_REVISION out of the
+# machine's own startup log to prove the running image is the pinned one. Without it the
+# provenance check silently degrades into "no version line in the logs" and gets skipped.
+CMD ["sh", "-c", "echo \"PIXIVFLOW_REVISION=${PIXIVFLOW_REVISION:-unknown}\"; exec node dist/index.js scheduler"]
