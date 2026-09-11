@@ -30,6 +30,10 @@ class MemoryStore implements ControlStore {
       scheduleId: occurrence.scheduleId,
       botId: occurrence.botId,
       occurrenceAt: occurrence.occurrenceAt,
+      recoveryCount: 0,
+      recoveryGeneration: 0,
+      recoveryReason: null,
+      recoveredAt: null,
       status: 'pending',
       attemptCount: 0,
       dispatchDeadline: occurrence.dispatchDeadline,
@@ -225,6 +229,10 @@ describe('dispatch eligibility rules', () => {
     startedAt: null,
     completedAt: null,
     lastError: null,
+    recoveryCount: 0,
+    recoveryGeneration: 0,
+    recoveryReason: null,
+    recoveredAt: null,
     ...overrides,
   });
 

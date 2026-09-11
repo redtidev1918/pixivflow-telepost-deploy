@@ -14,6 +14,7 @@ import { applyExecutionResult, claimExecution } from '../execution';
 import { decryptSecret, encryptSecret } from '../credentials';
 import { secretsMatch } from '../secrets';
 import { buildCallbackData } from '../reviews';
+import { assessRecovery, refusalEvent, recoverOccurrence, type RecoveryReport } from '../recovery';
 import type { ControlPlaneStore, ExecutionStatus, ItemStatus } from '../store';
 import { SCHEDULES } from '../schedules';
 
@@ -293,6 +294,69 @@ export async function handleControl(
         reject: buildCallbackData(record.id, 'reject'),
       },
     });
+  }
+
+  // ---- operator recovery ----------------------------------------------------
+  //
+  // Authenticated with the control-plane secret, never public. Dry run by default:
+  // an operator must see the eligibility report before anything moves. This is
+  // deliberately NOT a "reopen" -- see src/recovery.ts for why the automatic
+  // attempt history is immutable and why the next run is attempt 4.
+  const requeue = /^\/control\/occurrences\/([^/]+)\/requeue$/.exec(url.pathname);
+  if (requeue) {
+    if (!authorized(request, callbackSecret)) return json({ error: 'unauthorized' }, 401);
+    if (request.method !== 'POST') return json({ error: 'method not allowed' }, 405);
+
+    const slotId = decodeURIComponent(requeue[1] ?? '');
+    if (!slotId) return json({ error: 'slot id is required' }, 400);
+
+    let body: { reason?: unknown; dryRun?: unknown } = {};
+    try {
+      body = (await request.json()) as { reason?: unknown; dryRun?: unknown };
+    } catch {
+      return json({ error: 'body must be JSON' }, 400);
+    }
+    const reason = typeof body.reason === 'string' ? body.reason : '';
+    // Safe default: a caller that forgets the flag gets a dry run, not a mutation.
+    const dryRun = body.dryRun !== false;
+    const actorHeader = request.headers.get('x-operator-actor');
+    const actor = actorHeader && actorHeader.trim() ? actorHeader.trim() : 'operator';
+
+    const schedule = SCHEDULES.find((candidate) => slotId.startsWith(`${candidate.id}@`));
+    if (!schedule) {
+      return json({ error: 'unknown schedule for that occurrence', slotId }, 400);
+    }
+
+    const input = {
+      slotId,
+      reason,
+      actor,
+      nowMs: Date.now(),
+      maxAutomaticAttempts: schedule.maxAttempts,
+      dispatchDeadlineHours: schedule.dispatchDeadlineHours,
+      dryRun,
+    };
+
+    if (dryRun) {
+      // A dry run writes nothing at all: no grant, no event.
+      return json(await assessRecovery(store, input));
+    }
+
+    const { report, events, storeResult } = await recoverOccurrence(store, input);
+    const refusal = refusalEvent(report, input.nowMs);
+    const recorded = refusal ? [...events, refusal] : events;
+    if (recorded.length > 0) await store.logEvents(recorded);
+    return json(
+      {
+        ...report,
+        // Explicit confirmation, because an operator acting at 3am should not have
+        // to infer a grant from `eligible`, and should see which audit event landed.
+        requeued: storeResult === 'requeued',
+        storeResult,
+        event: events[0]?.event ?? refusal?.event ?? null,
+      },
+      report.eligible ? 200 : 409
+    );
   }
 
   const match = CONTROL_PATTERN.exec(url.pathname);

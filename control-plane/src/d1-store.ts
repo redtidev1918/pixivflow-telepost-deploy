@@ -61,6 +61,10 @@ interface SlotRowDb {
   started_at: number | null;
   completed_at: number | null;
   last_error: string | null;
+  recovery_count: number;
+  recovery_generation: number;
+  recovery_reason: string | null;
+  recovered_at: number | null;
 }
 
 function toRow(row: SlotRowDb): OccurrenceRow {
@@ -78,11 +82,16 @@ function toRow(row: SlotRowDb): OccurrenceRow {
     startedAt: row.started_at,
     completedAt: row.completed_at,
     lastError: row.last_error,
+    recoveryCount: row.recovery_count ?? 0,
+    recoveryGeneration: row.recovery_generation ?? 0,
+    recoveryReason: row.recovery_reason ?? null,
+    recoveredAt: row.recovered_at ?? null,
   };
 }
 
 const SLOT_COLUMNS = `id, schedule_id, bot_id, occurrence_at, status, attempt_count, retry_not_before,
-  dispatch_deadline, current_execution_id, dispatched_at, started_at, completed_at, last_error`;
+  dispatch_deadline, current_execution_id, dispatched_at, started_at, completed_at, last_error,
+  recovery_count, recovery_generation, recovery_reason, recovered_at`;
 
 interface ExecutionRowDb {
   id: string;
@@ -552,6 +561,90 @@ export class D1ControlStore implements ControlPlaneStore {
       .bind(limit)
       .all<ExecutionRowDb>();
     return (results ?? []).map(toExecution);
+  }
+
+  async countOpenExecutionsForSlot(slotId: string): Promise<number> {
+    const row = await this.db
+      .prepare(
+        `SELECT COUNT(*) AS n FROM executions
+          WHERE slot_id = ? AND status IN ('dispatching','dispatched','running')`
+      )
+      .bind(slotId)
+      .first<{ n: number }>();
+    return row?.n ?? 0;
+  }
+
+  async listReviewsForSlot(slotId: string): Promise<ReviewRecord[]> {
+    const { results } = await this.db
+      .prepare(`SELECT ${REVIEW_COLUMNS} FROM reviews WHERE slot_id = ? ORDER BY created_at ASC`)
+      .bind(slotId)
+      .all<ReviewRowDb>();
+    return (results ?? []).map(toReview);
+  }
+
+  /**
+   * Grant one operator recovery attempt.
+   *
+   * The WHERE clause is the concurrency control: it names the exact pre-state the
+   * caller inspected (terminal status, observed recovery generation) and requires
+   * that no execution still holds the slot. Two operators acting on the same
+   * terminal generation therefore produce exactly one row change — the second
+   * sees zero changed rows and reports a conflict instead of granting attempt 5.
+   *
+   * `attempt_count` is deliberately absent from the SET list. The automatic
+   * history stays on the record; the next dispatch reads attempt_count + 1 and
+   * becomes attempt 4.
+   *
+   * The UPDATE must stay ONE statement. Its atomicity is what makes the guard
+   * real: split into a SELECT and a later UPDATE, two concurrent operators could
+   * both pass the check and buy two attempts from one terminal generation.
+   */
+  async grantRecoveryAttempt(input: {
+    slotId: string;
+    reason: string;
+    actor: string;
+    nowMs: number;
+    dispatchDeadline: number;
+    expectedStatus: SlotStatus;
+    expectedGeneration: number;
+  }): Promise<'requeued' | 'conflict' | 'not-found'> {
+    const exists = await this.db
+      .prepare(`SELECT 1 AS present FROM slot_occurrences WHERE id = ?`)
+      .bind(input.slotId)
+      .first<{ present: number }>();
+    if (!exists) return 'not-found';
+
+    const result = (await this.db
+      .prepare(
+        `UPDATE slot_occurrences
+            SET status = 'pending',
+                recovery_count = recovery_count + 1,
+                recovery_generation = recovery_generation + 1,
+                recovery_reason = ?,
+                recovered_at = ?,
+                dispatch_deadline = ?,
+                retry_not_before = NULL,
+                current_execution_id = NULL,
+                completed_at = NULL
+          WHERE id = ?
+            AND status = ?
+            AND recovery_generation = ?
+            AND NOT EXISTS (
+              SELECT 1 FROM executions
+               WHERE slot_id = slot_occurrences.id
+                 AND status IN ('dispatching','dispatched','running')
+            )`
+      )
+      .bind(
+        `${input.actor}: ${input.reason}`,
+        input.nowMs,
+        input.dispatchDeadline,
+        input.slotId,
+        input.expectedStatus,
+        input.expectedGeneration
+      )
+      .run()) as { meta?: { changes?: number } } | undefined;
+    return (result?.meta?.changes ?? 0) === 1 ? 'requeued' : 'conflict';
   }
 
   async listUnclaimedExecutions(olderThanMs: number, limit: number): Promise<ExecutionRow[]> {
