@@ -15,7 +15,7 @@ app = 'pixivflow-executor'
 primary_region = 'iad'
 
 [build]
-  dockerfile = 'docker/pixivflow-executor.Dockerfile'
+  dockerfile = '../docker/pixivflow-executor.Dockerfile'
 
 [env]
   NODE_ENV = 'production'
