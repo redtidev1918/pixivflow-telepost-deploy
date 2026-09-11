@@ -2,8 +2,8 @@
 
 > 状态：**已上线**。Cloudflare Worker + D1 自 2026-09-10 起承担本部署的生产控制平面，bot1/bot2
 > 的 webhook 均已归 Worker（`getWebhookInfo` 实测，`EXPECT_OWNER=worker` 闸门 exit 0）。Fly 生产
-> （`telesubmit-multi-bot`，TelePost 2.17.2 / PixivFlow，+ watchdog）**仍在运行且未改动**，作为回滚材料
-> 保留到 §8 停机。
+> （`telesubmit-multi-bot`，TelePost 2.17.2 / PixivFlow）已 **stopped 且 `autostart=false`**，
+> 唤醒型触发器（`schedule-watchdog`）已删除。Fly 作为回滚材料保留，但**不得再参与生产**——见 §8.1。
 > 本文记录目标架构、上线前置条件、上线步骤、回滚，以及**两个已证实的硬约束**。文中"现在 / 迁移期"
 > 的叙述保留为历史；**当前事实以 §2 为准**。
 
@@ -294,7 +294,8 @@ cron 发放、由 GitHub job 执行、由人在审核群真实点击，不接受
    其他：丢 tick 恢复（删除 occurrence 后下一次 sweep 立即重建并正确判过期）、并发 sweep（3 次 ×2 阶段全部落库、0 重复 id）、approve/reject 并发竞态（5 轮各仅 1 个赢家，两种顺序都出现）、崩溃遗留 claim 的收敛（1 恢复为 published / 1 转 uncertain）。
 4. 按 §4.1 的裁定完成审核域接线
 5. 一个完整调度周期内双跑（Fly 生产 + 无服务器平面），比较两边的 slot 结果
-6. 切换：Cloudflare cron 接管发放，Fly watchdog 先降为 observer，再停用
+6. 切换：Cloudflare cron 接管发放；`schedule-watchdog` **已删除**（它是"备用时钟"，实际会把已退役的
+   Fly 重新拉起来，见 §8.1）
 7. 按 §8 停机并做隔离验证，通过后才考虑删除 Fly 常驻
 
 ## 6. 回滚
@@ -315,11 +316,22 @@ curl -sS "https://api.telegram.org/bot$TOKEN/setWebhook" \
 TELEGRAM_BOT1_TOKEN=... scripts/cutover-preflight.sh   # 确认已复原
 ```
 
-回滚只需这一条命令，因为 **Fly 生产在最终验收前不删除、不降级**：旧 TelePost 进程仍在监听原路径，webhook 一指回去就恢复接收更新。
+回滚现在是**两步显式操作**，不再是"把机器开起来它自己就接管"：
+
+```bash
+# 1. 显式启动旧平面（autostart=false 之后，只有这一步能唤醒它）
+flyctl machine start 683032ec6617e8 -a telesubmit-multi-bot
+# 2. 显式把 webhook 交还给 TelePost
+curl -sS "https://api.telegram.org/bot$TOKEN/setWebhook" -d "url=$TELEPOST_WEBHOOK_BASE/$BOT"
+TELEGRAM_BOT1_TOKEN=... scripts/cutover-preflight.sh   # 确认已复原
+```
+
+**为什么必须显式**：TelePost 启动时会自己 `setWebhook`（`📡 启动 Webhook 模式...`），
+所以"启动机器"本身就等于"抢回审核域"。隐式 ownership 是危险的，回滚必须是操作员的决定。
 
 - 其余部分：停止 Cloudflare cron 派发即可，不需要恢复数据。
 - D1 中只有影子数据（合成 slot / review / `99999999` 作品），删除无影响。
-- 任何时刻只要 `PIXIVFLOW_ENABLED` / watchdog 仍指向 Fly，生产就还在原路径上。
+- **绝不能**让任何 watchdog / 外部触发器把 Fly 唤醒：见 §8.1。
 - 绝不可移动已发布的 tag；重建镜像走独立的 rebuild workflow。
 
 ## 7. 已知隐患（与迁移无关，但应单独修）
@@ -363,6 +375,39 @@ flyctl machine destroy 683032ec6617e8 -a telesubmit-multi-bot
 
 > ⚠️ **机器可以删，volume / SQLite / secret 备份不要同时删。** 机器只是计算实例；真正不
 > 可逆的是把旧状态一起清掉。永久删除状态数据需要单独确认。
+
+### 8.1 停机必须同时关掉三个入口（2026-09-11 事故）
+
+**"停机"不等于"不再参与生产"。** 2026-09-11 的事故证明了这一点，代价是当天两次定时投稿全灭：
+
+```
+02:00  Worker 发放 bot1 10:00 occurrence，GitHub job 开跑
+02:20  schedule-watchdog（GitHub cron）POST 唤醒 Fly —— 而 Worker 的 job 还在跑
+       Fly 上 TelePost 启动 → 自己 setWebhook 抢回两个 bot 的审核域
+       Fly 上 PixivFlow 启动 → 与 Worker 的 job 抢同一个 pixiv-main
+       Pixiv 按账号限流 → 两边都进 cooldown 死循环
+02:30  Worker 的 job 触达 30 分钟 watchdog → failed（attempt 1/3）
+02:40  03:20  重试两次，同样死在配额争抢 → attempt 3/3 → slot_terminal failed
+04:23  操作员 `machine stop` → 04:24:41 机器被 flyd 自己唤醒（autostart=true），完整回到生产
+```
+
+三个入口必须同时关闭，缺一个都等于没关：
+
+| 入口 | 关闭方式 | 为什么不够 |
+| --- | --- | --- |
+| 唤醒触发器 | 删除 `.github/workflows/schedule-watchdog.yml` | 只 `disabled_manually` 是仓库设置在挡，文件还在，随时能被重新启用 |
+| 自动唤醒 | `flyctl machine update <id> --autostart=false` | 只 `machine stop` 时，任何一次请求都会把它拉起来（实测 75 秒后自启） |
+| webhook 抢占 | 操作员显式 `setWebhook` 指向 Worker | TelePost 启动即自行注册 webhook，"启动机器"就等于"抢回审核域" |
+
+**新不变量：一个 Pixiv 凭据在任何时刻只能有一个 execution plane owner。**
+Fly 可以存在、可以保留 volume/SQLite、可以作为回滚镜像，但它在正常生产状态下
+**不得**被唤醒、**不得**运行自己的 Pixiv scheduler、**不得** claim Telegram webhook。
+`PIXIVFLOW_ENABLED` / watchdog 指向 Fly 不再意味着"生产还在原路径上"，而意味着"生产正在被两个
+平面撕裂"。
+
+**也不需要 watchdog**：丢失 tick 由 Cloudflare reconciliation 自带恢复（sweep 每 10 分钟重算
+lookback 窗口内的 occurrence，见 §9 与 `docs/SERVERLESS-OPERATIONS.md` §8），
+这正是它取代 Fly watchdog 的原因。
 
 ## 9. 完整生产周期判据（跑完才停 Fly）
 

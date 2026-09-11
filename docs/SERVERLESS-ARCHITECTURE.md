@@ -124,6 +124,20 @@ account into rate-limit cooldown, two slots burned their whole run budget waitin
 the retry then finished in 6 minutes. Serial, the same four run in 3.0–4.3 minutes with
 zero 429s.
 
+**Invariant: one credential has exactly one execution plane owner at any moment.**
+
+Admission inside the control plane is not enough on its own, because a retired plane
+can still be holding the same account. Found the hard way on 2026-09-11: a leftover
+GitHub watchdog woke the stopped Fly machine, TelePost and PixivFlow came back up,
+both planes spent the morning in each other's rate-limit cooldown, and every scheduled
+occurrence failed 3/3 while nothing was wrong with any of them. See
+`docs/SERVERLESS-CUTOVER.md` §8.1.
+
+The corollary is what the incident taught: a plane that is not the owner must be
+unable to participate — not merely stopped. It must have no wake trigger, no
+auto-start, and no ability to claim the Telegram webhook on boot. Otherwise "stopped"
+is a momentary state that the next inbound request undoes.
+
 ## 7. Credentials
 
 ```
