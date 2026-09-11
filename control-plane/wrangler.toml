@@ -16,11 +16,29 @@ database_name = "pixivflow-control"
 database_id = "1fa00cbc-6dcc-4a89-ba8f-30cf79cc286b"
 
 [vars]
-# Live: dispatch runs a real GitHub job that publishes to Telegram. Shadow mode
-# (planned and recorded but never executed) is what the migration validated
-# first; flipping this back to "shadow" is the fastest way to stop publishing
-# without touching webhooks.
-EXECUTION_MODE = "live"
+# INCIDENT 2026-09-11 (Pixiv penalty): the shared account `pixiv-main` entered a
+# rate-limit penalty. Every live dispatch from 02:00Z onwards died on the batch's
+# own 1800000ms watchdog with error_class `download_failed` (5/5 attempts across
+# both bots), while the same occurrence finished in ~3 minutes on 2026-09-10T21:19Z.
+# A dispatch is 30 minutes of requests against an account that is being throttled,
+# so continuing to retry deepens the penalty.
+#
+# Two switches, deliberately both:
+#   DISPATCH_PAUSED  opens no new attempts. Reconcile/create/expire keep running,
+#                    so the ledger stays honest and "why did nothing dispatch" is
+#                    answerable (the sweep records `dispatch_paused`).
+#   EXECUTION_MODE   shadow is the backstop, not the primary lever: shadow alone
+#                    still dispatches (it only guarantees the runner gets the
+#                    shadow config and cannot publish). Keep it as the second lock
+#                    so a manual sweep or /api/slots cannot publish either.
+#
+# Restore the live pair (`EXECUTION_MODE = "live"`, drop DISPATCH_PAUSED) once the
+# penalty has subsided and one occurrence completes end-to-end. Note that a paused
+# occurrence still expires at its dispatch deadline, and `expired` is NOT in
+# RECOVERABLE_SLOT_STATUSES (recovery.ts), so staying paused past a deadline loses
+# that slot for good.
+EXECUTION_MODE = "shadow"
+DISPATCH_PAUSED = "true"
 RECONCILIATION_LOOKBACK_HOURS = "24"
 # This Worker's public base URL (a cron trigger has no request URL, so the runner
 # would otherwise have nowhere to report back).
