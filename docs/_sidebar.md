@@ -2,6 +2,7 @@
   - [架构与不变量](SERVERLESS-ARCHITECTURE.md)
   - [部署与运维](SERVERLESS-OPERATIONS.md)
   - [上线、回滚与验收](SERVERLESS-CUTOVER.md)
+  - [Pixiv egress 限流事故（2026-09-11）](incidents/2026-09-11-pixiv-egress-rate-limit.md)
 - 开始部署
   - [文档中心](/)
   - [📥 下载](download.md)

@@ -45,7 +45,7 @@ failures were structural. Each row below is a class of failure that is now impos
 | --- | --- | --- |
 | Cloudflare Worker | the clock, the ledger, admission, review decisions, publish by server-side copy | carry media, or hold state in memory |
 | D1 | every durable fact: occurrences, executions, items, reviews, credentials, events | be treated as a queue that can be retried blindly |
-| GitHub Actions | execute one occurrence, then vanish | be the clock, or own any state |
+| execution provider (currently GitHub-hosted runners) | execute one occurrence, then vanish | be the clock, own any state, or be assumed Pixiv-egress-qualified (§9) |
 | Telegram | durable media and the human decision | be polled |
 
 ## 3. Identity: the canonical occurrence
@@ -222,3 +222,50 @@ See `SERVERLESS-OPERATIONS.md` §4.
   `copyMessage`.
 - **No second Telegram backend in production.** Bots are discovered from the
   environment (`TELEGRAM_<ID>_TOKEN`), so a bot is a secret, not a code path.
+
+## 9. Execution provider: egress-qualified, replaceable
+
+The control plane (Worker + D1) is not the same thing as the data plane that reaches
+Pixiv. **Control-plane compatibility does not imply execution-plane compatibility**
+（控制面可运行，不代表数据执行面适合运行）.
+
+PixivFlow reaches several distinct Pixiv planes — OAuth (`oauth.secure.pixiv.net`), the
+App API (`app-api.pixiv.net`) and the media CDN (`i.pximg.net`, requests carry
+`Referer: https://app-api.pixiv.net/`) — so "OAuth works" proves nothing about the
+production search/download workload. An execution provider must be chosen for CPU/memory,
+runtime support, and **network egress**: reachability, egress reputation, rate-limit
+behaviour and CDN accessibility — not merely "Node.js runs here".
+
+The provider is a replaceable data plane, never a second scheduler or clock:
+
+```
+        Cloudflare Worker + D1                    execution provider              Telegram
+   ┌───────────────────────────────┐        ┌─────────────────────────┐     ┌──────────────────┐
+   │ cron */10  = the only clock   │        │ GitHub hosted runner     │     │ review group     │
+   │ reconcile / admit / review    │dispatch│   (currently suspect)    │     │  approve/reject  │
+   │ D1 ledger  = the only state   │───────▶│ self-hosted runner       │     │ private channel  │
+   └───────────────────────────────┘        │ VPS / Fly / other        │     └──────────────────┘
+          durable control plane             └─────────────────────────┘
+```
+
+### Provider qualification status
+
+Only cells with an actual measurement are filled. A provider becomes production-qualified
+only after passing the egress probes in `SERVERLESS-OPERATIONS.md` §10.
+
+| Provider | Control plane | Pixiv OAuth | Pixiv App API | Media CDN | Production status |
+| --- | --- | --- | --- | --- | --- |
+| Cloudflare Worker | PASS | unqualified | unqualified | unqualified | control-plane only |
+| GitHub hosted runner | n/a | reachable | DEGRADED (repeated 429) | unqualified | not production-qualified |
+| Fly.io | n/a | historically PASS | historically PASS | historically PASS | candidate / needs requalification |
+| VPS | n/a | pending | pending | pending | candidate |
+| self-hosted runner | n/a | pending | pending | pending | candidate |
+
+GitHub-hosted runners are **implemented but currently not production-qualified for the
+Pixiv data plane**: they can reach Pixiv, but production-like workloads repeatedly enter
+sustained 429 / penalty escalation and die on the 30-minute watchdog (run `34558034050`).
+They remain correct for CI, shadow and non-heavy tests. See
+`docs/incidents/2026-09-11-pixiv-egress-rate-limit.md`.
+
+Telegram stays independent of this choice: the Worker keeps the webhook, `callback_query`,
+review state and publish coordination regardless of which provider downloads the media.

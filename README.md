@@ -14,7 +14,8 @@ NAT 主机、Mac/Linux 本机和 Fly.io。默认（Compose）以两个独立容�
 ## 生产架构（当前）
 
 生产运行的是**无服务器控制平面**：Cloudflare Worker + D1 作为唯一状态与唯一的时钟，
-GitHub Actions 作为一次性执行平面，Telegram 提供耐久媒体与人工审核。
+GitHub Actions 作为一次性执行平面（当前为 hosted runner；其作为 Pixiv 数据执行面的资格
+需单独做 egress 验证，见下），Telegram 提供耐久媒体与人工审核。
 
 ```
 Cloudflare Worker + D1  (cron */10 = 唯一的时钟；账本、admission、审核状态)
@@ -34,6 +35,7 @@ cron 丢整天、两个时钟重复投稿 —— 这些是**结构问题**，重
 - 部署、迁移、凭据与账号管理、执行平面契约、可观测性、runbook：**[docs/SERVERLESS-OPERATIONS.md](docs/SERVERLESS-OPERATIONS.md)**
 - 上线步骤、回滚、验收判据、Fly 退役：**[docs/SERVERLESS-CUTOVER.md](docs/SERVERLESS-CUTOVER.md)**
 - 上线门禁（只读）：`scripts/cutover-preflight.sh`
+- 执行面出口限流事故（2026-09-11，GitHub hosted runner 真实 workload 下持续 429 / penalty）：**[docs/incidents/2026-09-11-pixiv-egress-rate-limit.md](docs/incidents/2026-09-11-pixiv-egress-rate-limit.md)**
 
 > 下面「我该选哪种部署？」里的 **Fly / Compose / systemd** 是**旧的常驻架构**，保留作为
 > 回滚目标与本地/自托管用途，直到 §8 的 Fly 退役完成。生产不再走它们。
