@@ -38,6 +38,11 @@ cron 丢整天、两个时钟重复投稿 —— 这些是**结构问题**，重
 > 下面「我该选哪种部署？」里的 **Fly / Compose / systemd** 是**旧的常驻架构**，保留作为
 > 回滚目标与本地/自托管用途，直到 §8 的 Fly 退役完成。生产不再走它们。
 
+> ⚠️ **退役状态下的 Fly 也必须无法参与生产**：`autostart=false`，且不得存在任何会唤醒它的
+> watchdog。否则它会与 Worker 抢同一个 Pixiv 凭据、并在启动时抢回 Telegram webhook ——
+> 2026-09-11 的两次投稿就是这样全灭的。回滚是**显式的两步**：`machine start` +
+> 操作员 `setWebhook`。详见 [docs/SERVERLESS-CUTOVER.md](docs/SERVERLESS-CUTOVER.md) §8.1。
+
 ## 我该选哪种部署？（旧的常驻架构）
 
 - **不用 Fly**：有 Docker 用 **Docker Compose**；不想用 Docker 用 **systemd / 裸机**。
