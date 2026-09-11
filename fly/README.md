@@ -1,62 +1,76 @@
-# Fly.io 512 MiB 部署
+# Fly 部署：两个应用
 
-本配置复用仓库根目录的联合 Dockerfile，运行 TelePost 2.10、PixivFlow 2.10 和最多
-两个 Bot，不启动 WebUI。真实凭据全部放 Fly Secrets。
+本目录只有两份拓扑来源，各自对应一个 Fly 应用。完整契约见
+[../docs/ARCHITECTURE.md](../docs/ARCHITECTURE.md)。
+
+| 文件 | 应用 | 角色 | 关键参数 |
+| --- | --- | --- | --- |
+| `deploy.telepost.toml` | `telesubmit-multi-bot` | 常驻：webhook / 投稿 API / 审核 / 发布 | `auto_stop_machines=false`、`min_machines_running=1`、`force_https=false`（Flycast 投递）、长期健康检查 |
+| `deploy.pixivflow.toml` | `pixivflow-scheduler` | 执行端：平时停止、被触发唤醒、跑完自行退出 | `auto_start_machines=true`、`auto_stop_machines=false`、`min_machines_running=0`、`restart.policy=no`、**无健康检查** |
+
+## 部署
 
 ```bash
-# 在仓库根目录执行；先修改 toml 中 app、WEBHOOK_URL 与 volume source
-fly config validate -c fly/deploy.fly-multi-bot.toml
-fly secrets set -a your-app-name \
+# 先把两份配置里的 app 改成自己的名字
+fly config validate -c fly/deploy.telepost.toml
+fly config validate -c fly/deploy.pixivflow.toml
+
+# 业务端（常驻）
+fly volumes create data -a <your-telepost-app> --size 1 --region iad
+fly deploy -c fly/deploy.telepost.toml --ha=false
+
+# 执行端（独立卷；卷名必须与 deploy.pixivflow.toml 的 mounts.source 一致）
+fly volumes create pixivflow_data -a <your-pixivflow-app> --size 1 --region iad
+fly deploy -c fly/deploy.pixivflow.toml --ha=false
+```
+
+`--ha=false` 是必需的：每个应用只有一台机器，而卷只能挂在一台机器上。
+
+## Secrets
+
+```bash
+# 业务端
+fly secrets set -a <your-telepost-app> \
   BOT1_TOKEN=... BOT1_CHANNEL_ID=... BOT1_OWNER_ID=... \
   BOT2_TOKEN=... BOT2_CHANNEL_ID=... BOT2_OWNER_ID=... \
-  PIXIV_REFRESH_TOKEN=... \
   TELEPOST_BOT1_SUBMIT_TOKEN=... TELEPOST_BOT2_SUBMIT_TOKEN=...
-fly deploy -c fly/deploy.fly-multi-bot.toml --now
+
+# 执行端：只有 Pixiv 凭据 + 投稿令牌 + 触发令牌。这里不该出现任何 Telegram 令牌。
+fly secrets set -a <your-pixivflow-app> \
+  PIXIV_CLIENT_ID=... PIXIV_CLIENT_SECRET=... PIXIV_DEVICE_TOKEN=... PIXIV_REFRESH_TOKEN=... \
+  TELEPOST_BOT1_SUBMIT_TOKEN=... TELEPOST_BOT2_SUBMIT_TOKEN=... \
+  SCHEDULER_TRIGGER_TOKEN=...
 ```
 
-首次部署前创建持久卷；更新已有应用前先创建 volume snapshot。部署后检查：
+Cloudflare 时钟需要相同的触发令牌：
 
 ```bash
-curl https://your-app.fly.dev/health
-curl -H "Authorization: Bearer $TELEPOST_BOT1_SUBMIT_TOKEN" \
-  https://your-app.fly.dev/api/bot1/v1/health
+cd control-plane && npx wrangler secret put SCHEDULER_TRIGGER_TOKEN
 ```
 
-更新任务：
+`wrangler.toml` 里的 `PIXIVFLOW_TRIGGER_BASE_URL` 指向执行端应用地址；cron 表达式与
+`src/cron-map.ts` 的键必须一致（`npm test` 会核对）。
+
+## 为什么执行端没有健康检查
+
+探测本身就是请求，而请求会唤醒已停止的机器。一个刚决定收工的执行端会被自己的健康检查
+无限叫醒，于是既回不到 stopped，也永远在计费。停机由执行端自己的账本决定
+（`schedulerRuntime.exitWhenIdle`），不是由平台探测推断。
+
+同理，**不要**给执行端加 `auto_stop_machines`：代理看到的是「HTTP 连接已空闲」，
+而下载还在后台跑（实测 10–40 分钟），按空闲停机会把批次拦腰砍断。
+
+## 更新配置
+
+- PixivFlow 的运行配置随镜像发布（`pixivflow/config/production.json`，`watchConfig=false`）：
+  改配置 = 改提交/版本 + 重新部署执行端。
+- TelePost 的部署默认值来自 `[env]`；OWNER 可在 Telegram 用 `/botconfig` 覆盖单个 Bot，
+  只重载对应 Bot。
+- 批量策略：`../scripts/apply_telepost_policy.sh`（会重启机器，不动卷）。
+
+## 部署后核对
 
 ```bash
-./fly/scripts/update_pixivflow_config.sh your-app-name ./pixivflow.json
-./fly/scripts/update_telepost_policy.sh your-app-name ./telepost-policy.json --dry-run
-./fly/scripts/update_telepost_policy.sh your-app-name ./telepost-policy.json
+../scripts/verify-production.sh     # 只读：参数、状态、触发鉴权、webhook 归属
+../scripts/verify-images.sh         # 只读：线上镜像/提交号是否等于仓库固定的那个
 ```
-
-## 镜像部署与源码部署
-
-Fly 模板不使用 `[build].image`，而通过 `docker/telepost.Dockerfile` 和
-`docker/pixivflow.Dockerfile` 透传固定 Release 镜像，避免它静默覆盖命令行的
-`--dockerfile`。
-
-`docker/combined.Dockerfile` 只用于已发布 TelePost/PixivFlow 版本。要把尚未发布的
-PixivFlow 提交部署到分拆实例，只能使用：
-
-```bash
-./deploy --platform fly --config fly/pixivflow-split.toml source ../PixivFlow
-```
-
-源码目录必须是干净的 PixivFlow Git 工作区。工具会将 Git SHA 写入镜像标签和
-`PIXIVFLOW_REVISION`，部署后两处均匹配才返回成功。
-
-PixivFlow 配置原子热加载，不重启。日常修改单个 TelePost Bot 可由 OWNER 在 Telegram
-使用 `/botconfig`，只重载对应 Bot；上面的批量策略脚本通过 staged secrets 一次部署，
-会重启 Machine，但不会重建/删除持久卷。
-
-## 自动休眠（auto-stop）省账单
-
-流量是「大部分时间没人 + 每天几个间断高峰」时，配置使用
-`auto_stop_machines = "suspend"`：无流量时机器挂起（不计 CPU，RAM 状态保留，
-唤醒只重放持久状态，比冷启动的 `"stop"` 明显更快），来流量由 proxy 自动唤醒。
-前提是 Webhook 模式（webhook 是唤醒信号）。健康检查打 `/ready`（所有 bot 子进程
-`initialize()+start()` 完成才 200，冷启动期间 503），`/live` 恒 200 仅表示进程存活、
-`/health` 是 auto-stop 唤醒入口。完整机制、睡眠比例→账单换算、以及
-「双 Bot 拆一台 256 + PixivFlow 拆自己机器」的拓扑与改动面，见
-[docs/AUTOSTOP.md](../docs/AUTOSTOP.md)。

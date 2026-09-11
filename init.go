@@ -22,19 +22,18 @@ import (
 //go:embed caddy/Caddyfile
 //go:embed proxy
 //go:embed docker
-//go:embed fly/deploy.fly-multi-bot.toml
-//go:embed fly/deploy.fly-autosleep.toml
 //go:embed fly/deploy.telepost.toml
 //go:embed fly/deploy.pixivflow.toml
 var scaffold embed.FS
 
 // 与 docker-compose/.env 基线保持一致（发版时同步更新）。
-// 已知兼容版本：PixivFlow 2.12.0（durable occurrences + external clock +
-// generic provenance）与 TelePost 2.15.0（generic source_label/source_ref/
-// scheduled_at 入参）。
+//
+// Fly 拓扑只有一种：常驻的 TelePost 应用 + 独立的 PixivFlow 执行工作器。
+// 没有「同一容器里再拉起 PixivFlow」的合并拓扑，也没有平台侧按空闲推断停机的
+// autosleep 拓扑——后者会在下载进行中就停掉机器。
 const (
 	telepostBaseline = "2.17.2"
-	pixivBaseline    = "2.12.0"
+	pixivBaseline    = "2.18.1"
 )
 
 // 向导场景（answers 里的 SCENARIO 键；缺省 = polling）。
@@ -202,12 +201,10 @@ func wizard() map[string]string {
 			}
 		case "4":
 			answers["SCENARIO"] = scenarioFly
-			// 生命周期：autosleep（停机省钱，需要外部时钟）vs always-on（常驻、内部 cron）。
-			if lc, err := read("Fly 生命周期？\n      1) autosleep（默认推荐：空闲停机最省钱，需配外部时钟 Cloudflare/cron，见 docs/AUTOSTOP.md）\n      2) always-on（常驻，内部 cron 定时）\n    输入 1-2 或回车=1"); err == nil && strings.TrimSpace(lc) == "2" {
-				answers["FLY_LIFECYCLE"] = "always-on"
-			} else {
-				answers["FLY_LIFECYCLE"] = "autosleep"
-			}
+			// Fly 拓扑不再有生命周期选项：
+			//   TelePost 常驻（冷启动对用户可见，且没有空闲可省），
+			//   PixivFlow 平时停止、被认证触发唤醒、跑完按自己的账本退出。
+			answers["FLY_LIFECYCLE"] = "split"
 		}
 	}
 	return answers
@@ -234,6 +231,7 @@ func writeScaffold(dir string, answers map[string]string) error {
 		{"docker/combined.Dockerfile", "docker/combined.Dockerfile", 0o644},
 		{"docker/telepost.Dockerfile", "docker/telepost.Dockerfile", 0o644},
 		{"docker/pixivflow.Dockerfile", "docker/pixivflow.Dockerfile", 0o644},
+		{"docker/pixivflow-scheduler.Dockerfile", "docker/pixivflow-scheduler.Dockerfile", 0o644},
 	}
 	for _, f := range files {
 		data, err := scaffold.ReadFile(f.src)
@@ -288,35 +286,40 @@ func fillEnv(tpl []byte, answers map[string]string) []byte {
 
 // writeFlyTpl 生成 ./telesubmit.fly.toml（把内嵌模板的镜像基线刷新到当前值）。
 func writeFlyTpl(dir string, answers map[string]string) error {
-	tpl := "fly/deploy.fly-multi-bot.toml"
-	if answers["FLY_LIFECYCLE"] == "autosleep" || answers["FLY_LIFECYCLE"] == "" {
-		tpl = "fly/deploy.fly-autosleep.toml"
+	// 拆分以后根目录不能再只生成一份「TelePost + PixivFlow 同机」的配置：那份配置
+	// 本身就是混部拓扑的来源。这里按仓库里唯一的两份拓扑来源各生成一份。
+	out := []struct{ src, dst string }{
+		{"fly/deploy.telepost.toml", "telesubmit.fly.toml"},
+		{"fly/deploy.pixivflow.toml", "pixivflow.fly.toml"},
 	}
-	data, err := scaffold.ReadFile(tpl)
-	if err != nil {
-		return fmt.Errorf("读取内嵌 fly 模板: %w", err)
-	}
-	lines := strings.Split(string(data), "\n")
-	for i, line := range lines {
-		tr := strings.TrimSpace(line)
-		switch {
-		case strings.HasPrefix(tr, "TELEPOST_IMAGE"):
-			lines[i] = "  TELEPOST_IMAGE = \"" + telepostRepo + ":" + telepostBaseline + "\""
-		case strings.HasPrefix(tr, "PIXIVFLOW_VERSION"):
-			lines[i] = "  PIXIVFLOW_VERSION = \"" + pixivBaseline + "\""
+	for _, f := range out {
+		data, err := scaffold.ReadFile(f.src)
+		if err != nil {
+			return fmt.Errorf("读取内嵌 fly 模板: %w", err)
+		}
+		lines := strings.Split(string(data), "\n")
+		for i, line := range lines {
+			tr := strings.TrimSpace(line)
+			switch {
+			case strings.HasPrefix(tr, "app = "):
+				// 生产 app 名不属于公开模板，留占位符由部署者填写。
+				lines[i] = "app = '<your-app-name>'"
+			case strings.HasPrefix(tr, "TELEPOST_IMAGE"):
+				lines[i] = "  TELEPOST_IMAGE = \"" + telepostRepo + ":" + telepostBaseline + "\""
+			case strings.HasPrefix(tr, "PIXIVFLOW_VERSION"):
+				lines[i] = "  PIXIVFLOW_VERSION = \"" + pixivBaseline + "\""
+			case strings.HasPrefix(tr, "dockerfile = '../docker/"):
+				// 模板放在 fly/ 下，配置写到仓库根目录后相对路径要跟着变。
+				lines[i] = strings.Replace(line, "'../docker/", "'docker/", 1)
+			}
+		}
+		dst := filepath.Join(dir, f.dst)
+		if err := os.WriteFile(dst, []byte(strings.Join(lines, "\n")), 0o644); err != nil {
+			return fmt.Errorf("写入 %s: %w", f.dst, err)
 		}
 	}
-	dst := filepath.Join(dir, "telesubmit.fly.toml")
-	if err := os.WriteFile(dst, []byte(strings.Join(lines, "\n")), 0o644); err != nil {
-		return err
-	}
-	if tpl == "fly/deploy.fly-autosleep.toml" {
-		okf("已生成 telesubmit.fly.toml（autosleep：TelePost %s + PixivFlow %s；空闲停机，需配外部时钟 + SCHEDULER_TRIGGER_TOKEN）",
-			telepostBaseline, pixivBaseline)
-		infof("autosleep 下一步：设置 SCHEDULER_TRIGGER_TOKEN secret；data/pixivflow/config.json 已含 schedulerRuntime.mode=external；配置 scheduler/cloudflare（SCHEDULES 映射到你的 schedule id）。")
-	} else {
-		infof("已生成 telesubmit.fly.toml（always-on 常驻：TelePost %s + PixivFlow %s，内部 cron；请修改 app 名）",
-			telepostBaseline, pixivBaseline)
-	}
+	okf("已生成两份 Fly 配置：telesubmit.fly.toml（TelePost %s，常驻）+ pixivflow.fly.toml（外部时钟唤醒、跑完自行退出）",
+		telepostBaseline)
+	infof("下一步：把两份配置里的 app 名改成自己的；PixivFlow 需要把 PIXIVFLOW_REF 换成 40 位提交号（或发布 tag）；TelePost secrets 见 .env，PixivFlow secrets 见 docs/ARCHITECTURE.md。")
 	return nil
 }
