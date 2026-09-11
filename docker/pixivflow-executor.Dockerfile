@@ -46,6 +46,10 @@ RUN tar -xf /tmp/ffmpeg.tar.xz -C /tmp \
 
 WORKDIR /app/pixivflow
 COPY --from=build /build/dist ./dist
+# Workspace packages: node_modules/@redtidev/* are RELATIVE symlinks into
+# packages/, so the packages dir (with their built dist) must ship too or the
+# runtime dies with MODULE_NOT_FOUND '@redtidev/pixiv-client'.
+COPY --from=build /build/packages ./packages
 COPY --from=build /build/node_modules ./node_modules
 COPY --from=build /build/package.json ./
 COPY --from=build /tmp/PIXIVFLOW_COMMIT /app/PIXIVFLOW_COMMIT
