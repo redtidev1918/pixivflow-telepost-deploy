@@ -52,7 +52,7 @@ EXECUTION_PROVIDER = "fly"
 # public service, no scheduler.
 FLY_APP = "pixivflow-executor"
 FLY_REGION = "iad"
-FLY_IMAGE = "registry.fly.io/pixivflow-executor:deployment-01M28B0M4ZR5ZK45F8RRFBM7QT"
+FLY_IMAGE = "registry.fly.io/pixivflow-executor:"
 # Secrets (set with `wrangler secret put`, never committed):
 #   FLY_API_TOKEN         Machines API token, app-scoped to pixivflow-executor
 #   FLY_EXECUTOR_SECRET   bearer for Fly executor routes ONLY (claim/items/
