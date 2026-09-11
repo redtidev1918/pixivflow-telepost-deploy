@@ -61,5 +61,5 @@ primary_region = 'iad'
     timeout = '10s'
     path = '/health'
 
-[restart]
+[[restart]]
   policy = 'always'
