@@ -32,7 +32,7 @@ var scaffold embed.FS
 // 没有「同一容器里再拉起 PixivFlow」的合并拓扑，也没有平台侧按空闲推断停机的
 // autosleep 拓扑——后者会在下载进行中就停掉机器。
 const (
-	telepostBaseline = "2.17.2"
+	telepostBaseline = "2.17.3"
 	pixivBaseline    = "2.18.1"
 )
 
