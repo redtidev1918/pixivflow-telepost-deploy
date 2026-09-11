@@ -90,7 +90,18 @@ describe('pixivflow worker topology', () => {
     expect(fly).toMatch(/auto_start_machines\s*=\s*true/);
     expect(fly).toMatch(/auto_stop_machines\s*=\s*false/);
     expect(fly).toMatch(/min_machines_running\s*=\s*0/);
-    expect(fly).toMatch(/\[restart\][\s\S]*?policy\s*=\s*['"]no['"]/);
+    // The source config uses the fly.toml spelling. The Machines API normalizes
+    // it to "no" at runtime, and flyctl rejects "no" here, so the source must
+    // say "never" — the two spellings are asserted separately on purpose.
+    //
+    // Comments are stripped first: the config explains the normalization in
+    // prose, and a negative assertion that reads prose would fail on the
+    // explanation instead of on the value.
+    const code = withoutComments(fly);
+    expect(code).toMatch(/\[\[restart\]\][\s\S]*?policy\s*=\s*['"]never['"]/);
+    expect(code, 'fly.toml must use "never", not the Machines-API spelling').not.toMatch(
+      /policy\s*=\s*['"]no['"]/,
+    );
   });
 
   it('carries no liveness probe that would fight the stopped state', () => {
@@ -144,10 +155,28 @@ describe('pixivflow runtime config', () => {
   });
 
   it('puts every mutable path on the volume, never in the image', () => {
-    expect(config.storage.databasePath).toMatch(/^\/app\/data\//);
-    for (const key of ['downloadDirectory', 'illustrationDirectory', 'novelDirectory']) {
-      expect(config.storage[key], key).toMatch(/^\/app\/data\//);
+    // Relative, not absolute. PixivFlow's loader rewrites absolute paths that fall
+    // outside the config directory (/app/config) back to its own defaults, and its
+    // default download directory is the EPHEMERAL /app/downloads. Relative paths
+    // resolve against the project root /app, so ./data/... lands on the mounted
+    // volume -- which is the only reason the ledger survives a machine restart.
+    expect(config.storage.databasePath).toBe('./data/pixivflow.db');
+    expect(config.storage.downloadDirectory).toBe('./data/downloads');
+    for (const [key, value] of Object.entries(config.storage)) {
+      expect(String(value), `${key} must stay relative`).not.toMatch(/^\//);
     }
+    expect(read('fly/deploy.pixivflow.toml')).toMatch(/destination\s*=\s*['"]\/app\/data['"]/);
+  });
+
+  it('can prove which commit it is running', () => {
+    const dockerfile = read('docker/pixivflow-scheduler.Dockerfile');
+    // scripts/write-version.js bakes GIT_COMMIT into the process's own startup report.
+    // Without it every image -- pinned or not -- says commit "dev", and the machine
+    // cannot answer "which code is this?".
+    expect(dockerfile).toMatch(/GIT_COMMIT=.*npm run build/);
+    // verify-images.sh greps the startup log for this token; if the entrypoint stops
+    // printing it, the provenance check silently degrades to a skip.
+    expect(dockerfile).toMatch(/PIXIVFLOW_REVISION=\$\{PIXIVFLOW_REVISION/);
   });
 
   it('delivers finished work to TelePost and can do nothing else', () => {
