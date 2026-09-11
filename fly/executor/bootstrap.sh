@@ -23,7 +23,10 @@
 set -uo pipefail
 
 : "${EXECUTION_ID:?}" "${SLOT_ID:?}" "${SCHEDULE_ID:?}" "${ATTEMPT:?}" "${BOT_ID:?}" "${MODE:?}" "${CREDENTIAL_KEY:?}" "${CALLBACK_URL:?}" "${CONTROL_PLANE_URL:?}"
-: "${CONTROL_SECRET:?}"
+# The executor's own bearer (Fly app secret), deliberately NOT CALLBACK_SECRET:
+# its reach is limited to the runner routes by the control plane's auth split.
+: "${FLY_EXECUTOR_SECRET:?}"
+CONTROL_SECRET="$FLY_EXECUTOR_SECRET"
 
 WORK=/tmp/work
 mkdir -p "$WORK"
