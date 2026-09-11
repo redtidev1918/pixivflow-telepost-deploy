@@ -159,6 +159,8 @@ export interface ExecutionRow {
   error: string | null;
   errorClass: string | null;
   result: string | null;
+  /** The credential this execution holds while it is open; `null` for legacy rows. */
+  credentialKey?: string | null;
 }
 
 /**
@@ -168,13 +170,28 @@ export interface ExecutionRow {
  */
 export interface ExecutionStore {
   /** Idempotent: (slot_id, attempt) is unique, so a racing sweep cannot double-open. */
+  /**
+   * Open an execution, acquiring its credential as part of the same statement.
+   *
+   * Returns `credential-busy` when another open execution already holds
+   * `credentialKey` at its declared concurrency. That refusal has to be atomic with
+   * the insert: a read-then-insert lets two reconcilers both observe a free
+   * credential and both dispatch, which pushes the account into the rate-limit
+   * cooldown the admission exists to prevent.
+   *
+   * `credentialKey` is optional so historical rows and non-credential executions
+   * stay representable, but a caller that omits it opts out of admission entirely.
+   */
   openExecution(input: {
     id: string;
     slotId: string;
     attempt: number;
     provider: string;
     nowMs: number;
-  }): Promise<'created' | 'exists'>;
+    credentialKey?: string;
+    /** Declared concurrency for that credential. Defaults to 1. */
+    maxConcurrent?: number;
+  }): Promise<'created' | 'exists' | 'credential-busy'>;
   getExecution(executionId: string): Promise<ExecutionRow | null>;
   /** Newest execution for a slot (used to decide retry eligibility). */
   latestExecutionForSlot(slotId: string): Promise<ExecutionRow | null>;

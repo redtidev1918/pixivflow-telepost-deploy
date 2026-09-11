@@ -170,9 +170,23 @@ export class MemoryControlStore implements ControlPlaneStore {
     attempt: number;
     provider: string;
     nowMs: number;
-  }): Promise<'created' | 'exists'> {
+    credentialKey?: string;
+    maxConcurrent?: number;
+  }): Promise<'created' | 'exists' | 'credential-busy'> {
     const key = `${input.slotId}#${input.attempt}`;
     if (this.executions.has(key)) return 'exists';
+    // Check and insert with no await in between, mirroring the single conditional
+    // INSERT the real store uses: the guard has to be atomic with the write, or two
+    // reconcilers can both acquire one credential.
+    if (input.credentialKey) {
+      const limit = input.maxConcurrent ?? 1;
+      const holders = [...this.executions.values()].filter(
+        (execution) =>
+          execution.credentialKey === input.credentialKey &&
+          ['dispatching', 'dispatched', 'running'].includes(execution.status)
+      ).length;
+      if (holders >= limit) return 'credential-busy';
+    }
     this.createdExecutions += 1;
     this.executions.set(key, {
       id: key,
@@ -185,6 +199,7 @@ export class MemoryControlStore implements ControlPlaneStore {
       dispatchedAt: null,
       startedAt: null,
       completedAt: null,
+      credentialKey: input.credentialKey ?? null,
       error: null,
       errorClass: null,
       result: null,

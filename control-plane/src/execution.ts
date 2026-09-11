@@ -14,6 +14,7 @@
  *    no local process state is ever treated as evidence.
  */
 
+import { CREDENTIAL_ADMISSION } from './schedules';
 import type { ExecutionProvider, ProviderConclusion, ProviderRun } from './provider';
 import {
   isTerminalExecution,
@@ -79,9 +80,20 @@ export async function startAttempt(
     attempt: input.attempt,
     provider: provider.name,
     nowMs,
+    // Credential admission rides in this insert. Reconciliation already refused to
+    // dispatch an occurrence whose credential is held, but that decision is a read
+    // followed by a write; this is the atomic half, so two concurrent reconcilers
+    // cannot both acquire the same account.
+    credentialKey: input.credentialKey,
+    maxConcurrent: CREDENTIAL_ADMISSION[input.credentialKey] ?? 1,
   });
   if (opened === 'exists') {
     return { executionId, dispatched: false, detail: 'attempt already open' };
+  }
+  if (opened === 'credential-busy') {
+    // Not an error and not a retry: the occurrence stays pending and a later sweep
+    // dispatches it once the holder is terminal.
+    return { executionId, dispatched: false, detail: 'credential busy' };
   }
 
   // The slot is marked dispatched BEFORE the provider call: if the process dies
