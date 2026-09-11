@@ -453,6 +453,12 @@ Fly 可以存在、可以保留 volume/SQLite、可以作为回滚镜像，但�
 lookback 窗口内的 occurrence，见 §9 与 `docs/SERVERLESS-OPERATIONS.md` §8），
 这正是它取代 Fly watchdog 的原因。
 
+> **补充（2026-09-11，egress 限流）**：即便只剩一个执行平面，GitHub hosted runner 在真实
+> workload 下仍反复进入 Pixiv 限流 cooldown 并死在 30 分钟 watchdog（run `34558034050`）。
+> 这是**出口（egress）限流**问题，与 §8.1 的"双平面抢凭据"是两件事。GitHub hosted runner
+> 当前不视为已验证的 Pixiv 生产执行面；执行面选择见
+> `docs/incidents/2026-09-11-pixiv-egress-rate-limit.md` 与 `SERVERLESS-ARCHITECTURE.md` §9。
+
 ## 9. 完整生产周期判据（跑完才停 Fly）
 
 新系统独立承担 `10:00 / 10:10 / 18:00 / 18:10`，全部满足才算通过：

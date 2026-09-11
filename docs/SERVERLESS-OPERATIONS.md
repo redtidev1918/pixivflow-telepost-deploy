@@ -16,7 +16,7 @@ rollback, the acceptance evidence).
 | control plane | Cloudflare Worker `pixivflow-control-plane` | `https://pixivflow-control-plane.redtidev1918.workers.dev` |
 | ledger | D1 `pixivflow-control` | id `1fa00cbc-6dcc-4a89-ba8f-30cf79cc286b` (APAC) |
 | clock | Worker cron | `*/10 * * * *` — see §2 |
-| execution plane | GitHub Actions `pixivflow-batch.yml` | repo `redtidev1918/pixivflow-telepost-deploy` |
+| execution plane | GitHub Actions `pixivflow-batch.yml` (hosted runner; **not production-qualified for the Pixiv data plane** — see §10) | repo `redtidev1918/pixivflow-telepost-deploy` |
 | execution engine | PixivFlow (pinned ref) | `PIXIVFLOW_REF` in `control-plane/wrangler.toml` |
 | review surface | Telegram | the review group + the private channel |
 
@@ -224,3 +224,36 @@ EXPECT_OWNER=worker scripts/cutover-preflight.sh  # after cutover or rollback
 
 `SERVERLESS-CUTOVER.md` holds the ordered procedure: cutover, rollback (one
 `setWebhook` per bot), the acceptance criteria, and Fly decommission.
+
+## 10. Execution Provider Qualification
+
+The control plane and the Pixiv data plane are independent choices. A provider must pass
+an egress qualification before it runs `pixiv-main` in production. The probes are minimal
+by design: a full business batch conflates "the search scope is large" with "the egress is
+throttled".
+
+- **OAuth probe** — `oauth.secure.pixiv.net`: record DNS, TLS, HTTP status, latency.
+- **App API probe** — one small fixed request (never 12 tags / 100 samples / pagination):
+  HTTP status, TTFB, 429, `Retry-After`, request latency.
+- **Media probe** — one known-accessible media URL with `Range: bytes=0-65535` and
+  `Referer: https://app-api.pixiv.net/`: HTTP 200/206/403/429, TTFB, 64 KiB duration, timeout.
+- **Burst probe** — a small, controlled run of consecutive requests, only to detect an
+  egress that enters 429 abnormally easily; it must not drive the account into penalty.
+
+Run the same probes against the same credential, endpoint, request shape, User-Agent and
+Referer on GitHub hosted / Cloudflare Worker / Fly / VPS / self-hosted runner, and record a
+uniform table:
+
+```text
+Provider / Region / public ASN:
+OAuth:   status, latency
+App API: status, latency, Retry-After, 429
+Media:   status, TTFB, 64 KiB duration
+Verdict: PASS / DEGRADED / FAIL
+```
+
+TODO: a single `pixivflow diagnose egress` (or `scripts/detect-pixiv-egress.*`) so the A/B
+is one command, not hand-rolled curls — modelled on DeviantDrop's `scripts/detect-da.mjs`,
+which already draws the same line for a different platform: Telegram/control logic is not
+the same thing as third-party data-plane egress. See
+`docs/incidents/2026-09-11-pixiv-egress-rate-limit.md`.
