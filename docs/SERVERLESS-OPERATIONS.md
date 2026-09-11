@@ -208,6 +208,7 @@ The suite covers, and the risky ones were also exercised against real infrastruc
 | callback replay | one publish, `applied:false` on the replayed report |
 | approve/reject race | one winner every round, live on real D1 |
 | rate limiting | bounded backoff, server `Retry-After` honoured, admission serialises |
+| two reconcilers racing for one credential | the guard is inside the INSERT that opens the execution, so exactly one acquires; the loser is `held`, not an error |
 | a retired plane competing for the credential | 2026-09-11, live: removed the wake trigger, disabled auto-start, restored webhook ownership. The exhausted occurrence was recovered through the operator primitive, not a hand-edited row |
 | exhausted automatic attempts after an external fault | `POST /control/occurrences/:slotId/requeue` grants attempt N+1 without rewriting the N that failed |
 | crashed publish | the stale-claim reaper: provable → `published`, otherwise `uncertain` |
