@@ -12,62 +12,35 @@ topic or ranking, TelePost handles review and channel publishing. One config cov
 overseas VPS, a mainland-China server, a NAT-only host without public ingress, a local
 macOS/Linux machine, and Fly.io. The default (Compose) topology runs two independent
 containers — a TelePost multi-bot supervisor and a PixivFlow scheduler — each pulling a
-`ghcr` image and talking over HTTP, sized for 512 MiB machines with no WebUI. Fly.io can
-optionally use a combined image.
+`ghcr` image and talking over HTTP, sized for 512 MiB machines with no WebUI.
 
-## Production architecture (current)
+> ⚠️ **Two things claiming to be authoritative is how the 2026-09-11 incident happened**:
+> the submission bot's webhook pointed at the Worker, and every user submission was
+> "acknowledged then dropped". Today there is exactly one webhook owner (TelePost) and one
+> execution ledger (PixivFlow). The legacy implementation and its acceptance scripts are
+> deleted, and guard tests stop them from returning.
 
-Production runs a **serverless control plane**: a Cloudflare Worker plus D1 as the only
-state store and the only clock, GitHub Actions as a one-shot execution plane, and
-Telegram providing durable media and human review.
+## Production topology: two apps and one clock
 
-```
-Cloudflare Worker + D1  (cron */10 = the only clock; ledger, admission, review state)
-        │  workflow_dispatch
-        ▼
-GitHub Actions          (one-shot runner: one occurrence, destroyed when done)
-        │  HTTPS claim / result
-        ▼
-Telegram                (media uploaded once; publishing is a server-side copyMessage)
-```
+There is exactly one production topology, and it has three planes (full contract in
+**[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)**):
 
-**Why the change**: machine sleep, HTTP relay timeouts, long-lived scheduler processes,
-leases left behind by crashes, one missed cron losing a whole day, two clocks causing
-duplicate posts — these are **structural** problems that no amount of retrying fixes. The
-new architecture makes each class **impossible by construction** instead of "handled better".
+- **Cloudflare only decides *when to wake* something up**: cron → schedule id → a
+  single token-bearing POST. It computes no occurrence and writes no business table.
+  See `control-plane/` and [docs/SCHEDULING.md](docs/SCHEDULING.md).
+- **PixivFlow** (`fly/deploy.pixivflow.toml`): its own machine and volume, **stopped by
+  default**, woken by the trigger through the platform proxy, and it exits on its own
+  once its own ledger is empty (`exitWhenIdle`).
+- **TelePost** (`fly/deploy.telepost.toml`): **always on**, the only holder of Telegram
+  credentials and the only component that can publish to a channel. Nothing reaches a
+  channel without human approval.
 
-- Architecture and invariants (English): **[docs/en/SERVERLESS-ARCHITECTURE.md](docs/en/SERVERLESS-ARCHITECTURE.md)**
-- Deployment, migration, credentials, execution-plane contract, observability, runbooks (English): **[docs/en/SERVERLESS-OPERATIONS.md](docs/en/SERVERLESS-OPERATIONS.md)**
-- Cutover steps, rollback, acceptance criteria, Fly retirement (Chinese): **[docs/SERVERLESS-CUTOVER.md](docs/SERVERLESS-CUTOVER.md)**
+Without Fly: **Docker Compose** is a single-machine self-host path (every role inside one
+container) and does not have the same boundaries as the production topology above; the
+difference is spelled out at the end of ARCHITECTURE. systemd/bare metal is the same story.
 
-> The Fly / Compose / systemd options below are the **legacy always-on architecture**,
-> kept as a rollback target and for local/self-hosted use. Production no longer uses them.
-> See [docs/SERVERLESS-CUTOVER.md](docs/SERVERLESS-CUTOVER.md) §8.
-
-> ⚠️ **A retired Fly app must not be able to join production**: `autostart=false`, and no
-> watchdog may wake it. Otherwise it competes for the same Pixiv credentials and steals the
-> Telegram webhook on boot. Rollback is an **explicit two-step** operation:
-> `machine start` plus an operator `setWebhook`.
-
-## Which deployment should I choose? (legacy always-on)
-
-- **Not using Fly**: with Docker use **Docker Compose**; without Docker use **systemd / bare
-  metal**. Both use an internal cron scheduler with a long-running process.
-- **Using Fly**:
-  - **Low traffic, cost-sensitive, cold start of a few seconds is fine** → **Fly Autosleep**:
-    1×512 MB, normally fully stopped; a Telegram webhook or an external clock (Cloudflare
-    Cron) sends an authenticated Slot HTTP request at 10:00/18:00 to wake it. See
-    [docs/SCHEDULING.md](docs/SCHEDULING.md), `fly/deploy.fly-autosleep.toml`,
-    `scheduler/cloudflare/`.
-  - **Want the least maintenance and can pay a few dollars a month** → **Fly Always-on**:
-    1×512 MB always on, internal cron, no external dependency.
-  - **Need service isolation / 512 MB measured insufficient** → **Fly Split**: PixivFlow
-    256 MB always on + TelePost 512 MB with autosleep.
-
-> The single source of truth for scheduled posting, shutdown, slot idempotency and
-> no-duplicate retries: **[docs/SCHEDULING.md](docs/SCHEDULING.md)** (Chinese).
-> The historical Fly autosleep design and its cold-start cost:
-> [docs/AUTOSTOP.md](docs/AUTOSTOP.md) (Chinese).
+> Scheduled posting, wake-up, shutdown, slot idempotency and no-duplicate delivery:
+> **[docs/SCHEDULING.md](docs/SCHEDULING.md)**.
 
 ## Features
 
@@ -101,7 +74,7 @@ new architecture makes each class **impossible by construction** instead of "han
 | No public ingress; Telegram/Pixiv reachable | `docker compose up -d` | AUTO picks Polling |
 | Domain with inbound 80/443 | `docker compose --profile webhook up -d` | AUTO picks Webhook |
 | Mainland China, proxy required | `docker compose --profile proxy up -d` | Polling + Mihomo |
-| Fly.io | `deploy` (recommended, below) or `fly deploy -c fly/deploy.fly-multi-bot.toml` | Webhook |
+| Fly.io | one command per app: `fly deploy -c fly/deploy.telepost.toml` and `fly deploy -c fly/deploy.pixivflow.toml` | Webhook |
 | Linux VPS (systemd, no Docker) | `deploy --platform systemd` | Polling (runs from source) |
 
 Both Polling and Webhook expose the same `http://127.0.0.1:8080/api/botN/v1/*`, so
@@ -149,7 +122,7 @@ go build -o deploy .
 ./deploy doctor                 # environment self-check (dependencies/config/login/network)
 ./deploy tp latest              # upgrade TelePost to latest and deploy (or pin e.g. 2.10.41)
 ./deploy pf 2.10.31             # upgrade PixivFlow to a specific version (ugoira->GIF needs >=2.10.31)
-./deploy --platform fly --config fly/pixivflow-split.toml source ../PixivFlow
+# production: set PIXIVFLOW_REF (40-char commit) in fly/deploy.pixivflow.toml, then fly deploy
 ./deploy status                 # status / health
 ./deploy logs 200               # last 200 log lines
 ./deploy version                # tool and current config version
@@ -228,7 +201,7 @@ Full documentation site: <https://redtidev1918.github.io/pixivflow-telepost-depl
 | Document | Content |
 | :-- | :-- |
 | [📥 Download](docs/download.md) | Per-platform `deploy` binaries (auto-updated on every release) |
-| [English docs index](docs/en/README.md) | English entry point, including the production serverless design and ops pages |
+| [English docs index](docs/en/README.md) | English entry point |
 | [SCENARIOS](docs/SCENARIOS.md) | Deployment scenario cheat sheet (Chinese) |
 | [SCHEDULING](docs/SCHEDULING.md) | Scheduled posting, shutdown, slot idempotency (Chinese) |
 | [ARCHITECTURE](docs/ARCHITECTURE.md) | Architecture and trust boundaries (Chinese) |

@@ -44,7 +44,7 @@ PixivFlow requires Node 22+.
 ## Fly.io
 
 ```bash
-cp fly/deploy.fly-multi-bot.toml ./telesubmit.fly.toml   # change the app name and version baseline
+./deploy init <dir>            # writes telesubmit.fly.toml (service) and pixivflow.fly.toml (worker)
 ./deploy doctor --platform fly        # checks flyctl login and friends
 ./deploy deploy --platform fly        # or ./deploy tp latest --platform fly
 ```
@@ -55,7 +55,7 @@ systemd. Having a public address does not force Webhook; when you cannot reliabl
 inbound HTTPS, Polling is simpler and more reliable.
 
 > Fly is **always-on** by default. To save money you can enable auto-stop, or split into two
-> 256 MiB machines — those are optional optimisations, see [AUTOSTOP.md](/AUTOSTOP.md)（中文）.
+> Production topology and lifecycle: see [ARCHITECTURE.md](ARCHITECTURE.md).
 
 ## Want the WebUI management panel?
 

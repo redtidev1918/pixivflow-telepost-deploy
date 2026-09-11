@@ -9,14 +9,28 @@
 
 ## Production design and operations
 
-These two pages are the authoritative English references for the serverless control plane
-that currently runs in production (Cloudflare Worker + D1).
+The single authoritative description of the production topology is
+**[架构与信任边界 / Architecture and trust boundaries](/ARCHITECTURE.md)** (Chinese). It states
+the three-repo responsibility contract in three sentences:
 
-| Document | Content |
-| :-- | :-- |
-| [Architecture and invariants](SERVERLESS-ARCHITECTURE.md) | Worker + D1 as the single clock and ledger; why each legacy failure mode is now structurally impossible |
-| [Deployment and operations](SERVERLESS-OPERATIONS.md) | Deployment, migration, credentials, execution-plane contract, observability and runbooks |
-| [Cutover handbook (中文)](/SERVERLESS-CUTOVER.md) | Ordered cutover steps, rollback, acceptance criteria and Fly retirement |
+1. **Cloudflare only decides *when* to wake**: cron expression → schedule id → one authenticated
+   POST. No occurrences, no timezones, no business tables, no D1.
+2. **PixivFlow only decides *what* to execute and *how* to deliver it reliably**: the schedule
+   domain, the slot ledger, the run lease, downloads and the delivery outbox. It is normally
+   stopped, is woken by the trigger, and exits once its own ledger is empty.
+3. **TelePost only decides *how submissions are reviewed and published***: the one always-on
+   service, the only holder of Telegram credentials, the only thing that can post to a channel.
+   Nothing reaches a channel before a human approves it.
+
+Read-only verification (never prints secrets):
+
+```bash
+./scripts/verify-production.sh    # three planes, lifecycle flags, trigger auth, webhook ownership
+./scripts/smoke-telepost.sh       # probes + submission API auth
+./scripts/smoke-pixivflow.sh      # stopped state + unauthorized trigger rejected
+./scripts/verify-webhooks.sh      # who owns the two bots' webhooks (needs BOT*_TOKEN)
+./scripts/verify-images.sh        # deployed image/commit vs the pinned expectation
+```
 
 ## Downloads
 
@@ -38,7 +52,7 @@ Start from the [documentation home](/), or jump directly to:
 | [MULTI-BOT (中文)](/MULTI-BOT.md) | Auto-discovering `BOT{N}_TOKEN`, adding bots, routing PixivFlow deliveries |
 | [SCHEDULING (中文)](/SCHEDULING.md) | Single source of truth for scheduled posting, slot idempotency and shutdown |
 | [PERFORMANCE (中文)](/PERFORMANCE.md) | Measuring first, then tuning levers; 256/512/1 GiB tiers |
-| [ARCHITECTURE (中文)](/ARCHITECTURE.md) | Core runtime vs. platform optimizations, process model, trust boundaries |
+| [ARCHITECTURE (中文)](/ARCHITECTURE.md) | The sole authority for the three-plane contract, lifecycle, persistence and trust boundaries |
 
 ## Links
 

@@ -11,53 +11,27 @@
 TelePost 负责投稿审核与频道发布。同一份配置可用于海外 VPS、国内服务器、无公网
 NAT 主机、Mac/Linux 本机和 Fly.io。默认（Compose）以两个独立容器运行：TelePost
 多 Bot supervisor 与 PixivFlow 调度器各自拉取 ghcr 镜像、经 HTTP 通信，适合
-512 MiB 小机器，不启动 WebUI；Fly 合一台可选走组合镜像（combined）。
+512 MiB 小机器，不启动 WebUI。
 
-## 生产架构（当前）
+> ⚠️ **同一件事有两个「权威」实现，就是 2026-09-11 事故的成因**：当时投稿机器人的 webhook
+> 被指向 Worker，用户投稿被「签收后丢弃」。今天只剩一个 webhook 负责人（TelePost）、
+> 一套执行账本（PixivFlow）。旧的实现与其上线门禁脚本已删除，守护测试会阻止它们回来。
 
-生产运行的是**无服务器控制平面**：Cloudflare Worker + D1 作为唯一状态与唯一的时钟，
-GitHub Actions 作为一次性执行平面，Telegram 提供耐久媒体与人工审核。
+## 生产拓扑：两个应用 + 一个时钟
 
-```
-Cloudflare Worker + D1  (cron */10 = 唯一的时钟；账本、admission、审核状态)
-        │  workflow_dispatch
-        ▼
-GitHub Actions          (一次性 runner：一次 occurrence，跑完即销毁)
-        │  HTTPS claim / result
-        ▼
-Telegram                (媒体只上传一次；发布是服务器端 copyMessage)
-```
+生产只有一种拓扑，由三个平面组成（完整契约见 **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)**）：
 
-**为什么换**：机器休眠、HTTP 中转超时、常驻调度进程、崩溃后残留的 lease、丢一次
-cron 丢整天、两个时钟重复投稿 —— 这些是**结构问题**，重试再好也修不掉。新架构让每
-一类都**由构造消除**，而不是"处理得更好"。
+- **Cloudflare 只决定「何时唤醒」**：cron → schedule 标识 → 一个带触发令牌的 POST，
+  不计算 occurrence、不写业务表。见 `control-plane/` 与 [docs/SCHEDULING.md](docs/SCHEDULING.md)。
+- **PixivFlow**（`fly/deploy.pixivflow.toml`）：独立机器 + 独立卷，**平时停止**，
+  被触发请求由平台代理自动唤醒，跑完由自己的账本决定退出（`exitWhenIdle`）。
+- **TelePost**（`fly/deploy.telepost.toml`）：**常驻**，唯一持有 Telegram 令牌、
+  唯一能发布到频道的服务；人工批准前任何作品都不会进频道。
 
-- 架构与不变量（含每一条旧失败模式为何不可能再发生，英文）：**[docs/en/SERVERLESS-ARCHITECTURE.md](docs/en/SERVERLESS-ARCHITECTURE.md)**
-- 部署、迁移、凭据与账号管理、执行平面契约、可观测性、runbook（英文）：**[docs/en/SERVERLESS-OPERATIONS.md](docs/en/SERVERLESS-OPERATIONS.md)**
-- 上线步骤、回滚、验收判据、Fly 退役：**[docs/SERVERLESS-CUTOVER.md](docs/SERVERLESS-CUTOVER.md)**
-- 上线门禁（只读）：`scripts/cutover-preflight.sh`
+不用 Fly 时：**Docker Compose** 是单机自托管路径（所有角色在一个容器内），
+它与上面的生产拓扑不是同一组边界，区别写在 ARCHITECTURE 末节；systemd / 裸机同理。
 
-> 下面「我该选哪种部署？」里的 **Fly / Compose / systemd** 是**旧的常驻架构**，保留作为
-> 回滚目标与本地/自托管用途，直到 §8 的 Fly 退役完成。生产不再走它们。
-
-> ⚠️ **退役状态下的 Fly 也必须无法参与生产**：`autostart=false`，且不得存在任何会唤醒它的
-> watchdog。否则它会与 Worker 抢同一个 Pixiv 凭据、并在启动时抢回 Telegram webhook ——
-> 2026-09-11 的两次投稿就是这样全灭的。回滚是**显式的两步**：`machine start` +
-> 操作员 `setWebhook`。详见 [docs/SERVERLESS-CUTOVER.md](docs/SERVERLESS-CUTOVER.md) §8.1。
-
-## 我该选哪种部署？（旧的常驻架构）
-
-- **不用 Fly**：有 Docker 用 **Docker Compose**；不想用 Docker 用 **systemd / 裸机**。
-  两者都用内部 cron（internal scheduler），进程常驻。
-- **用 Fly**：
-  - **低流量、想省钱、能接受冷启动几秒** → **Fly Autosleep**：1×512MB，平时完全停机，
-    Telegram webhook 或外部时钟（Cloudflare Cron）在 10:00/18:00 发受认证的 Slot HTTP 请求
-    把机器叫醒。见 [docs/SCHEDULING.md](docs/SCHEDULING.md)、`fly/deploy.fly-autosleep.toml`、`scheduler/cloudflare/`。
-  - **想最省心、不介意几美元/月** → **Fly Always-on**：1×512MB 常驻，内部 cron，无外部依赖。
-  - **要服务隔离 / 512MB 实测不够** → **Fly Split**：PixivFlow 256 常驻 + TelePost 512 休眠。
-
-> 定时投稿、省钱停机、Slot 幂等、重试不重复的完整原理与不变量：**[docs/SCHEDULING.md](docs/SCHEDULING.md)**。
-> Fly 自动休眠的历史方案与冷启动代价：[docs/AUTOSTOP.md](docs/AUTOSTOP.md)。
+> 定时、唤醒、停机、Slot 幂等、投递不重复的完整原理与不变量：**[docs/SCHEDULING.md](docs/SCHEDULING.md)**。
 
 ## 特性
 
@@ -92,7 +66,7 @@ cron 丢整天、两个时钟重复投稿 —— 这些是**结构问题**，重
 | 无公网，Telegram/Pixiv 可直连 | `docker compose up -d` | AUTO 自动选择 Polling |
 | 有域名且 80/443 可入站 | `docker compose --profile webhook up -d` | AUTO 选择 Webhook |
 | 国内网络，需要代理 | `docker compose --profile proxy up -d` | Polling + Mihomo |
-| Fly.io | `deploy`（推荐，见下）或 `fly deploy -c fly/deploy.fly-multi-bot.toml` | Webhook |
+| Fly.io | 两个应用各一条命令：`fly deploy -c fly/deploy.telepost.toml` 与 `fly deploy -c fly/deploy.pixivflow.toml` | Webhook |
 | Linux VPS（systemd，免 Docker） | `deploy --platform systemd` | Polling（源码直跑） |
 
 Polling 与 Webhook 都提供相同的 `http://127.0.0.1:8080/api/botN/v1/*`，因此
@@ -144,7 +118,7 @@ go build -o deploy .
 ./deploy doctor                 # 环境自检（依赖/配置/登录/网络）
 ./deploy tp latest              # 升级 TelePost 到最新并部署（也可指定如 2.10.41）
 ./deploy pf 2.10.31             # 升级 PixivFlow 到指定版本并部署（动图转 GIF 需 ≥2.10.31）
-./deploy --platform fly --config fly/pixivflow-split.toml source ../PixivFlow
+# 生产：改 fly/deploy.pixivflow.toml 的 PIXIVFLOW_REF（40 位提交号）后 fly deploy
 ./deploy status                 # 状态 / 健康
 ./deploy logs 200               # 最近 200 行日志
 ./deploy version                # 显示工具与当前配置版本
@@ -154,16 +128,16 @@ go build -o deploy .
 Fly.io；否则有 `docker-compose.yml` → Docker Compose；再否则 Linux 上有 systemctl →
 systemd。也可 `--platform fly|compose|systemd` 显式指定。
 
-- **Fly**：首次使用把模板复制为仓库根目录的 `telesubmit.fly.toml` 并按需修改
-  （`cp fly/deploy.fly-multi-bot.toml ./telesubmit.fly.toml`）；之后改它的
-  `[build.args]` 镜像版本 → `fly deploy --remote-only`，等健康检查通过后回报。
-  默认常驻（always-on）。更低成本的推荐架构（PixivFlow 256MB 常驻 + TelePost
-  512MB auto-stop，投递走 Flycast；**切换前的生产曾按此部署**，现在只作为回滚材料保留，
-  见 [docs/SERVERLESS-CUTOVER.md](docs/SERVERLESS-CUTOVER.md) §8）用 `deploy split`，见
-  [docs/AUTOSTOP.md](docs/AUTOSTOP.md)。
-  `combined.Dockerfile` 只组合已发布版本，不能部署 PixivFlow 未发布提交。源码热修复
-  必须使用 `source <PixivFlow目录>`：工具要求工作区干净、移除临时配置中的全部
-  `[build]` 段、传入当前 Git SHA，并在部署后同时核对镜像标签与运行时 revision。
+- **Fly（生产）**：本仓库固定两份配置，一个应用一份：
+  `fly deploy -c fly/deploy.telepost.toml`（业务端，常驻）与
+  `fly deploy -c fly/deploy.pixivflow.toml`（执行端：自动唤醒、不自动停止、跑完自行退出）。
+  首次使用先把两份配置里的 `app` 改成自己的名字。镜像引用分别由 `TELEPOST_IMAGE`
+  （发布版本）与 `PIXIVFLOW_REF`（40 位提交号或发布 tag）固定，部署后
+  `./scripts/verify-images.sh` 会核对线上镜像与提交号是否就是固定的那个。
+  `combined.Dockerfile` 只组合已发布版本，不能部署 PixivFlow 未发布提交；要把未发布提交
+  部署到执行端，改 `PIXIVFLOW_REF` 即可——`docker/pixivflow-scheduler.Dockerfile`
+  在构建时按该提交号克隆、编译，并把版本与提交号烘焙进镜像。
+  单机自托管仍可用 `deploy init` 生成 `telesubmit.fly.toml`（见下）。
 - **Compose**：compose 后端拆成 `telepost` 与 `pixivflow` 两个独立 service，
   各自拉取 ghcr 镜像（`.env` 的 `TELEPOST_IMAGE` / `PIXIVFLOW_IMAGE`），共享
   `./data` 卷、经 HTTP 通信（投递基址 `TELEPOST_API_BASE_URL`，默认
@@ -492,14 +466,15 @@ Basic Auth）。
 ```text
 deploy.go / go.mod                一键部署工具（Go 单二进制，随本套件 release 附带）
 docker-compose.yml                Compose：telepost + pixivflow 两服务 + 可选 Caddy/Mihomo
-docker/combined.Dockerfile        Fly 合一台的 Release-only co-locate 层
+docker/combined.Dockerfile        单机自托管（Compose）的 Release-only co-locate 层；**不用于生产 Fly**
+docker/pixivflow-scheduler.Dockerfile  生产 PixivFlow 调度镜像：按精确提交号构建，启动输出版本+提交号
 docker/{telepost,pixivflow}.Dockerfile  Fly 预构建镜像透传层（不使用 build.image）
 data/                             数据库、下载缓存、outbox、实际配置（不入库）
 pixivflow/config/*.example.json   多计划安全模板
 config/telepost-policy.example.json 非敏感频道/审核策略模板
 scripts/                          初始化、校验、本机/SSH 原子更新
 docs/                             架构、场景、性能、Webhook/代理等说明（定时投稿与省钱停机见 SCHEDULING.md；英文生产文档在 docs/en/）
-fly/                              Fly.io 512 MiB 配置与更新脚本
+fly/                              生产唯一两份配置：deploy.telepost.toml（常驻）与 deploy.pixivflow.toml（外部调度、可唤醒）
 proxy/                            可选 Mihomo 镜像
 .github/workflows/release.yml      打 v* 标签时产出各平台 deploy 二进制并附到 Release
 ```
@@ -522,7 +497,7 @@ Issue、日志、截图或 Git 历史，应立即吊销。
 
 - 架构与组件边界：[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
 - 加第 N 个频道（多 bot）：[docs/MULTI-BOT.md](docs/MULTI-BOT.md)
-- Fly 自动休眠省钱：见上文 Fly 段引用的 [docs/AUTOSTOP.md](docs/AUTOSTOP.md)
+- Fly 生命周期（平时停止 / 唤醒 / 跑完退出）：[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) 的「生命周期」一节
 - 贡献代码：[CONTRIBUTING.md](CONTRIBUTING.md)
 - 使用与排障：[SUPPORT.md](SUPPORT.md)
 - 私下报告漏洞：[SECURITY.md](SECURITY.md)
