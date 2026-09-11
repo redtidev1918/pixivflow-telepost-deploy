@@ -12,12 +12,21 @@ set -uo pipefail
 repo_dir=$(cd "$(dirname "$0")/.." && pwd)
 expected_host=${TELEPOST_HOST:-telesubmit-multi-bot.fly.dev}
 
+# 显式导出的环境变量优先于 .env。`.env` 属于本地 compose 部署，里面常是占位符或
+# 与生产 Fly secrets 不同的旧值；`set -a; . .env` 会无条件覆盖已导出的变量，于是
+# 「运维显式给了真 token」照样得到 SKIP——又一个看起来在做、其实没做的核对。
+_explicit_bot1=${BOT1_TOKEN:-}
+_explicit_bot2=${BOT2_TOKEN:-}
+
 if [[ -f "$repo_dir/.env" ]]; then
   set -a
   # shellcheck source=/dev/null
   . "$repo_dir/.env" >/dev/null 2>&1 || true
   set +a
 fi
+
+[[ -n "$_explicit_bot1" ]] && BOT1_TOKEN=$_explicit_bot1
+[[ -n "$_explicit_bot2" ]] && BOT2_TOKEN=$_explicit_bot2
 
 failures=0
 checked=0
