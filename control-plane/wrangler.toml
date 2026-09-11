@@ -47,13 +47,13 @@ DISPATCH_PAUSED = "true"
 # executor passes its real E2E; then this flips to `fly` in ONE commit —
 # exactly one configured production provider at any moment, never two
 # (SERVERLESS-CUTOVER.md §8.1).
-EXECUTION_PROVIDER = "github"
+EXECUTION_PROVIDER = "fly"
 # Fly executor (consumed when EXECUTION_PROVIDER = "fly"): one ephemeral
 # 512 MB machine per admitted execution — auto-destroyed, no volume, no
 # public service, no scheduler.
 FLY_APP = "pixivflow-executor"
 FLY_REGION = "iad"
-FLY_IMAGE = "registry.fly.io/pixivflow-executor:v1"
+FLY_IMAGE = "registry.fly.io/pixivflow-executor:deployment-01M288TD43X6KBZKY727R6J4FP"
 # Secrets (set with `wrangler secret put`, never committed):
 #   FLY_API_TOKEN         Machines API token, app-scoped to pixivflow-executor
 #   FLY_EXECUTOR_SECRET   bearer for Fly executor routes ONLY (claim/items/
