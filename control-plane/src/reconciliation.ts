@@ -339,7 +339,7 @@ export async function reconcileAll(
         slotId: slot.id,
         scheduleId: slot.scheduleId,
         botId: slot.botId,
-        detail: `credential ${schedule.credential} is busy`,
+        detail: JSON.stringify({ reason: 'credential_busy', credential: schedule.credential }),
       });
       summary.held += 1;
       continue;
@@ -385,6 +385,20 @@ export async function reconcileAll(
           attempt: slot.attemptCount + 1,
           botId: slot.botId,
         });
+      } else if (result.detail === 'credential busy') {
+        // The atomic acquire lost the race: another reconciler opened the holder
+        // between this sweep's admission read and its write. Same outcome as the
+        // pre-check would have produced, so it is `held` -- an error here would make
+        // a correct, converging system look broken.
+        events.push({
+          ts: nowMs,
+          event: 'dispatch_held',
+          slotId: slot.id,
+          scheduleId: slot.scheduleId,
+          botId: slot.botId,
+          detail: JSON.stringify({ reason: 'credential_busy', credential: schedule.credential }),
+        });
+        summary.held += 1;
       } else if (result.detail) {
         summary.errors.push(`dispatch ${slot.id}: ${result.detail}`);
       }
