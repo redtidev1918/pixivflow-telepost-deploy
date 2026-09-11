@@ -34,6 +34,9 @@ var scaffold embed.FS
 const (
 	telepostBaseline = "2.17.3"
 	pixivBaseline    = "2.18.1"
+	// PixivFlow 的发布 tag 带 v 前缀。构建引用（PIXIVFLOW_REF）必须是发布 tag 或
+	// 40 位提交号：分支名会让镜像层缓存一直命中旧提交。
+	pixivBaselineRef = "v" + pixivBaseline
 )
 
 // 向导场景（answers 里的 SCENARIO 键；缺省 = polling）。
@@ -201,10 +204,11 @@ func wizard() map[string]string {
 			}
 		case "4":
 			answers["SCENARIO"] = scenarioFly
-			// Fly 拓扑不再有生命周期选项：
+			// Fly 拓扑没有生命周期选项可填：它由两份权威配置各自写死——
 			//   TelePost 常驻（冷启动对用户可见，且没有空闲可省），
 			//   PixivFlow 平时停止、被认证触发唤醒、跑完按自己的账本退出。
-			answers["FLY_LIFECYCLE"] = "split"
+			// 这里不再产生任何 FLY_LIFECYCLE 之类的键：没有消费方，留着只会
+			// 让「拓扑由配置文件决定」这条契约出现第二种说法。
 		}
 	}
 	return answers
@@ -284,7 +288,8 @@ func fillEnv(tpl []byte, answers map[string]string) []byte {
 	return []byte(strings.Join(lines, "\n"))
 }
 
-// writeFlyTpl 生成 ./telesubmit.fly.toml（把内嵌模板的镜像基线刷新到当前值）。
+// writeFlyTpl 生成 ./telesubmit.fly.toml 与 ./pixivflow.fly.toml（把内嵌模板里固定的
+// 镜像/tag 基线刷新到当前发布值，并把 app 名留成占位符）。
 func writeFlyTpl(dir string, answers map[string]string) error {
 	// 拆分以后根目录不能再只生成一份「TelePost + PixivFlow 同机」的配置：那份配置
 	// 本身就是混部拓扑的来源。这里按仓库里唯一的两份拓扑来源各生成一份。
@@ -306,6 +311,11 @@ func writeFlyTpl(dir string, answers map[string]string) error {
 				lines[i] = "app = '<your-app-name>'"
 			case strings.HasPrefix(tr, "TELEPOST_IMAGE"):
 				lines[i] = "  TELEPOST_IMAGE = \"" + telepostRepo + ":" + telepostBaseline + "\""
+			case strings.HasPrefix(tr, "PIXIVFLOW_REF"):
+				// 权威配置里固定的是一个尚未发布的 2.19.0-dev 提交（见 AGENTS.md 待办）。
+				// 脚手架面向第三方，必须给已发布且不可变的引用；REF 与 VERSION 成对刷新，
+				// 否则会出现「按 2.18.1 构建、实际跑 2.19.0-dev」的自相矛盾。
+				lines[i] = "  PIXIVFLOW_REF = \"" + pixivBaselineRef + "\""
 			case strings.HasPrefix(tr, "PIXIVFLOW_VERSION"):
 				lines[i] = "  PIXIVFLOW_VERSION = \"" + pixivBaseline + "\""
 			case strings.HasPrefix(tr, "dockerfile = '../docker/"):
@@ -318,8 +328,9 @@ func writeFlyTpl(dir string, answers map[string]string) error {
 			return fmt.Errorf("写入 %s: %w", f.dst, err)
 		}
 	}
-	okf("已生成两份 Fly 配置：telesubmit.fly.toml（TelePost %s，常驻）+ pixivflow.fly.toml（外部时钟唤醒、跑完自行退出）",
-		telepostBaseline)
-	infof("下一步：把两份配置里的 app 名改成自己的；PixivFlow 需要把 PIXIVFLOW_REF 换成 40 位提交号（或发布 tag）；TelePost secrets 见 .env，PixivFlow secrets 见 docs/ARCHITECTURE.md。")
+	okf("已生成两份 Fly 配置：telesubmit.fly.toml（TelePost %s，常驻）+ pixivflow.fly.toml（PixivFlow %s，外部时钟唤醒、跑完自行退出）",
+		telepostBaseline, pixivBaselineRef)
+	infof("下一步：把两份配置里的 app 名改成自己的；PixivFlow 的 PIXIVFLOW_REF 已预填发布 tag %s，要跑未发布的提交就换成 40 位提交号；TelePost secrets 见 .env，PixivFlow secrets 见 docs/ARCHITECTURE.md。",
+		pixivBaselineRef)
 	return nil
 }

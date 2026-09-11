@@ -13,7 +13,7 @@
 #      API token or machine id anywhere in the trigger path.
 #   3. Stops itself when the ledger is empty. schedulerRuntime.exitWhenIdle makes
 #      the process exit once no slot is pending/running and no delivery is
-#      outstanding. `restart policy = "no"` is the other half of this: with a
+#      outstanding. `restart policy = "never"` is the other half of this: with a
 #      platform restart policy the machine would come straight back up and the
 #      "stopped" state could never be reached.
 #
@@ -48,8 +48,14 @@ kill_timeout = 60
   destination = '/app/data'
 
 [env]
-  # Absolute paths on purpose: the config is baked into the image, the ledger is
-  # on the volume, and neither depends on the process working directory.
+  # The config *file* is addressed absolutely on purpose: it is baked into the image
+  # and must not depend on the process working directory.
+  #
+  # The storage paths *inside* that file are relative on purpose (./data/...) and must
+  # stay that way. PixivFlow's config loader "auto-fixes" absolute paths that fall
+  # outside the config's own directory and rewrites the file in place; the replacement
+  # is its default ./downloads, i.e. /app/downloads -- an EPHEMERAL path next to the
+  # volume, not on it.
   PIXIV_DOWNLOADER_CONFIG = '/app/config/pixivflow.production.json'
   PIXIV_DB_CACHE_KB = '4096'
   NODE_ENV = 'production'
@@ -71,7 +77,11 @@ kill_timeout = 60
   min_machines_running = 0
   # No checks here. See the header.
 
-[restart]
+[[restart]]
   # The process exiting is the intended end of a run. Restarting it would defeat
   # the whole lifecycle.
-  policy = 'no'
+  #
+  # "never" is the fly.toml spelling. The Machines API normalizes it to
+  # restart.policy = "no" in the live Machine config; the two are the same thing,
+  # but flyctl rejects "no" here ("invalid restart policy: no").
+  policy = 'never'

@@ -8,7 +8,9 @@
   1. 环境变量 CLOUDFLARE_API_TOKEN（+ 可选 CLOUDFLARE_ACCOUNT_ID）
   2. Wrangler 的 OAuth 配置（`wrangler login` 留下的本地凭据）
 
-任何凭据都不会被打印。缺少凭据时以退出码 2 结束，调用方据此输出 SKIP。
+任何凭据都不会被打印。退出码：0 = 已核对且一致，1 = 核对失败（真的不一致 / Worker 不存在），
+2 = 无法核对（缺凭据，或凭据无权读账号 / Worker）。「无法核对」不是「失败」：调用方据此
+输出 SKIP，而不是把一次没做成的检查报成生产不合格。
 """
 
 from __future__ import annotations
@@ -76,13 +78,17 @@ def main() -> int:
     except SystemExit as exc:
         if exc.code == 2:
             print("[SKIP] 无 Cloudflare 只读凭据（CLOUDFLARE_API_TOKEN 或 wrangler login）")
-            return 0
+            return 2
         raise
 
     if not account:
         try:
             accounts = request(token, "/accounts").get("result") or []
         except urllib.error.HTTPError as exc:
+            if exc.code in (401, 403):
+                # 凭据存在但无权读账号：这次检查没做成，不等于时钟坏了。
+                print(f"[SKIP] Cloudflare 凭据无权读取账号（HTTP {exc.code}）")
+                return 2
             print(f"[FAIL] 读取 Cloudflare 账号失败（HTTP {exc.code}）")
             return 1
         except Exception:  # noqa: BLE001 - network failures are reported, not raised
@@ -97,7 +103,8 @@ def main() -> int:
         payload = request(token, f"/accounts/{account}/workers/scripts/{worker}/schedules")
     except urllib.error.HTTPError as exc:
         if exc.code in (401, 403):
-            print(f"[FAIL] 无权读取 Worker {worker} 的 schedules（HTTP {exc.code}）")
+            print(f"[SKIP] 无权读取 Worker {worker} 的 schedules（HTTP {exc.code}）")
+            return 2
         elif exc.code == 404:
             print(f"[FAIL] Worker {worker} 不存在或未部署")
         else:

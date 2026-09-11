@@ -13,10 +13,8 @@
     "retryDelay": 2000
   },
   "storage": {
-    "databasePath": "/app/data/pixivflow.db",
-    "downloadDirectory": "/app/data/cache",
-    "illustrationDirectory": "/app/data/cache/illustrations",
-    "novelDirectory": "/app/data/cache/novels",
+    "databasePath": "./data/pixivflow.db",
+    "downloadDirectory": "./data/downloads",
     "cacheRetentionDays": 7
   },
   "scheduler": {

@@ -22,10 +22,22 @@ fi
 failures=0
 checked=0
 
+# Telegram bot token 的形态是 "<数字>:<35 位以上 [A-Za-z0-9_-]>"。仓库根的 .env 属于
+# 本地 compose 部署，里面可能是占位符或与生产 Fly secrets 不同的旧值；拿它去查生产
+# webhook 只会得到 401「invalid token specified」，把「未提供可用凭据」误报成「生产
+# 不合格」。所以形态不符时按未提供处理，绝不发起调用。
+token_looks_valid() {
+  [[ "$1" =~ ^[0-9]{6,}:[A-Za-z0-9_-]{30,}$ ]]
+}
+
 check_bot() {
   local label=$1 token=$2
   if [[ -z "${token:-}" ]]; then
     echo "[SKIP] ${label}: 未提供 token（导出 ${label}_TOKEN 或写入 .env）"
+    return 0
+  fi
+  if ! token_looks_valid "$token"; then
+    echo "[SKIP] ${label}: token 形态不像 Telegram bot token（本地 .env 大概是占位符/旧值），未做归属核对"
     return 0
   fi
   checked=$((checked + 1))
