@@ -10,9 +10,6 @@
   - [从 Mac 远程更新策略](/REMOTE_UPDATES.md)
 - 运维
   - [定时投稿与停机（单一事实源）](/SCHEDULING.md)
-  - [Fly.io 自动休眠（历史方案）](/AUTOSTOP.md)
   - [性能与内存调优](/PERFORMANCE.md)
-- 开发
-  - [架构与信任边界](/ARCHITECTURE.md)
-  - [Serverless 架构与不变量（英文）](/en/SERVERLESS-ARCHITECTURE.md)
-  - [Serverless 部署与运维（英文）](/en/SERVERLESS-OPERATIONS.md)
+- 生产
+  - [架构与信任边界（职责契约）](/ARCHITECTURE.md)

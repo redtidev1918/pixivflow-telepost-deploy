@@ -308,8 +308,8 @@ func flyConfigHasBuildImage(path string) bool {
 	return false
 }
 
-// flyRuntimeConfig removes every build section so source deployment cannot
-// inherit an image that silently wins over --dockerfile.
+// flyRuntimeConfig removes every build section so that a stale [build] image
+// cannot silently win over the configured image (or over --dockerfile).
 func flyRuntimeConfig(data string) string {
 	lines := strings.Split(data, "\n")
 	result := make([]string, 0, len(lines))
@@ -1031,200 +1031,6 @@ func cmdDeploy(platform, cfg string, dryRun, build bool, retries int) {
 	okf("部署完成 ✅")
 }
 
-func pixivFlowSourceRevision(dir string) (string, string, error) {
-	abs, err := filepath.Abs(dir)
-	if err != nil {
-		return "", "", err
-	}
-	packageData, err := os.ReadFile(filepath.Join(abs, "package.json"))
-	if err != nil {
-		return "", "", fmt.Errorf("读取 package.json: %w", err)
-	}
-	var pkg struct {
-		Name string `json:"name"`
-	}
-	if err := json.Unmarshal(packageData, &pkg); err != nil || pkg.Name != "pixivflow" {
-		return "", "", fmt.Errorf("%s 不是 PixivFlow 源码仓库", abs)
-	}
-	if _, err := os.Stat(filepath.Join(abs, "Dockerfile.scheduler")); err != nil {
-		return "", "", fmt.Errorf("缺少 Dockerfile.scheduler")
-	}
-	status, err := exec.Command("git", "-C", abs, "status", "--porcelain").Output()
-	if err != nil {
-		return "", "", fmt.Errorf("读取 git 状态: %w", err)
-	}
-	if strings.TrimSpace(string(status)) != "" {
-		return "", "", fmt.Errorf("源码仓库有未提交改动；提交后才能生成可验证 revision")
-	}
-	revision, err := exec.Command("git", "-C", abs, "rev-parse", "HEAD").Output()
-	if err != nil {
-		return "", "", fmt.Errorf("读取 Git SHA: %w", err)
-	}
-	return abs, strings.TrimSpace(string(revision)), nil
-}
-
-func cmdSource(platform, cfg, repoDir string, dryRun bool) {
-	if platform != "fly" {
-		die("source 仅支持 Fly 上的 PixivFlow 分拆实例")
-	}
-	if repoDir == "" {
-		die("缺少 PixivFlow 源码目录（用法：deploy --config fly/pixivflow-split.toml source ../PixivFlow）")
-	}
-	fb := flyBin()
-	if fb == "" {
-		die("未找到 flyctl/fly")
-	}
-	if run([]string{fb, "auth", "whoami"}, false) != 0 {
-		die("fly 未登录")
-	}
-	abs, revision, err := pixivFlowSourceRevision(repoDir)
-	if err != nil {
-		die("源码部署检查失败：%v", err)
-	}
-	app := tomlGet(cfg, "app")
-	if app == "" {
-		die("无法从 %s 读取 app", cfg)
-	}
-	data, err := os.ReadFile(cfg)
-	if err != nil {
-		die("读取 %s: %v", cfg, err)
-	}
-	tmp, err := os.CreateTemp("", "pixivflow-source-*.toml")
-	if err != nil {
-		die("创建源码部署配置: %v", err)
-	}
-	tmpPath := tmp.Name()
-	defer os.Remove(tmpPath)
-	if _, err := tmp.WriteString(flyRuntimeConfig(string(data))); err != nil {
-		tmp.Close()
-		die("写入源码部署配置: %v", err)
-	}
-	if err := tmp.Close(); err != nil {
-		die("关闭源码部署配置: %v", err)
-	}
-
-	args := []string{
-		fb, "deploy", abs,
-		"--app", app,
-		"--config", tmpPath,
-		"--dockerfile", filepath.Join(abs, "Dockerfile.scheduler"),
-		"--build-arg", "VCS_REF=" + revision,
-		"--label", "org.opencontainers.image.revision=" + revision,
-		"--remote-only", "--strategy", "rolling", "--now",
-	}
-	infof("PixivFlow source=%s revision=%s app=%s", abs, revision, app)
-	if dryRun {
-		fmt.Printf("[dry-run] %s\n", strings.Join(args, " "))
-		return
-	}
-	if run(args, true) != 0 {
-		die("PixivFlow 源码部署失败")
-	}
-	// 运行时校验：读正在运行的容器环境变量 PIXIVFLOW_REVISION，确保不是旧镜像。
-	remoteRevision, err := exec.Command(fb, "ssh", "console", "-a", app, "-C", "printenv PIXIVFLOW_REVISION").CombinedOutput()
-	if err != nil || !outputHasLine(remoteRevision, revision) {
-		die("部署后运行时 revision 校验失败：期望 %s，得到 %s", revision, strings.TrimSpace(string(remoteRevision)))
-	}
-	okf("源码 revision 已验证：%s", revision)
-}
-
-func outputHasLine(output []byte, expected string) bool {
-	for _, line := range strings.Split(string(output), "\n") {
-		if strings.TrimSpace(line) == expected {
-			return true
-		}
-	}
-	return false
-}
-
-// ---- 用法 ----
-// ---- 拆机（Fly 专用）----
-
-// splitRewrite 把 toml 文本里 key 开头的行改写为 key = "value"（保留缩进）。
-func splitRewrite(data, key, value string) string {
-	lines := strings.Split(data, "\n")
-	for i, line := range lines {
-		tr := strings.TrimSpace(line)
-		if strings.HasPrefix(tr, key+" ") || strings.HasPrefix(tr, key+"=") {
-			indent := line[:len(line)-len(strings.TrimLeft(line, " \t"))]
-			lines[i] = indent + key + ` = "` + value + `"`
-		}
-	}
-	return strings.Join(lines, "\n")
-}
-
-// cmdSplit 把当前 Fly「合一台」部署拆成 telepost + pixivflow 两个独立 app。
-// 生成两份 toml 并打印步骤；不自动创建/重建资源（生产操作由用户确认后手动执行）。
-func cmdSplit(platform, cfg string) {
-	if platform != "fly" {
-		die("split 目前仅支持 Fly（compose/systemd 拆机 = 部署到另一台主机，手动即可）")
-	}
-	app := tomlGet(cfg, "app")
-	if app == "" {
-		die("无法从 %s 读取 app 名", cfg)
-	}
-	region := tomlGet(cfg, "primary_region")
-	if region == "" {
-		region = "iad"
-	}
-	tp := tpVersion("fly", cfg)
-	pf := pfVersion("fly", cfg)
-	pfApp := app + "-pixivflow"
-
-	stepf("1/2", "生成拆分模板")
-	tpData, err := scaffold.ReadFile("fly/deploy.telepost.toml")
-	if err != nil {
-		die("读取 telepost 拆分模板: %v", err)
-	}
-	tpToml := splitRewrite(string(tpData), "app", app)
-	tpToml = splitRewrite(tpToml, "primary_region", region)
-	tpToml = splitRewrite(tpToml, "TELEPOST_IMAGE", telepostRepo+":"+tp)
-	tpToml = splitRewrite(tpToml, "WEBHOOK_URL", "https://"+app+".fly.dev")
-	tpToml = strings.ReplaceAll(tpToml, "your-telepost-app", app)
-
-	pfData, err := scaffold.ReadFile("fly/deploy.pixivflow.toml")
-	if err != nil {
-		die("读取 pixivflow 拆分模板: %v", err)
-	}
-	pfToml := splitRewrite(string(pfData), "app", pfApp)
-	pfToml = splitRewrite(pfToml, "primary_region", region)
-	pfToml = splitRewrite(pfToml, "PIXIVFLOW_VERSION", pf)
-	pfToml = splitRewrite(pfToml, "TELEPOST_API_BASE_URL", "http://"+app+".flycast")
-	pfToml = strings.ReplaceAll(pfToml, "your-pixivflow-app", pfApp)
-	pfToml = strings.ReplaceAll(pfToml, "your-telepost-app", app)
-
-	if err := os.MkdirAll("fly", 0o755); err != nil {
-		die("创建 fly 目录失败: %v", err)
-	}
-	tpDst := filepath.Join("fly", "telepost-split.toml")
-	pfDst := filepath.Join("fly", "pixivflow-split.toml")
-	if err := os.WriteFile(tpDst, []byte(tpToml), 0o644); err != nil {
-		die("写入 %s 失败: %v", tpDst, err)
-	}
-	if err := os.WriteFile(pfDst, []byte(pfToml), 0o644); err != nil {
-		die("写入 %s 失败: %v", pfDst, err)
-	}
-	okf("已生成 %s（app=%s）与 %s（app=%s）", tpDst, app, pfDst, pfApp)
-
-	stepf("2/2", "执行步骤（确认后手动运行）")
-	fb := flyBin()
-	if fb == "" {
-		fb = "fly"
-	}
-	fmt.Printf("  # 1) 创建 PixivFlow 独立 app 与卷（常驻半边）\n")
-	fmt.Printf("  %s apps create %s\n", fb, pfApp)
-	fmt.Printf("  %s volumes create pixivflow_data --size 1 -r %s\n", fb, region)
-	fmt.Printf("  # 2) 给 TelePost 那台分配 Flycast 私网地址（只需一次；投递经 Fly Proxy 可 auto-start）\n")
-	fmt.Printf("  %s ips allocate-v6 --private -a %s\n", fb, app)
-	fmt.Printf("  # 3) 注入 PixivFlow 所需 secret（refresh token + 投稿 token）\n")
-	fmt.Printf("  %s secrets set -a %s PIXIV_REFRESH_TOKEN=... TELEPOST_BOT1_SUBMIT_TOKEN=... TELEPOST_BOT2_SUBMIT_TOKEN=...\n", fb, pfApp)
-	fmt.Printf("  # 4) 把 config.json 放进 pixivflow 卷（deploy init 生成的 data/pixivflow/config.json）\n")
-	fmt.Printf("  # 5) 部署：telepost 复用现有 app 名（改配成纯 bot 512MiB auto-stop），pixivflow 新 app 256MiB 常驻\n")
-	fmt.Printf("  %s deploy -c %s --remote-only --strategy rolling\n", fb, tpDst)
-	fmt.Printf("  %s deploy -c %s --remote-only\n", fb, pfDst)
-	fmt.Printf("  # 投递走 Flycast 私网 http://%s.flycast（经 Fly Proxy，能唤醒 stopped 的 TelePost）\n", app)
-}
-
 func usage() {
 	fmt.Print(`deploy — TelePost/PixivFlow 多平台一键部署（Go 单二进制）
 
@@ -1242,8 +1048,6 @@ func usage() {
   logs [行数]       最近日志
   doctor            环境自检
   version           显示工具与当前配置版本
-  split             Fly：把「合一台」拆成 telepost + pixivflow 两个 app（生成模板+步骤）
-  source <目录>     Fly：从干净的 PixivFlow Git 工作区构建并校验当前提交
 
 全局选项：
   --platform fly|compose|systemd|auto
@@ -1362,9 +1166,6 @@ func main() {
 		}
 	}
 	cfg := configFor(platform, o.config)
-	if o.cmd == "source" && o.config == "" {
-		cfg = filepath.Join("fly", "pixivflow-split.toml")
-	}
 
 	switch o.cmd {
 	case "deploy":
@@ -1381,10 +1182,6 @@ func main() {
 		cmdDoctor(platform, cfg)
 	case "version":
 		cmdVersion(platform, cfg)
-	case "split":
-		cmdSplit(platform, cfg)
-	case "source":
-		cmdSource(platform, cfg, o.arg, o.dryRun)
 	default:
 		failf("未知子命令：%s", o.cmd)
 		usage()

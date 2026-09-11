@@ -6,7 +6,7 @@
 源码工作区执行：
 
 ```bash
-./deploy --platform fly --config fly/pixivflow-split.toml source ../PixivFlow
+# 生产执行端按提交号构建：改 fly/deploy.pixivflow.toml 的 PIXIVFLOW_REF 后 fly deploy
 ```
 
 不要用 `docker/combined.Dockerfile` 部署未发布代码；它明确只安装固定的 npm Release。

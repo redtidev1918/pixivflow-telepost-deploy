@@ -115,7 +115,7 @@ fly deploy --strategy rolling   # 重启以让 supervisor 读到新 secret
 ## 上限与注意
 
 - 每个 Bot = 一个 Python 子进程，内存随 Bot 数线性增加。512 MiB 档建议 ≤2 个；
-  更多 Bot 需要升内存（≥1 GiB），或拆多机（见 [AUTOSTOP.md](AUTOSTOP.md) 的拓扑 A）。
+  更多 Bot 需要升内存（≥1 GiB），或再拆一台独立执行机（见 [ARCHITECTURE.md](ARCHITECTURE.md)）。
 - 多 bot webhook 模式下，父路由固定占 8080，Bot 子进程占 `8080+N`（仅本机回环可见）；
   Polling 模式无此端口分配，但 PixivFlow 仍可经 `127.0.0.1:8080/api/botN/v1/*` 投递。
 - `BOT{N}_TOKEN` 为空即视为「不存在」，supervisor 会跳过它——所以临时下线某频道，

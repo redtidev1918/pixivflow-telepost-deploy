@@ -1,68 +1,65 @@
-# TelePost 独立实例（拆两台：不含 PixivFlow，只跑投稿/审核 bot）
+# TelePost: the always-on submission / review / publish service.
 #
-# 与「合一台」的 fly/deploy.fly-multi-bot.toml 相对：直接用 TelePost 预构建镜像，
-# 不启用 PixivFlow（PixivFlow 拆到 fly/deploy.pixivflow.toml 单独部署）。
+# TelePost is the only thing that talks to Telegram. Users submit in private chat,
+# reviewers approve or reject, and an approved work is published to the channel by
+# this app - never by an execution machine.
 #
-# 部署步骤：
-#   fly apps create <your-telepost-app>
-#   fly volumes create data --size 1 -r iad
-#   fly secrets set -a <your-telepost-app> BOT1_TOKEN=... BOT1_CHANNEL_ID=... \
-#       TELEPOST_BOT1_SUBMIT_TOKEN=... TELEPOST_BOT2_SUBMIT_TOKEN=...
-#   fly deploy -c fly/deploy.telepost.toml
+# It must never sleep: a submission bot that is cold-starting looks broken to the
+# user, and there is no cost model that makes a user-visible submit button wait
+# for a machine to boot. The PixivFlow worker is where the "stopped by default"
+# saving comes from; this service stays resident.
+#
+# Deploy (the app name comes from this file, so no -a):
+#   fly deploy -c fly/deploy.telepost.toml --ha=false
 
-app = "your-telepost-app"
-primary_region = "iad"
+app = 'telesubmit-multi-bot'
+primary_region = 'iad'
 
 [build]
-  # 直接 `fly deploy -c fly/<本文件>`：dockerfile 路径按本 toml 所在的 fly/ 目录
-  # 解析，须用 ../docker/ 指回仓库根（写 docker/ 会报 fly/docker/... not found）。
-  dockerfile = "../docker/telepost.Dockerfile"
+  dockerfile = '../docker/telepost.Dockerfile'
+  [build.args]
+    # Pin the released TelePost image. Never `latest`: a floating reference makes
+    # "the same config" produce different code on different days.
+    TELEPOST_IMAGE = 'ghcr.io/redtidev1918/telepost:2.17.2'
 
-[build.args]
-  TELEPOST_IMAGE = "ghcr.io/redtidev1918/telepost:2.17.2"
+[[mounts]]
+  source = 'data'
+  destination = '/app/data'
 
 [env]
-  PYTHONUNBUFFERED = "1"
-  PYTHONDONTWRITEBYTECODE = "1"
-  TZ = "Asia/Shanghai"
-  RUN_MODE = "WEBHOOK"
-  WEBHOOK_URL = "https://your-telepost-app.fly.dev"
-  SEARCH_ANALYZER = "simple"
-  SEARCH_ENABLED = "false"
-  DB_CACHE_KB = "1024"
-  # 投稿 token：TelePost 用它们校验 PixivFlow（独立实例）的 HTTP 投稿
-  REVIEW_PREVIEW_THREAD = "1"
-  REVIEW_PREVIEW_INTERVAL_SECONDS = "0.75"
-  REVIEW_PREVIEW_TIMEOUT_SECONDS = "120"
-  REVIEW_ALBUM_SIZE = "5"
-  PENDING_REVIEW_RETENTION_DAYS = "1"
-  PENDING_REVIEW_CLEANUP_BATCH_SIZE = "20"
-  REVIEW_RETENTION_DAYS = "30"
-  # 多相册投稿都回复主贴（post）而不是逐级嵌套成链；投稿文件上限放宽到 100
-  CHANNEL_ALBUM_REPLY = "post"
-  API_MAX_FILES = "100"
-
-[mounts]
-  source = "data"
-  destination = "/app/data"
+  RUN_MODE = 'WEBHOOK'
+  WEBHOOK_PATH = '/webhook'
+  ROUTER_CHILD_READY_TIMEOUT = '120'
+  PENDING_REVIEW_RETENTION_DAYS = '1'
+  PENDING_REVIEW_CLEANUP_BATCH_SIZE = '20'
+  REVIEW_PREVIEW_THREAD = '1'
+  REVIEW_PREVIEW_INTERVAL_SECONDS = '0.75'
+  REVIEW_PREVIEW_TIMEOUT_SECONDS = '120'
+  SEARCH_ENABLED = 'false'
+  SEARCH_ANALYZER = 'simple'
+  DB_CACHE_KB = '1024'
+  TZ = 'Asia/Shanghai'
 
 [http_service]
   internal_port = 8080
-  force_https = false   # 关闭：让 Flycast 私网 HTTP（port 80→8080）直通，不 301 跳 HTTPS
-  # TelePost 是 event-driven（webhook/用户投稿/PixivFlow 投递都是入站），可 auto-stop：
-  # 无流量时停机省 RAM，来入站请求（经 Fly Proxy）自动拉起。
-  auto_stop_machines = "suspend"
+  # Plain HTTP stays acceptable on the private network: the PixivFlow worker
+  # delivers submissions to this app over Flycast (WireGuard-protected 6PN), and
+  # force_https would 301 that delivery into a dead end. The Telegram webhook and
+  # the review API are reached over public HTTPS regardless.
+  force_https = false
+  auto_stop_machines = false
   auto_start_machines = true
-  min_machines_running = 0
+  min_machines_running = 1
 
+  # A long-lived service keeps a long-lived liveness check. It reads /health, which
+  # answers immediately and does not gate on the children's readiness, so it cannot
+  # fight the always-on state.
   [[http_service.checks]]
-    grace_period = "60s"
-    interval = "30s"
-    method = "GET"
-    timeout = "10s"
-    path = "/ready"
+    grace_period = '60s'
+    interval = '30s'
+    method = 'GET'
+    timeout = '10s'
+    path = '/health'
 
-[vm]
-  cpu_kind = "shared"
-  cpus = 1
-  memory_mb = 512
+[restart]
+  policy = 'always'
