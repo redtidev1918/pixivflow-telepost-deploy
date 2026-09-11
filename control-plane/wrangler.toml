@@ -1,75 +1,26 @@
+# The clock. Cron expression in, authenticated trigger request out.
+#
+# There is deliberately no [[d1_databases]] binding, no queue, no KV and no
+# service binding here. Anything that needs to remember something about a run
+# belongs to PixivFlow's slot ledger.
+#
+# Secrets (never in this file):
+#   wrangler secret put SCHEDULER_TRIGGER_TOKEN   # bearer for the trigger endpoint
+
 name = "pixivflow-control-plane"
 main = "src/index.ts"
 compatibility_date = "2025-09-01"
-# Control plane only: JSON in, JSON out. Media never passes through the Worker.
 workers_dev = true
 
-# A single periodic reconciliation sweep is the clock. Not four one-shot crons:
-# a tick that never fires must not lose the day's work, so each sweep recomputes
-# which occurrences exist and creates what is missing.
-[triggers]
-crons = ["*/10 * * * *"]
+[observability]
+enabled = true
 
-[[d1_databases]]
-binding = "CONTROL_DB"
-database_name = "pixivflow-control"
-database_id = "1fa00cbc-6dcc-4a89-ba8f-30cf79cc286b"
+# Expressions are UTC. See src/cron-map.ts: the same strings are the keys of the
+# schedule map, and each one is the Asia/Shanghai schedule time minus 8 hours.
+# `deployment-contract.test.ts` fails if the two lists drift apart.
+[triggers]
+crons = ["0 2,10 * * *", "10 2,10 * * *"]
 
 [vars]
-# Dispatch is the only lever that spends the shared Pixiv credential, so both
-# switches live here rather than being flipped out of band (production and this file
-# must never disagree):
-#   DISPATCH_PAUSED = "true"   opens no new attempts. Reconcile / create / expire keep
-#                              running, so the ledger stays honest and every withheld
-#                              occurrence is visible as a `dispatch_paused` event.
-#   EXECUTION_MODE = "shadow"  still dispatches; it only guarantees the runner cannot
-#                              publish. A second lock, not a brake.
-# Pause instead of raising the watchdog when the account is being throttled: one
-# dispatch is 30 minutes of requests against it.
-#
-# INCIDENT 2026-09-11 (resolved): `pixiv-main` entered a Pixiv rate-limit penalty
-# while the legacy Fly plane (`telesubmit-multi-bot`, stopped 04:34Z) refreshed the
-# same credential from a second process, so every live dispatch from 02:00Z died on
-# the batch's own 1800000ms watchdog with `download_failed` (5/5 attempts across both
-# bots), while the same work finished in ~3 minutes at 2026-09-10T21:19Z. Dispatch
-# was paused at 05:21Z and lifted once the account had ~3 hours of cooldown with no
-# second plane running: one credential, one active execution.
-# P0 2026-09-11 (GitHub egress starvation): GitHub-hosted runners are NOT
-# production-qualified for the Pixiv data plane — production-like workloads
-# repeatedly starve in rate-limit cooldown and die on the 30-minute watchdog
-# (runs 34558034050, 34577070256, 34594382953; every review-less slot today).
-# Production moves to a Fly execution provider; until that lands, no new
-# GitHub production dispatch may open. Scheduling, reconciliation, the Telegram
-# webhook and review decisions stay live — only new attempts are withheld.
-EXECUTION_MODE = "live"
-# Which provider opens NEW production executions. `github` until the Fly
-# executor passes its real E2E; then this flips to `fly` in ONE commit —
-# exactly one configured production provider at any moment, never two
-# (SERVERLESS-CUTOVER.md §8.1).
-EXECUTION_PROVIDER = "fly"
-# Fly executor (consumed when EXECUTION_PROVIDER = "fly"): one ephemeral
-# 512 MB machine per admitted execution — auto-destroyed, no volume, no
-# public service, no scheduler.
-FLY_APP = "pixivflow-executor"
-FLY_REGION = "iad"
-FLY_IMAGE = "registry.fly.io/pixivflow-executor:deployment-01M28G3AH3AWFMPQNB6HK5ZJA2"
-# Secrets (set with `wrangler secret put`, never committed):
-#   FLY_API_TOKEN         Machines API token, app-scoped to pixivflow-executor
-#   FLY_EXECUTOR_SECRET   bearer for Fly executor routes ONLY (claim/items/
-#                         result/credential read+rotation persist); the GitHub
-#                         runner keeps CALLBACK_SECRET unchanged
-RECONCILIATION_LOOKBACK_HOURS = "24"
-# This Worker's public base URL (a cron trigger has no request URL, so the runner
-# would otherwise have nowhere to report back).
-CONTROL_PLANE_URL = "https://pixivflow-control-plane.redtidev1918.workers.dev"
-GITHUB_REPO = "redtidev1918/pixivflow-telepost-deploy"
-GITHUB_WORKFLOW = "pixivflow-batch.yml"
-GITHUB_REF = "main"
-# Which PixivFlow ref runners execute. Pin a released tag once PixivFlow ships
-# the batch command; until then the feature branch under test.
-PIXIVFLOW_REF = "master"
-
-# Secrets (set with `wrangler secret put`, never committed):
-#   GITHUB_DISPATCH_TOKEN  TEMPORARY MIGRATION AUTH (replace with a GitHub App)
-#   CALLBACK_SECRET        bearer the GitHub job uses to report claim/result
-#   TELEGRAM_WEBHOOK_SECRET
+# Deployment glue: where PixivFlow's authenticated trigger listens. Not a secret.
+PIXIVFLOW_TRIGGER_BASE_URL = "https://pixivflow-scheduler.fly.dev"

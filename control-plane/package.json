@@ -3,14 +3,13 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "description": "Cloudflare Worker + D1 durable control plane for the PixivFlow/TelePost production architecture",
+  "description": "Cloudflare Worker clock: cron expression in, authenticated PixivFlow trigger out. Owns no business state.",
   "scripts": {
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "dev": "wrangler dev",
     "deploy": "wrangler deploy",
-    "migrate:local": "wrangler d1 migrations apply CONTROL_DB --local",
-    "migrate:remote": "wrangler d1 migrations apply CONTROL_DB --remote"
+    "tail": "wrangler tail"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^5.20260910.1",
