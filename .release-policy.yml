@@ -35,6 +35,20 @@
   "checksums": true,
   "sbom": true,
   "repository": {
+    "pullRequests": {
+      "lifecycle": {
+        "enabled": true,
+        "parkedAfterDays": 7,
+        "archiveParkedToIssue": true,
+        "closeParked": true,
+        "deleteBranch": false,
+        "exempt": {
+          "branches": ["release-please--*"],
+          "actors": ["github-actions[bot]", "dependabot[bot]"],
+          "labels": ["keep-open"]
+        }
+      }
+    },
     "git": {
       "productionOperations": {
         "base": "default",
