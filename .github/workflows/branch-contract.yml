@@ -12,3 +12,5 @@ permissions:
 jobs:
   branch-contract:
     uses: redtidev1918/releasegraph/.github/workflows/reusable-branch-contract.yml@982cf9c19cbcd899a3964fa9ffab748e5abcdaf6 # ReleaseGraph v1.4.10
+
+# contract fixture: exercises the production-operation branch gate
