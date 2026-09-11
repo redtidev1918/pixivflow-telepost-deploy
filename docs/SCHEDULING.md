@@ -4,7 +4,7 @@
 > 生产拓扑与三仓库职责边界以 [架构与信任边界](ARCHITECTURE.md) 为唯一权威；本文件只展开调度细节。
 > 配置项默认值以 [PixivFlow CONFIG.md](https://github.com/redtidev1918/PixivFlow) 为准。
 
-## 一句话
+## 两种调度模式
 
 - **VPS / Docker / systemd / 想省心的 Fly**：用 **internal** 调度（进程常驻，内部 cron 到点跑）。
 - **生产 Fly（低流量、想省钱）**：用 **external** 调度——PixivFlow 机器平时 stopped，
@@ -145,7 +145,8 @@ stopped（省钱，健康 idle）
   不必付第二次冷启动。
 - `maxLifetimeMs`（生产 3 小时）是**异常长跑的硬上限兜底**：触发时先持久化既有序列与状态、
   输出明确日志再退出，状态不删除，下次唤醒可续跑。正常任务永不依赖它退出。
-- `restart policy = "no"`：进程退出就是一次运行的预期终点，平台不得重新拉起它。
+- `restart.policy = "never"`：进程退出就是一次运行的预期终点，平台不得重新拉起它。
+  flyctl 只接受 `never`（写 `no` 会被拒绝），线上 Machine 配置里会显示为 `no`，两者是同一件事。
 - **不配置健康检查**：探测本身就是请求，会把刚刚决定收工的机器重新叫醒，形成停不下来的循环。
 
 TelePost 相反，它**从不休眠**：`auto_stop_machines = false`、`min_machines_running = 1`，

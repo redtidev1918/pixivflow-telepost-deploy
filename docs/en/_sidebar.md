@@ -1,6 +1,6 @@
 - Getting Started
   - [Overview](/en/)
-  - [📥 Download](/en/download.md)
+  - [Download](/en/download.md)
 - Deployment Scenarios
   - [Scenarios](/en/SCENARIOS.md)
   - [Polling](/en/POLLING.md)

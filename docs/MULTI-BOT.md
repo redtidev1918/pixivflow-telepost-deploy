@@ -10,8 +10,8 @@ TelePost 的 supervisor（`run.py`）会**自动发现**所有 `BOT{N}_TOKEN`（
 
 | 环境变量 | 必填 | 说明 |
 |---|---|---|
-| `BOT{N}_TOKEN` | ✅ | 该 Bot 的 Token（`@BotFather` 创建，且是目标频道管理员） |
-| `BOT{N}_CHANNEL_ID` | ✅ | 目标频道（`@频道名` 或 `-100…` 数字 ID） |
+| `BOT{N}_TOKEN` | 是 | 该 Bot 的 Token（`@BotFather` 创建，且是目标频道管理员） |
+| `BOT{N}_CHANNEL_ID` | 是 | 目标频道（`@频道名` 或 `-100…` 数字 ID） |
 | `BOT{N}_OWNER_ID` | 建议 | 所有者 Telegram 用户 ID（`/botconfig`、审核等权限） |
 | `BOT{N}_REVIEW_CHAT_ID` | 审核时 | 该 Bot 的审核群 ID（需要审核时填） |
 | `BOT{N}_BOT_MODE` | 可选 | `MIXED`（默认）/ 其它模式 |
