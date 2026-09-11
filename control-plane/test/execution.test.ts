@@ -772,3 +772,81 @@ describe('the credential travels with the dispatch', () => {
     expect(schedule.credential).toBe('pixiv-main');
   });
 });
+
+describe('a provider run that ends WITHOUT a verdict (Fly callback lost)', () => {
+  const input = (slot: Awaited<ReturnType<typeof seedDueSlot>>) => ({
+    slot,
+    scheduleId: schedule.id,
+    botId: schedule.botId,
+    attempt: 1,
+    targets: [] as string[],
+    callbackUrl: CALLBACK,
+    pixivflowRef: 'test-ref',
+    credentialKey: CREDENTIAL,
+    mode: 'shadow' as const,
+  });
+
+  it('is UNCERTAIN when the executor had claimed: the Telegram send may have happened', async () => {
+    const store = new MemoryControlStore();
+    const provider = new FakeProvider();
+    const slot = await seedDueSlot(store, NOW);
+    const { executionId } = await startAttempt(store, provider, input(slot), NOW);
+
+    await claimExecution(store, { executionId, providerRunId: '1' }, NOW + 500);
+    provider.concludeLastRun('completed', null);
+
+    const outcome = await reconcileExecution(store, (await store.getExecution(executionId))!, provider, 3, NOW + 60_000);
+
+    expect(outcome).toBe('reconciled');
+    expect((await store.getExecution(executionId))!.status).toBe('uncertain');
+    // Terminal, NOT retryable: the next sweep must never re-dispatch the same
+    // slot, because the review media may already be sitting in the group.
+    expect((await store.getOccurrence(slot.id))!.status).toBe('uncertain');
+  });
+
+  it('is a retryable failure when the executor never claimed', async () => {
+    const store = new MemoryControlStore();
+    const provider = new FakeProvider();
+    const slot = await seedDueSlot(store, NOW);
+    const { executionId } = await startAttempt(store, provider, input(slot), NOW);
+
+    // The machine ended before any claim: no business side effect was possible.
+    provider.concludeLastRun('completed', null);
+
+    // First pass adopts the run (the dispatch response was lost), the second
+    // applies its (verdict-less) terminal state. Both passes sit past the
+    // unclaimed-run grace: a machine that ended this early is a provider loss.
+    const first = await reconcileExecution(
+      store,
+      (await store.getExecution(executionId))!,
+      provider,
+      3,
+      NOW + DISPATCH_CLAIM_GRACE_MS + 1000
+    );
+    expect(first).toBe('reconciled');
+    const second = await reconcileExecution(
+      store,
+      (await store.getExecution(executionId))!,
+      provider,
+      3,
+      NOW + DISPATCH_CLAIM_GRACE_MS + 2000
+    );
+    expect(second).toBe('reconciled');
+
+    expect((await store.getExecution(executionId))!.status).toBe('failed');
+    // Retryable: the occurrence goes back to pending for the next attempt.
+    expect((await store.getOccurrence(slot.id))!.status).toBe('pending');
+  });
+
+  it('persists a synchronously returned providerRunId at dispatch time (Fly model)', async () => {
+    const store = new MemoryControlStore();
+    const provider = new FakeProvider();
+    provider.syncRunId = true;
+    const slot = await seedDueSlot(store, NOW);
+    const { executionId } = await startAttempt(store, provider, input(slot), NOW);
+
+    // No claim happened yet, but the execution already points at ITS machine:
+    // reconciliation queries the right machine instead of guessing by time.
+    expect((await store.getExecution(executionId))!.providerRunId).toBe('1');
+  });
+});

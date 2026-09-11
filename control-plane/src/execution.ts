@@ -171,6 +171,13 @@ export async function startAttempt(
   // or a later failure would inherit a stale wait.
   await store.clearRetryNotBefore(input.slot.id, nowMs);
 
+  // A provider that returns its run id synchronously (Fly Machines create does)
+  // has it persisted HERE, not at claim time: reconciliation must query THIS
+  // machine instead of guessing one from creation-time heuristics.
+  if (dispatchResult.providerRunId) {
+    await store.attachProviderRun(executionId, dispatchResult.providerRunId, nowMs);
+  }
+
   await store.logEvents([
     {
       ts: nowMs,
@@ -470,6 +477,43 @@ async function applyProviderRun(
   nowMs: number
 ): Promise<'unchanged' | 'reconciled'> {
   if (run.state === 'completed') {
+    // A provider run that ENDED without a verdict is the callback-lost case,
+    // and what it means depends on whether the executor ever claimed the work:
+    // the machine's lifecycle alone cannot tell a "nothing happened" from a
+    // "everything happened but the report died".
+    if (run.conclusion === null && run.state === 'completed') {
+      if (execution.status === 'running') {
+        // Claimed: Pixiv search, download and the Telegram review send may all
+        // have happened. An unconfirmed send must never be retried — that is
+        // how the same media gets posted twice. Terminal, human-visible.
+        await applyExecutionResult(
+          store,
+          {
+            executionId: execution.id,
+            status: 'uncertain',
+            maxAttempts,
+            error: 'provider run ended after claim without a result report',
+            errorClass: 'uncertain_delivery',
+          },
+          nowMs
+        );
+        return 'reconciled';
+      }
+      // Only dispatched, never claimed: no business side effect could have
+      // happened, so this is a plain retryable provider loss.
+      await applyExecutionResult(
+        store,
+        {
+          executionId: execution.id,
+          status: 'failed',
+          maxAttempts,
+          error: 'provider run ended before the execution was claimed',
+          errorClass: 'provider_error',
+        },
+        nowMs
+      );
+      return 'reconciled';
+    }
     const { status, errorClass } = statusFromConclusion(run.conclusion);
     await applyExecutionResult(
       store,
