@@ -373,6 +373,33 @@ flyctl machine stop 683032ec6617e8 -a telesubmit-multi-bot
 flyctl machine destroy 683032ec6617e8 -a telesubmit-multi-bot
 ```
 
+### 8.2 Credential execution lock（为什么不是跨平面分布式锁）
+
+事故之后最容易被提出的"修复"是：给 GitHub runner 和 Fly 之间加一个分布式锁。**不要做这件事。**
+
+真正的 invariant 是：
+
+```text
+一个 credential 在任何时刻只能有一个 execution plane owner
+```
+
+而不是：
+
+```text
+多个平面 + 一个协调它们的锁
+```
+
+前者是配置问题（Fly 不参与生产），后者会引入 lease 续约、stale owner、时钟漂移、
+fencing token、split brain、fail-open/fail-closed、runner 崩溃恢复、老 owner 复活 ——
+而维护这些复杂度的理由会随着 Fly 一起消失。为保留一个待退役的平面而建设永久基础设施，
+是这次事故里最贵的一种"修复"。
+
+**真正的锁在新系统内部**，由 D1 承担，语义见 `docs/SERVERLESS-ARCHITECTURE.md` §6：
+credential 是外部限流资源，`pixiv-main` 声明 `maxConcurrentExecutions = 1`，
+不同 slot 使用同一 credential 必须串行，不同 credential 可以并行；获取是原子的
+（guard 在开 execution 的同一条 INSERT 里）；释放由 execution 进入终态完成，
+不需要 runner 发 release；丢失的 runner 由 provider reconciliation 收敛，不会永久锁死账号。
+
 > ⚠️ **机器可以删，volume / SQLite / secret 备份不要同时删。** 机器只是计算实例；真正不
 > 可逆的是把旧状态一起清掉。永久删除状态数据需要单独确认。
 
@@ -398,6 +425,23 @@ flyctl machine destroy 683032ec6617e8 -a telesubmit-multi-bot
 | 唤醒触发器 | 删除 `.github/workflows/schedule-watchdog.yml` | 只 `disabled_manually` 是仓库设置在挡，文件还在，随时能被重新启用 |
 | 自动唤醒 | `flyctl machine update <id> --autostart=false` | 只 `machine stop` 时，任何一次请求都会把它拉起来（实测 75 秒后自启） |
 | webhook 抢占 | 操作员显式 `setWebhook` 指向 Worker | TelePost 启动即自行注册 webhook，"启动机器"就等于"抢回审核域" |
+
+**根因（按层次写清楚，避免被误读成"没有加锁"）：**
+
+```text
+Primary root cause:
+  legacy second execution plane remained ACTIVE after cutover.
+  schedule-watchdog 唤醒 Fly；Fly 上 TelePost 夺回 webhook、PixivFlow 抢 pixiv-main。
+
+Contributing control gap:
+  credential admission 当时只约束新控制平面内部。
+  它无法约束一个自己都不知道存在的第二个平面 —— 这不是"锁不够强"，
+  而是"参与生产的平面数量"没有被约束。
+```
+
+这两件事要分开修：**平面数量**由清场解决（§8.1 的三个入口），
+**平面内部的互斥**由 credential execution lock 解决（§8.2）。
+只做后者无法阻止事故重演，只做前者则新系统自身仍可能在并发 sweep 下双派发。
 
 **新不变量：一个 Pixiv 凭据在任何时刻只能有一个 execution plane owner。**
 Fly 可以存在、可以保留 volume/SQLite、可以作为回滚镜像，但它在正常生产状态下
