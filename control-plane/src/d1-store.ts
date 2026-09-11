@@ -519,18 +519,49 @@ export class D1ControlStore implements ControlPlaneStore {
     attempt: number;
     provider: string;
     nowMs: number;
-  }): Promise<'created' | 'exists'> {
+    credentialKey?: string;
+    maxConcurrent?: number;
+  }): Promise<'created' | 'exists' | 'credential-busy'> {
+    const limit = input.maxConcurrent ?? 1;
     // Unique (slot_id, attempt) is the anti-duplicate-dispatch layer: two
     // concurrent sweeps, a retried request or a replayed clock all converge on
     // one execution row instead of opening a second runner for the same attempt.
+    //
+    // The credential guard rides in the same statement, so acquisition is atomic:
+    // `SELECT ... WHERE NOT EXISTS (open holder)` cannot be interleaved the way a
+    // read followed by a separate insert can. When the guard refuses, nothing is
+    // written and the caller reports the occurrence as held.
     const result = (await this.db
       .prepare(
-        `INSERT OR IGNORE INTO executions (id, slot_id, attempt, provider, status, created_at)
-         VALUES (?, ?, ?, ?, 'dispatching', ?)`
+        `INSERT OR IGNORE INTO executions (id, slot_id, attempt, provider, status, created_at, credential_key)
+         SELECT ?, ?, ?, ?, 'dispatching', ?, ?
+          WHERE ? IS NULL
+             OR (SELECT COUNT(*) FROM executions
+                  WHERE credential_key = ?
+                    AND status IN ('dispatching','dispatched','running')) < ?`
       )
-      .bind(input.id, input.slotId, input.attempt, input.provider, input.nowMs)
+      .bind(
+        input.id,
+        input.slotId,
+        input.attempt,
+        input.provider,
+        input.nowMs,
+        input.credentialKey ?? null,
+        input.credentialKey ?? null,
+        input.credentialKey ?? null,
+        limit
+      )
       .run()) as { meta?: { changes?: number } } | undefined;
-    return (result?.meta?.changes ?? 0) > 0 ? 'created' : 'exists';
+    if ((result?.meta?.changes ?? 0) > 0) return 'created';
+    if (!input.credentialKey) return 'exists';
+    // Either the attempt already existed or the credential was held. Only the
+    // caller knows which attempt it was asking for, so distinguish it here rather
+    // than making every caller guess.
+    const existing = await this.db
+      .prepare(`SELECT 1 AS present FROM executions WHERE id = ?`)
+      .bind(input.id)
+      .first<{ present: number }>();
+    return existing ? 'exists' : 'credential-busy';
   }
 
   async getExecution(executionId: string): Promise<ExecutionRow | null> {
