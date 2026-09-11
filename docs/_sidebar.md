@@ -1,14 +1,10 @@
-- 生产（无服务器控制平面）
-  - [架构与不变量（英文）](/en/SERVERLESS-ARCHITECTURE.md)
-  - [部署与运维（英文）](/en/SERVERLESS-OPERATIONS.md)
-  - [上线、回滚与验收](/SERVERLESS-CUTOVER.md)
 - 开始部署
-  - [文档中心](/)
+  - [概览](/)
   - [📥 下载](/download.md)
   - [部署场景速查](/SCENARIOS.md)
   - [Polling：无公网部署](/POLLING.md)
   - [Webhook：公网 HTTPS 部署](/WEBHOOK.md)
-- 场景
+- 场景与网络
   - [国内网络与 Mihomo](/MIHOMO.md)
   - [多 Bot：加第 N 个频道](/MULTI-BOT.md)
   - [从 Mac 远程更新策略](/REMOTE_UPDATES.md)
@@ -16,14 +12,7 @@
   - [定时投稿与停机（单一事实源）](/SCHEDULING.md)
   - [Fly.io 自动休眠（历史方案）](/AUTOSTOP.md)
   - [性能与内存调优](/PERFORMANCE.md)
-- 进阶
+- 开发
   - [架构与信任边界](/ARCHITECTURE.md)
-- English
-  - [Documentation](/en/)
-  - [📥 Download](/en/download.md)
-  - [Scenarios](/en/SCENARIOS.md)
-  - [Polling](/en/POLLING.md)
-  - [Webhook](/en/WEBHOOK.md)
-  - [Mainland networking and Mihomo](/en/MIHOMO.md)
-  - [Serverless architecture](/en/SERVERLESS-ARCHITECTURE.md)
-  - [Serverless operations](/en/SERVERLESS-OPERATIONS.md)
+  - [Serverless 架构与不变量（英文）](/en/SERVERLESS-ARCHITECTURE.md)
+  - [Serverless 部署与运维（英文）](/en/SERVERLESS-OPERATIONS.md)
