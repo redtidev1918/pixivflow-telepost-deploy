@@ -31,10 +31,10 @@ Start from the [documentation home](/), or jump directly to:
 
 | Document | Content |
 | :-- | :-- |
-| [SCENARIOS (中文)](/SCENARIOS.md) | Two paths (Compose / deploy CLI), four Compose scenarios, systemd backend, Fly.io |
-| [POLLING (中文)](/POLLING.md) | No public ingress: `RUN_MODE=AUTO`, empty `WEBHOOK_URL` |
-| [WEBHOOK (中文)](/WEBHOOK.md) | Public HTTPS: Caddy certificates, multi-bot paths, reverse proxy |
-| [MIHOMO (中文)](/MIHOMO.md) | Proxy container, proxy environment variables, build-time proxy |
+| [SCENARIOS](SCENARIOS.md) | Two paths (Compose / deploy CLI), four Compose scenarios, systemd backend, Fly.io |
+| [POLLING](POLLING.md) | No public ingress: `RUN_MODE=AUTO`, empty `WEBHOOK_URL` |
+| [WEBHOOK](WEBHOOK.md) | Public HTTPS: Caddy certificates, multi-bot paths, reverse proxy |
+| [MIHOMO](MIHOMO.md) | Proxy container, proxy environment variables, build-time proxy |
 | [MULTI-BOT (中文)](/MULTI-BOT.md) | Auto-discovering `BOT{N}_TOKEN`, adding bots, routing PixivFlow deliveries |
 | [SCHEDULING (中文)](/SCHEDULING.md) | Single source of truth for scheduled posting, slot idempotency and shutdown |
 | [PERFORMANCE (中文)](/PERFORMANCE.md) | Measuring first, then tuning levers; 256/512/1 GiB tiers |

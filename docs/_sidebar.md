@@ -21,3 +21,9 @@
 - English
   - [Documentation](/en/)
   - [📥 Download](/en/download.md)
+  - [Scenarios](/en/SCENARIOS.md)
+  - [Polling](/en/POLLING.md)
+  - [Webhook](/en/WEBHOOK.md)
+  - [Mainland networking and Mihomo](/en/MIHOMO.md)
+  - [Serverless architecture](/en/SERVERLESS-ARCHITECTURE.md)
+  - [Serverless operations](/en/SERVERLESS-OPERATIONS.md)
