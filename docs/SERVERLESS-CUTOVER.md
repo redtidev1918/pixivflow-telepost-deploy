@@ -394,7 +394,7 @@ fencing token、split brain、fail-open/fail-closed、runner 崩溃恢复、老 
 而维护这些复杂度的理由会随着 Fly 一起消失。为保留一个待退役的平面而建设永久基础设施，
 是这次事故里最贵的一种"修复"。
 
-**真正的锁在新系统内部**，由 D1 承担，语义见 `docs/SERVERLESS-ARCHITECTURE.md` §6：
+**真正的锁在新系统内部**，由 D1 承担，语义见 `docs/en/SERVERLESS-ARCHITECTURE.md` §6：
 credential 是外部限流资源，`pixiv-main` 声明 `maxConcurrentExecutions = 1`，
 不同 slot 使用同一 credential 必须串行，不同 credential 可以并行；获取是原子的
 （guard 在开 execution 的同一条 INSERT 里）；释放由 execution 进入终态完成，
@@ -450,7 +450,7 @@ Fly 可以存在、可以保留 volume/SQLite、可以作为回滚镜像，但�
 平面撕裂"。
 
 **也不需要 watchdog**：丢失 tick 由 Cloudflare reconciliation 自带恢复（sweep 每 10 分钟重算
-lookback 窗口内的 occurrence，见 §9 与 `docs/SERVERLESS-OPERATIONS.md` §8），
+lookback 窗口内的 occurrence，见 §9 与 `docs/en/SERVERLESS-OPERATIONS.md` §8），
 这正是它取代 Fly watchdog 的原因。
 
 ## 9. 完整生产周期判据（跑完才停 Fly）

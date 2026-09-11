@@ -4,13 +4,17 @@
 > (download scheduler) together with TelePost (Telegram review/publish bot), shipped as
 > a Go `deploy` CLI plus Docker Compose and Fly.io backends. New here? Follow
 > [SCENARIOS](SCENARIOS.md) → pick [Polling](POLLING.md) or [Webhook](WEBHOOK.md).
+>
+> English pages live under [`/en/`](en/), including the production serverless
+> architecture and operations reference.
 
 这是 PixivFlow + TelePost 的部署套件：`deploy` CLI（Go 单二进制）+ Docker Compose +
 Fly.io，把 PixivFlow 的定时下载和 TelePost 的 Telegram 审核/发布串起来。按你的目标选一条路线:
 
 ## 📥 下载
 
-`deploy` 一键部署工具（单二进制）见 [📥 下载页](download.md)（自动指向最新 Release，各平台压缩包）。
+`deploy` 一键部署工具（单二进制）见 [📥 下载页](download.md)（自动指向最新 Release，各平台压缩包）；
+英文版见 [Download](/en/download.md)。
 
 ## 🧭 按任务找文档
 
@@ -20,7 +24,7 @@ Fly.io，把 PixivFlow 的定时下载和 TelePost 的 Telegram 审核/发布串
 | 有域名、要公网 HTTPS 入站 | [Webhook：公网 HTTPS 部署](WEBHOOK.md) |
 | 国内服务器、需要代理 | [国内网络与 Mihomo](MIHOMO.md) |
 | 加第 2、3 个频道 | [多 Bot：加第 N 个频道](MULTI-BOT.md) |
-| 想省钱、开自动休眠 | [Fly.io 自动休眠（auto-stop）](AUTOSTOP.md) |
+| 想省钱、开自动休眠 | [定时投稿与停机](SCHEDULING.md) |
 | 内存不够 / OOM 调优 | [性能与内存调优](PERFORMANCE.md) |
 | 从 Mac 远程更新配置或代码 | [从 Mac 远程更新策略](REMOTE_UPDATES.md) |
 | 了解架构、二次开发 | [架构与信任边界](ARCHITECTURE.md) |
@@ -47,8 +51,17 @@ Fly.io，把 PixivFlow 的定时下载和 TelePost 的 Telegram 审核/发布串
 
 | 文档 | 内容 |
 | --- | --- |
-| [AUTOSTOP](AUTOSTOP.md) | Fly auto-stop 成本优化：stop vs suspend、外部闹钟、推荐拓扑与决策清单 |
+| [SCHEDULING](SCHEDULING.md) | 定时投稿与停机的**单一事实源**：触发模型、Slot 幂等、重试不重复、决策树 |
+| [AUTOSTOP](AUTOSTOP.md) | Fly auto-stop 成本优化（历史方案，已被 SCHEDULING 取代，保留作参考） |
 | [PERFORMANCE](PERFORMANCE.md) | 内存调优：先测量、按影响排序的杠杆、256/512/1 GiB 三档与监控 |
+
+### 生产（无服务器控制平面）
+
+| 文档 | 内容 |
+| --- | --- |
+| [SERVERLESS-ARCHITECTURE](en/SERVERLESS-ARCHITECTURE.md) | 架构与不变量：Worker + D1 作为唯一时钟与账本，旧失败模式为何被构造消除（英文） |
+| [SERVERLESS-OPERATIONS](en/SERVERLESS-OPERATIONS.md) | 部署、迁移、凭据与账号管理、执行平面契约、可观测性与 runbook（英文） |
+| [SERVERLESS-CUTOVER](SERVERLESS-CUTOVER.md) | 上线步骤、回滚、验收判据与 Fly 退役（含状态说明） |
 
 ### 进阶
 
@@ -68,4 +81,4 @@ Fly.io，把 PixivFlow 的定时下载和 TelePost 的 Telegram 审核/发布串
 
 - [SCENARIOS](SCENARIOS.md) — 还没跑起来?从这里开始
 - [POLLING](POLLING.md) — 无公网环境?默认就是它
-- [AUTOSTOP](AUTOSTOP.md) — 想省钱?先读适用画像
+- [SCHEDULING](SCHEDULING.md) — 想省钱?先读定时与停机的单一事实源
