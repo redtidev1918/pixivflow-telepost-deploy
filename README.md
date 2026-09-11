@@ -1,5 +1,7 @@
 # PixivFlow + TelePost Deploy
 
+**语言 / Language:** 中文 · [English](README.en.md)
+
 [![Validate](https://github.com/redtidev1918/pixivflow-telepost-deploy/actions/workflows/validate.yml/badge.svg)](https://github.com/redtidev1918/pixivflow-telepost-deploy/actions/workflows/validate.yml)
 [![Release](https://github.com/redtidev1918/pixivflow-telepost-deploy/actions/workflows/release.yml/badge.svg)](https://github.com/redtidev1918/pixivflow-telepost-deploy/actions/workflows/release.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
@@ -30,8 +32,8 @@ Telegram                (媒体只上传一次；发布是服务器端 copyMessa
 cron 丢整天、两个时钟重复投稿 —— 这些是**结构问题**，重试再好也修不掉。新架构让每
 一类都**由构造消除**，而不是"处理得更好"。
 
-- 架构与不变量（含每一条旧失败模式为何不可能再发生）：**[docs/SERVERLESS-ARCHITECTURE.md](docs/SERVERLESS-ARCHITECTURE.md)**
-- 部署、迁移、凭据与账号管理、执行平面契约、可观测性、runbook：**[docs/SERVERLESS-OPERATIONS.md](docs/SERVERLESS-OPERATIONS.md)**
+- 架构与不变量（含每一条旧失败模式为何不可能再发生，英文）：**[docs/en/SERVERLESS-ARCHITECTURE.md](docs/en/SERVERLESS-ARCHITECTURE.md)**
+- 部署、迁移、凭据与账号管理、执行平面契约、可观测性、runbook（英文）：**[docs/en/SERVERLESS-OPERATIONS.md](docs/en/SERVERLESS-OPERATIONS.md)**
 - 上线步骤、回滚、验收判据、Fly 退役：**[docs/SERVERLESS-CUTOVER.md](docs/SERVERLESS-CUTOVER.md)**
 - 上线门禁（只读）：`scripts/cutover-preflight.sh`
 
@@ -496,7 +498,7 @@ data/                             数据库、下载缓存、outbox、实际配�
 pixivflow/config/*.example.json   多计划安全模板
 config/telepost-policy.example.json 非敏感频道/审核策略模板
 scripts/                          初始化、校验、本机/SSH 原子更新
-docs/                             架构、场景、性能、Webhook/代理等说明（auto-stop 省钱见 AUTOSTOP.md）
+docs/                             架构、场景、性能、Webhook/代理等说明（定时投稿与省钱停机见 SCHEDULING.md；英文生产文档在 docs/en/）
 fly/                              Fly.io 512 MiB 配置与更新脚本
 proxy/                            可选 Mihomo 镜像
 .github/workflows/release.yml      打 v* 标签时产出各平台 deploy 二进制并附到 Release
