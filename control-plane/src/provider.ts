@@ -63,6 +63,13 @@ export interface DispatchRequest {
 export interface DispatchResult {
   accepted: boolean;
   detail?: string;
+  /**
+   * The provider's own run id, when the dispatch API returns one synchronously
+   * (Fly Machines create does; GitHub workflow_dispatch does not). Persisted
+   * immediately so reconciliation queries THIS machine instead of guessing one
+   * from creation-time heuristics.
+   */
+  providerRunId?: string;
 }
 
 export interface ExecutionProvider {

@@ -706,6 +706,11 @@ export class FakeProvider implements ExecutionProvider {
   readonly dispatches: Array<{ slotId: string; credentialKey: string; attempt: number; ref: string }> = [];
   acceptDispatch = true;
   dispatchError: string | undefined;
+  /**
+   * Fly-style dispatch: the create response carries the run id synchronously,
+   * so the control plane persists it before the runner ever claims.
+   */
+  syncRunId = false;
   /** Simulate a provider whose dispatch throws (network failure, runtime bug). */
   throwOnDispatch: string | undefined;
   cancelCalls: string[] = [];
@@ -738,7 +743,7 @@ export class FakeProvider implements ExecutionProvider {
       ref: request.pixivflowRef,
     });
     this.recent.push(run);
-    return { accepted: true };
+    return this.syncRunId ? { accepted: true, providerRunId: runId } : { accepted: true };
   }
 
   async getRun(runId: string): Promise<ProviderRun> {

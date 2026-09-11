@@ -1,0 +1,21 @@
+# PixivFlow execution worker app.
+#
+# This app owns ONLY disposable executor machines: the control plane's Fly
+# provider creates one machine per admitted execution, the machine claims it,
+# runs one slot, reports the result and auto-destroys. There is deliberately:
+#   - no [http_service] / no public endpoints (no webhook, no scheduler surface)
+#   - no [mounts] volume (durable state lives in D1)
+#   - no cron / no autostart / no restart policy that could resurrect work
+#
+# Machines themselves are created through the Machines API with their execution
+# identity in `config.metadata`; nothing in this file can start work on its own.
+# The image below is overridden per dispatch by the control plane's FLY_IMAGE.
+
+app = 'pixivflow-executor'
+primary_region = 'iad'
+
+[build]
+  dockerfile = 'docker/pixivflow-executor.Dockerfile'
+
+[env]
+  NODE_ENV = 'production'

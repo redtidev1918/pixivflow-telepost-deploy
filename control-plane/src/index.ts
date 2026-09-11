@@ -9,6 +9,7 @@
  */
 
 import { D1ControlStore, type D1Like } from './d1-store';
+import { FlyMachinesExecutionProvider } from './fly-provider';
 import { GitHubActionsExecutionProvider } from './github-provider';
 import { instantToLocal, nextOccurrence, occurrenceFor } from './occurrences';
 import type { DispatchRequest, DispatchResult, ExecutionProvider, ProviderRun } from './provider';
@@ -42,6 +43,29 @@ export interface Env {
    * (see the control-plane README). Never logged.
    */
   GITHUB_DISPATCH_TOKEN?: string;
+  /**
+   * Which provider opens NEW production executions: `github` (default, for
+   * backwards compatibility) or `fly`. Explicit configuration, never inferred
+   * from "which secrets happen to exist" — a second execution plane must not
+   * come into being by accident.
+   */
+  EXECUTION_PROVIDER?: string;
+  /** Fly Machines API token (secret binding). Never logged. */
+  FLY_API_TOKEN?: string;
+  /** Fly app that owns the ephemeral executor machines. */
+  FLY_APP?: string;
+  /** Fly region the executor machines run in (historical baseline: `iad`). */
+  FLY_REGION?: string;
+  /** Immutable executor image reference (a specific version, not bare `latest`). */
+  FLY_IMAGE?: string;
+  /**
+   * Bearer for Fly executor machines ONLY, deliberately separate from
+   * CALLBACK_SECRET (the GitHub runner's): its reach is limited to the runner
+   * routes (claim/items/result, credential read + rotation persist, duplicate
+   * history, review lookup) and never touches operator recovery or credential
+   * administration. Never logged.
+   */
+  FLY_EXECUTOR_SECRET?: string;
   /** base64 of 32 bytes; encrypts stored credentials at rest. */
   CREDENTIAL_MASTER_KEY?: string;
   /**
@@ -128,6 +152,29 @@ class UnconfiguredProvider implements ExecutionProvider {
 }
 
 function buildProvider(env: Env): ExecutionProvider {
+  // The production provider is EXPLICIT configuration, not an inference from
+  // which secrets happen to exist: a second execution plane must never come
+  // into being by accident (2026-09-11 incident, SERVERLESS-CUTOVER.md §8.1).
+  const selected = (env.EXECUTION_PROVIDER ?? 'github').trim().toLowerCase();
+  if (selected === 'fly') {
+    if (!env.FLY_API_TOKEN || !env.FLY_APP || !env.FLY_IMAGE) {
+      return new UnconfiguredProvider(
+        'execution provider not configured: FLY_API_TOKEN/FLY_APP/FLY_IMAGE missing'
+      );
+    }
+    if (!env.CONTROL_PLANE_URL) {
+      return new UnconfiguredProvider('CONTROL_PLANE_URL missing: runners would have nowhere to report back');
+    }
+    return new FlyMachinesExecutionProvider({
+      apiToken: env.FLY_API_TOKEN,
+      appName: env.FLY_APP,
+      region: env.FLY_REGION ?? 'iad',
+      image: env.FLY_IMAGE,
+    });
+  }
+  if (selected !== 'github') {
+    return new UnconfiguredProvider(`unknown EXECUTION_PROVIDER: "${selected}" (expected github or fly)`);
+  }
   if (!env.GITHUB_REPO || !env.GITHUB_DISPATCH_TOKEN) {
     return new UnconfiguredProvider('execution provider not configured: GITHUB_REPO/GITHUB_DISPATCH_TOKEN missing');
   }
@@ -219,6 +266,7 @@ export default {
 
     const controlResponse = await handleControl(request, store, url, env.CALLBACK_SECRET, {
       ...(env.CREDENTIAL_MASTER_KEY ? { CREDENTIAL_MASTER_KEY: env.CREDENTIAL_MASTER_KEY } : {}),
+      ...(env.FLY_EXECUTOR_SECRET ? { FLY_EXECUTOR_SECRET: env.FLY_EXECUTOR_SECRET } : {}),
     });
     if (controlResponse) return controlResponse;
 
