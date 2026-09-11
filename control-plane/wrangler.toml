@@ -16,29 +16,25 @@ database_name = "pixivflow-control"
 database_id = "1fa00cbc-6dcc-4a89-ba8f-30cf79cc286b"
 
 [vars]
-# INCIDENT 2026-09-11 (Pixiv penalty): the shared account `pixiv-main` entered a
-# rate-limit penalty. Every live dispatch from 02:00Z onwards died on the batch's
-# own 1800000ms watchdog with error_class `download_failed` (5/5 attempts across
-# both bots), while the same occurrence finished in ~3 minutes on 2026-09-10T21:19Z.
-# A dispatch is 30 minutes of requests against an account that is being throttled,
-# so continuing to retry deepens the penalty.
+# Dispatch is the only lever that spends the shared Pixiv credential, so both
+# switches live here rather than being flipped out of band (production and this file
+# must never disagree):
+#   DISPATCH_PAUSED = "true"   opens no new attempts. Reconcile / create / expire keep
+#                              running, so the ledger stays honest and every withheld
+#                              occurrence is visible as a `dispatch_paused` event.
+#   EXECUTION_MODE = "shadow"  still dispatches; it only guarantees the runner cannot
+#                              publish. A second lock, not a brake.
+# Pause instead of raising the watchdog when the account is being throttled: one
+# dispatch is 30 minutes of requests against it.
 #
-# Two switches, deliberately both:
-#   DISPATCH_PAUSED  opens no new attempts. Reconcile/create/expire keep running,
-#                    so the ledger stays honest and "why did nothing dispatch" is
-#                    answerable (the sweep records `dispatch_paused`).
-#   EXECUTION_MODE   shadow is the backstop, not the primary lever: shadow alone
-#                    still dispatches (it only guarantees the runner gets the
-#                    shadow config and cannot publish). Keep it as the second lock
-#                    so a manual sweep or /api/slots cannot publish either.
-#
-# Restore the live pair (`EXECUTION_MODE = "live"`, drop DISPATCH_PAUSED) once the
-# penalty has subsided and one occurrence completes end-to-end. Note that a paused
-# occurrence still expires at its dispatch deadline, and `expired` is NOT in
-# RECOVERABLE_SLOT_STATUSES (recovery.ts), so staying paused past a deadline loses
-# that slot for good.
-EXECUTION_MODE = "shadow"
-DISPATCH_PAUSED = "true"
+# INCIDENT 2026-09-11 (resolved): `pixiv-main` entered a Pixiv rate-limit penalty
+# while the legacy Fly plane (`telesubmit-multi-bot`, stopped 04:34Z) refreshed the
+# same credential from a second process, so every live dispatch from 02:00Z died on
+# the batch's own 1800000ms watchdog with `download_failed` (5/5 attempts across both
+# bots), while the same work finished in ~3 minutes at 2026-09-10T21:19Z. Dispatch
+# was paused at 05:21Z and lifted once the account had ~3 hours of cooldown with no
+# second plane running: one credential, one active execution.
+EXECUTION_MODE = "live"
 RECONCILIATION_LOOKBACK_HOURS = "24"
 # This Worker's public base URL (a cron trigger has no request URL, so the runner
 # would otherwise have nowhere to report back).
