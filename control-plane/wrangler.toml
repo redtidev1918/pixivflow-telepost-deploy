@@ -42,7 +42,6 @@ database_id = "1fa00cbc-6dcc-4a89-ba8f-30cf79cc286b"
 # GitHub production dispatch may open. Scheduling, reconciliation, the Telegram
 # webhook and review decisions stay live — only new attempts are withheld.
 EXECUTION_MODE = "live"
-DISPATCH_PAUSED = "true"
 # Which provider opens NEW production executions. `github` until the Fly
 # executor passes its real E2E; then this flips to `fly` in ONE commit —
 # exactly one configured production provider at any moment, never two
