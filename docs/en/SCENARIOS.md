@@ -54,15 +54,16 @@ logged in → Fly.io; a `docker-compose.yml` in the directory → Compose; `syst
 systemd. Having a public address does not force Webhook; when you cannot reliably provide
 inbound HTTPS, Polling is simpler and more reliable.
 
-> Fly is **always-on** by default. To save money you can enable auto-stop, or split into two
-> Production topology and lifecycle: see [ARCHITECTURE.md](ARCHITECTURE.md).
+The production topology on Fly is fixed at two apps: PixivFlow is normally stopped, is woken by
+the trigger request and exits based on its own ledger, while TelePost stays always on. Do not
+give PixivFlow auto-stop or a health check; the reasoning is in the
+[architecture document](/ARCHITECTURE.md) (Chinese), section 生命周期.
 
 ## Want the WebUI management panel?
 
 The kit's combined image does not include WebUI by default (the 512 MiB trade-off). On a ≥1 GiB
 machine you can run the official webui container sharing `./data` with the kit (zero changes to
 the kit). Build commands, shared-volume startup and concurrency caveats are in the
-[README section "Optional: PixivFlow WebUI management panel"](https://github.com/redtidev1918/pixivflow-telepost-deploy/blob/main/README.en.md).
+[README section on the WebUI](https://github.com/redtidev1918/pixivflow-telepost-deploy/blob/main/README.en.md#optional-pixivflow-webui-needs-1-gib).
 
-> Pages marked **（中文）** are currently Chinese-only. Their English versions are being added
-> incrementally.
+Pages marked （中文） are currently Chinese-only.

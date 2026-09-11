@@ -3,7 +3,7 @@
 这份文件写给任何进入本仓库的智能体或工程师。先读 `docs/ARCHITECTURE.md`，它是职责契约的
 唯一权威描述；本文件只回答「什么该做、什么绝对不该做」。
 
-## 一句话
+## 定位
 
 本仓库把 PixivFlow（执行）与 TelePost（投稿/审核/发布）组合成一个可部署的生产系统，
 外加一个只负责「何时唤醒」的 Cloudflare 薄时钟。**它不拥有任何业务状态。**
@@ -58,5 +58,5 @@ go test ./...                                  # 部署工具
   文档与门禁脚本已删除：`docs/SERVERLESS-CUTOVER.md`、`docs/en/SERVERLESS-*.md`、
   `scripts/cutover-preflight.sh`、`scripts/prod-acceptance*.{sh,js}`。
   请勿重新引入——三平面对应三仓库，契约见 `docs/ARCHITECTURE.md`。
-- PixivFlow 与 TelePost 各自新增了 `AGENTS.md` 职责契约（分别在各自仓库根目录）；
-  改动跨仓库边界时先读那两份。
+- TelePost 仓库根目录有它自己的 `AGENTS.md` 职责契约，改动跨仓库边界时先读它；
+  PixivFlow 目前没有 `AGENTS.md`，其边界以本仓库 `docs/ARCHITECTURE.md` 为准。

@@ -48,8 +48,9 @@ sudo ./deploy pf latest --platform systemd     # 升级 PixivFlow（npm 重装 +
 Fly.io；目录里有 `docker-compose.yml` → Compose；Linux 有 systemctl → systemd。
 有公网不代表必须用 Webhook；无法稳定提供 HTTPS 入站时，Polling 更简单可靠。
 
-> Fly 默认**常驻（always-on）**。想省钱可开 auto-stop、或拆成 256 MiB 两台——那是
-> 生产拓扑与生命周期见 [ARCHITECTURE.md](ARCHITECTURE.md)。
+Fly 上的生产拓扑固定为两个应用：PixivFlow 平时停止、被触发请求唤醒、跑完由自己的账本
+决定退出；TelePost 常驻。不要给 PixivFlow 配 auto-stop 或健康检查，原因见
+[ARCHITECTURE.md](ARCHITECTURE.md) 的「生命周期」一节。
 
 ## 想要 WebUI 管理面板？
 

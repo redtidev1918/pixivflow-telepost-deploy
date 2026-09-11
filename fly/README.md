@@ -6,7 +6,7 @@
 | 文件 | 应用 | 角色 | 关键参数 |
 | --- | --- | --- | --- |
 | `deploy.telepost.toml` | `telesubmit-multi-bot` | 常驻：webhook / 投稿 API / 审核 / 发布 | `auto_stop_machines=false`、`min_machines_running=1`、`force_https=false`（Flycast 投递）、长期健康检查 |
-| `deploy.pixivflow.toml` | `pixivflow-scheduler` | 执行端：平时停止、被触发唤醒、跑完自行退出 | `auto_start_machines=true`、`auto_stop_machines=false`、`min_machines_running=0`、`restart.policy=no`、**无健康检查** |
+| `deploy.pixivflow.toml` | `pixivflow-scheduler` | 执行端：平时停止、被触发唤醒、跑完自行退出 | `auto_start_machines=true`、`auto_stop_machines=false`、`min_machines_running=0`、`restart.policy=never`（线上 Machine 配置显示为 `no`）、**无健康检查** |
 
 ## 部署
 

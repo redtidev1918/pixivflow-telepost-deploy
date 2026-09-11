@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # 只读生产校验：一句话回答「现在的生产是不是契约描述的那套东西」。
 #
-# 只读的含义很具体：不发触发请求、不改配置、不注册 webhook、不动数据。
-# 唯一带凭据的检查（webhook 归属）在缺少变量时输出 SKIP，且永远不打印密钥。
+# 只读的含义很具体：不改配置、不注册 webhook、不动数据。全脚本只对外发一次请求，
+# 而且故意不带凭据（第 3 节的未授权触发核对），因此不会触发任何实际执行；带凭据的
+# webhook 归属核对在缺变量时输出 SKIP，且永远不打印密钥。
 #
 # 退出码：0 = 全部通过（SKIP 不算失败），1 = 至少一项不合格。
 set -uo pipefail
@@ -14,7 +15,19 @@ pixivflow_app=${PIXIVFLOW_APP:-pixivflow-scheduler}
 telepost_app=${TELEPOST_APP:-telesubmit-multi-bot}
 worker_name=${WORKER_NAME:-pixivflow-control-plane}
 trigger_base=${PIXIVFLOW_TRIGGER_BASE_URL:-https://pixivflow-scheduler.fly.dev}
-schedule_id=${SCHEDULE_ID:-bot1-daily}
+# schedule id 从权威配置读，不用脚本里的魔法常量：常量一旦和配置漂移，未授权核对
+# 会退化成「路径不存在」的 404——看起来仍在核对，其实什么也没核对。
+schedule_id=${SCHEDULE_ID:-}
+if [[ -z "$schedule_id" ]]; then
+  schedule_id=$(python3 -c '
+import json, sys
+cfg = json.load(open("pixivflow/config/production.json"))
+for s in cfg.get("schedules") or []:
+    if s.get("enabled") is not False and s.get("id"):
+        print(s["id"])
+        break
+' 2>/dev/null || true)
+fi
 
 failures=0
 fail() { echo "[FAIL] $*"; failures=$((failures + 1)); }
@@ -212,14 +225,27 @@ else
   fi
 fi
 
-code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 20 \
-  "${trigger_base%/}/internal/schedules/${schedule_id}/run" 2>/dev/null || echo 000)
-case "$code" in
-  401|403) ok "未授权的触发被拒（HTTP ${code}）" ;;
-  000) fail "触发地址无法访问：${trigger_base}" ;;
-  200|202) fail "未授权触发被接受（HTTP ${code}）：触发端点缺少鉴权" ;;
-  *) note "未授权触发返回 HTTP ${code}（预期 401/403；若为 404 检查路径与 schedule id）" ;;
-esac
+# 全脚本唯一一次对外请求，而且故意不带凭据：它只回答「触发端点会不会在无凭据时
+# 放行」。必须用 POST + JSON——触发端点只注册了 POST，用 GET 会得到 404 而不是
+# 401，于是「鉴权生效」这条被一个方法用错的探针永久掩盖（实测过）。
+# 注意：若执行端当时是 stopped，这一发会把机器唤醒并占掉一个空闲窗口；这是刻意
+# 的核对成本，不是周期性探测（执行端仍然不配任何健康检查）。
+if [[ "$pixivflow_exists" != true ]]; then
+  note "跳过未授权触发核对（${pixivflow_app} 不存在）"
+elif [[ -z "$schedule_id" ]]; then
+  fail "无法从权威配置读出 schedule id（pixivflow/config/production.json 里没有 enabled 的 schedule）"
+else
+  code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 20 -X POST \
+    -H 'content-type: application/json' -d '{"label":"verify-production-unauthorized"}' \
+    "${trigger_base%/}/internal/schedules/${schedule_id}/run" 2>/dev/null || echo 000)
+  case "$code" in
+    401|403) ok "未授权的触发被拒（HTTP ${code}）：触发端点确实要求凭据" ;;
+    000) fail "触发地址无法访问：${trigger_base}" ;;
+    200|202) fail "未授权触发被接受（HTTP ${code}）：触发端点缺少鉴权" ;;
+    404) fail "触发端点不存在（HTTP 404）：路径或 schedule id 与运行配置不一致" ;;
+    *) fail "未授权触发返回 HTTP ${code}（预期 401/403）" ;;
+  esac
+fi
 
 echo "== 4/7 业务端探针 =="
 for path in health live; do

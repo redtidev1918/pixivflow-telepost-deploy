@@ -13,9 +13,9 @@ NAT 主机、Mac/Linux 本机和 Fly.io。默认（Compose）以两个独立容�
 多 Bot supervisor 与 PixivFlow 调度器各自拉取 ghcr 镜像、经 HTTP 通信，适合
 512 MiB 小机器，不启动 WebUI。
 
-> ⚠️ **同一件事有两个「权威」实现，就是 2026-09-11 事故的成因**：当时投稿机器人的 webhook
-> 被指向 Worker，用户投稿被「签收后丢弃」。今天只剩一个 webhook 负责人（TelePost）、
-> 一套执行账本（PixivFlow）。旧的实现与其上线门禁脚本已删除，守护测试会阻止它们回来。
+生产只有一个 webhook 负责人（TelePost）和一套执行账本（PixivFlow）。历史上曾同时存在
+两份「权威」实现，投稿机器人的 webhook 被指向 Cloudflare Worker，用户投稿被静默丢弃；
+那套实现与其上线门禁脚本已删除，`control-plane/test/` 下的守护测试会阻止它们回来。
 
 ## 生产拓扑：两个应用 + 一个时钟
 
@@ -31,7 +31,7 @@ NAT 主机、Mac/Linux 本机和 Fly.io。默认（Compose）以两个独立容�
 不用 Fly 时：**Docker Compose** 是单机自托管路径（所有角色在一个容器内），
 它与上面的生产拓扑不是同一组边界，区别写在 ARCHITECTURE 末节；systemd / 裸机同理。
 
-> 定时、唤醒、停机、Slot 幂等、投递不重复的完整原理与不变量：**[docs/SCHEDULING.md](docs/SCHEDULING.md)**。
+定时、唤醒、停机、Slot 幂等与投递去重的原理和不变量见 [docs/SCHEDULING.md](docs/SCHEDULING.md)。
 
 ## 特性
 
@@ -46,8 +46,8 @@ NAT 主机、Mac/Linux 本机和 Fly.io。默认（Compose）以两个独立容�
 - **多网络模式**：Polling / Webhook / 可选 Mihomo 代理，同一套 `api/botN/v1/*` 接口。
 - **低内存友好**：512 MiB 即可运行——小相册 + 失败自动降级逐张、逐页强制 GC、
   可调健康检查参数。
-- **远程热更新**：PixivFlow 配置原子热重载；TelePost 可由 OWNER 使用 `/botconfig`
-  持久化策略并只重载当前 Bot，批量策略仍可通过脚本短重启应用。
+- **远程更新**：Compose/systemd 部署下 PixivFlow 配置改文件即热重载，Fly 生产随镜像发布；
+  TelePost 可由 OWNER 用 `/botconfig` 持久化策略并只重载当前 Bot，批量策略用脚本短重启应用。
 - **不静默、不重复**：最终无候选会进审核群；PixivFlow 持久 outbox
   防止短暂故障漏通知，TelePost SQLite 幂等记录防止重启后重复通知。
 
@@ -311,25 +311,18 @@ pixivflow download --config /app/data/pixivflow/config.json
 
 ## 远程变更
 
-PixivFlow 会监听配置文件；有效的新 JSON 通过完整校验后原子替换调度表，无需重启：
-
-```bash
-# 本机部署
-./scripts/update_pixivflow_config.sh ./my-config.json
-
-# 从 Mac 更新远端 VPS
-./scripts/push_pixivflow_config.sh user@server /opt/pixivflow-telepost ./my-config.json
-```
+Compose/systemd 部署下，PixivFlow 监听配置文件，校验通过后原子替换调度表，无需重启；
+Fly 生产执行端的配置随镜像发布（`watchConfig=false`），改配置需要重新构建并部署。
 
 TelePost OWNER 可直接在 Telegram 使用 `/botconfig` 修改当前 Bot 的频道、审核群、
 API/聊天审核与频道署名策略；存在 pending 投稿时会拒绝切换频道或审核群。应用后只
 重载当前 Bot，另一个 Bot、PixivFlow、数据库、缓存和 outbox 不受影响。
 
-需要从 Mac 批量更新多个 Bot 时，仍可使用非敏感策略文件：
+从 Mac 批量更新多个 Bot 时使用非敏感策略文件：
 
 ```bash
 cp config/telepost-policy.example.json ./telepost-policy.json
-./scripts/apply_telepost_policy.sh ./telepost-policy.json
+./scripts/apply_telepost_policy.sh ./telepost-policy.json   # 本机
 ./scripts/push_telepost_policy.sh user@server /opt/pixivflow-telepost ./telepost-policy.json
 ```
 
@@ -456,8 +449,8 @@ Basic Auth）。
 - **并发**：webui 与 pixivflow scheduler 共用同一个 SQLite / 下载目录（官方即按
   共享卷设计）；日常查看、改计划没问题，但不要在 webui 里与 scheduler 同时触发
   大规模下载/维护，避免 SQLite 锁竞争。
-- **版本对齐**：webui 后端镜像的 PixivFlow 版本不要低于 kit 内嵌的版本（当前
-  2.10.31），以免旧版本读不懂新 config 字段；config 用 `PIXIV_DOWNLOADER_CONFIG`
+- **版本对齐**：webui 后端镜像的 PixivFlow 版本不要低于 kit 内嵌的版本（Compose 默认
+  `pixivflow:2.12.3`），以免旧版本读不懂新 config 字段；config 用 `PIXIV_DOWNLOADER_CONFIG`
   显式指向 kit 那份即可（相对路径会以该 config 为基准解析，各进程一致）。
 - **前端升级**：方式 B 的前端独立成镜像，换 tag 重启即可，无需重新构建后端。
 

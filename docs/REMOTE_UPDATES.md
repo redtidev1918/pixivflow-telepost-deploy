@@ -17,20 +17,25 @@
 旧的 `source` 子命令已删除：它会重新引入源码构建路径，与「只有两份权威 Fly 配置、
 镜像一律按不可变引用构建」的契约冲突，请勿重新引入。
 
-## PixivFlow：真正热重载
+## PixivFlow 配置更新
 
-先保存一份不含真实密钥的策略 JSON。真实 Pixiv 与投稿 Token 通过远端 `.env`
-注入，JSON 中只保留 `${TELEPOST_BOTN_SUBMIT_TOKEN}` 占位符。
+生产 Fly 执行端的配置随镜像发布（`pixivflow/config/production.json`，`watchConfig=false`）：
+改配置就是改该文件，再重新构建并部署执行端，不存在运行中热重载。
+
+Compose 与 systemd 自托管部署的配置在 `data/pixivflow/config.json`，`watchConfig=true`，
+直接编辑该文件即可热重载。先本地校验再上传，避免远端读到半份配置：
 
 ```bash
 python3 -m json.tool ./my-config.json >/dev/null
-./scripts/push_pixivflow_config.sh \
-  user@server /opt/pixivflow-telepost ./my-config.json
+scp ./my-config.json user@server:/opt/pixivflow-telepost/data/pixivflow/config.json.upload
+ssh user@server 'cd /opt/pixivflow-telepost \
+  && python3 -m json.tool data/pixivflow/config.json.upload >/dev/null \
+  && mv data/pixivflow/config.json.upload data/pixivflow/config.json'
 ```
 
-脚本上传为 `config.json.upload`，远端再次校验后用 `mv` 原子替换。PixivFlow 文件
-监听器会校验整份配置，再一次替换 Cron、targets 和 delivery；无效配置保留旧快照。
-修改 `pixiv`、`network` 或 `storage` 时应手工重启容器。
+真实 Pixiv 与投稿 Token 用 `${TELEPOST_BOTN_SUBMIT_TOKEN}` 占位符写在 JSON 里，
+由远端 `.env` 注入。监听器校验整份配置后一次替换 Cron、targets 与 delivery，
+无效配置保留旧快照；改动 `pixiv`、`network` 或 `storage` 段需要手工重启容器。
 
 ## TelePost：策略更新后短重启
 

@@ -14,11 +14,11 @@ macOS/Linux machine, and Fly.io. The default (Compose) topology runs two indepen
 containers — a TelePost multi-bot supervisor and a PixivFlow scheduler — each pulling a
 `ghcr` image and talking over HTTP, sized for 512 MiB machines with no WebUI.
 
-> ⚠️ **Two things claiming to be authoritative is how the 2026-09-11 incident happened**:
-> the submission bot's webhook pointed at the Worker, and every user submission was
-> "acknowledged then dropped". Today there is exactly one webhook owner (TelePost) and one
-> execution ledger (PixivFlow). The legacy implementation and its acceptance scripts are
-> deleted, and guard tests stop them from returning.
+Production has exactly one webhook owner (TelePost) and one execution ledger (PixivFlow). There
+was once a second implementation claiming to be authoritative: the submission bot's webhook
+pointed at a Cloudflare Worker and every user submission was silently dropped. That
+implementation and its acceptance scripts are deleted, and the guard tests under
+`control-plane/test/` keep them from returning.
 
 ## Production topology: two apps and one clock
 
@@ -39,8 +39,8 @@ Without Fly: **Docker Compose** is a single-machine self-host path (every role i
 container) and does not have the same boundaries as the production topology above; the
 difference is spelled out at the end of ARCHITECTURE. systemd/bare metal is the same story.
 
-> Scheduled posting, wake-up, shutdown, slot idempotency and no-duplicate delivery:
-> **[docs/SCHEDULING.md](docs/SCHEDULING.md)**.
+Scheduled posting, wake-up, shutdown, slot idempotency and no-duplicate delivery are described
+in [docs/SCHEDULING.md](docs/SCHEDULING.md).
 
 ## Features
 
@@ -60,9 +60,9 @@ difference is spelled out at the end of ARCHITECTURE. systemd/bare metal is the 
   same `api/botN/v1/*` interface.
 - **Low-memory friendly**: runs in 512 MiB — small albums with automatic per-image fallback,
   per-page forced GC and tunable health-check parameters.
-- **Remote hot updates**: PixivFlow atomically hot-reloads its config; a TelePost OWNER can
-  persist policy for the current bot via `/botconfig`, while bulk policy changes still apply
-  through a scripted short restart.
+- **Remote updates**: under Compose/systemd PixivFlow hot-reloads its config when the file
+  changes; the Fly production image ships its config instead. A TelePost OWNER can persist
+  policy for the current bot via `/botconfig`, and bulk changes apply through a scripted short restart.
 - **Never silent, never duplicate**: an empty final candidate list still posts to the review
   group; PixivFlow's persistent outbox prevents lost notifications during short outages and
   TelePost's SQLite idempotency records prevent duplicate notifications after restarts.
@@ -177,8 +177,12 @@ defaults sized for a 512 MiB machine: **telepost 320m + pixivflow 192m** (tunabl
 | **512 MiB** (default) | Two bots + PixivFlow | Defaults: telepost 320m + pixivflow 192m |
 | **≥1 GiB** | The above with headroom / WebUI | Raise `TELEPOST_MEMORY_LIMIT=512m`, `PIXIVFLOW_MEMORY_LIMIT=384m` |
 
-The optional PixivFlow WebUI needs ≥1 GiB. Before exposing it publicly, set both
+## Optional PixivFlow WebUI (needs ≥1 GiB)
+
+It is not part of the kit's combined image. Before exposing it publicly, set both
 `WEBUI_USERNAME` and `WEBUI_PASSWORD` (Basic Auth is enabled only when both are non-empty).
+Container build commands and the shared-volume startup are in the Chinese
+[README section](/README.md) and [SCENARIOS](/SCENARIOS.md).
 
 ## Security boundaries
 
@@ -200,7 +204,7 @@ Full documentation site: <https://redtidev1918.github.io/pixivflow-telepost-depl
 
 | Document | Content |
 | :-- | :-- |
-| [📥 Download](docs/download.md) | Per-platform `deploy` binaries (auto-updated on every release) |
+| [Download](docs/download.md) | Per-platform `deploy` binaries (auto-updated on every release) |
 | [English docs index](docs/en/README.md) | English entry point |
 | [SCENARIOS](docs/SCENARIOS.md) | Deployment scenario cheat sheet (Chinese) |
 | [SCHEDULING](docs/SCHEDULING.md) | Scheduled posting, shutdown, slot idempotency (Chinese) |
