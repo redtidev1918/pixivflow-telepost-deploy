@@ -84,7 +84,11 @@ export function dueForDispatch(
     // immediately is what spends a second runner on the same contended account
     // instead of waiting for it to clear.
     if (row.retryNotBefore !== null && row.retryNotBefore > nowMs) return false;
-    return row.attemptCount < maxAttemptsFor(row.scheduleId);
+    // Automatic retry keeps its own ceiling; an operator recovery widens it by
+    // exactly one per grant. Without the second term a recovered occurrence would
+    // sit `pending` forever, because its attempts are already spent -- which is
+    // what made a terminal occurrence unrecoverable before.
+    return row.attemptCount < maxAttemptsFor(row.scheduleId) + row.recoveryCount;
   });
 }
 

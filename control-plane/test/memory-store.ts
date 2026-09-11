@@ -77,6 +77,10 @@ export class MemoryControlStore implements ControlPlaneStore {
       startedAt: null,
       completedAt: null,
       lastError: null,
+      recoveryCount: 0,
+      recoveryGeneration: 0,
+      recoveryReason: null,
+      recoveredAt: null,
     });
     void nowMs;
     return 'created';
@@ -262,6 +266,62 @@ export class MemoryControlStore implements ControlPlaneStore {
       row.attemptCount += 1;
       row.dispatchedAt = row.dispatchedAt ?? nowMs;
     }
+  }
+
+  async countOpenExecutionsForSlot(slotId: string): Promise<number> {
+    return [...this.executions.values()].filter(
+      (execution) =>
+        execution.slotId === slotId &&
+        ['dispatching', 'dispatched', 'running'].includes(execution.status)
+    ).length;
+  }
+
+  async listReviewsForSlot(slotId: string): Promise<ReviewRecord[]> {
+    return [...this.reviews.values()]
+      .filter((review) => review.slotId === slotId)
+      .sort((a, b) => a.createdAt - b.createdAt);
+  }
+
+  /**
+   * Mirrors the SQL WHERE clause exactly: the same pre-state the caller observed,
+   * plus "no execution still holds the slot". An in-memory store cannot interleave,
+   * but the conditions still have to hold, or a test could pass against a fake that
+   * grants what the real store refuses.
+   */
+  async grantRecoveryAttempt(input: {
+    slotId: string;
+    reason: string;
+    actor: string;
+    nowMs: number;
+    dispatchDeadline: number;
+    expectedStatus: SlotStatus;
+    expectedGeneration: number;
+  }): Promise<'requeued' | 'conflict' | 'not-found'> {
+    const row = this.slots.get(input.slotId);
+    if (!row) return 'not-found';
+    // Everything from here to the mutation is synchronous ON PURPOSE. The real
+    // store does this in one UPDATE, so check-then-write is atomic; a single
+    // `await` between the check and the write would let two concurrent grants both
+    // pass the guard and buy two attempts from one terminal generation.
+    const holds = [...this.executions.values()].some(
+      (execution) =>
+        execution.slotId === input.slotId &&
+        ['dispatching', 'dispatched', 'running'].includes(execution.status)
+    );
+    if (row.status !== input.expectedStatus) return 'conflict';
+    if (row.recoveryGeneration !== input.expectedGeneration) return 'conflict';
+    if (holds) return 'conflict';
+
+    row.status = 'pending';
+    row.recoveryCount += 1;
+    row.recoveryGeneration += 1;
+    row.recoveryReason = `${input.actor}: ${input.reason}`;
+    row.recoveredAt = input.nowMs;
+    row.dispatchDeadline = input.dispatchDeadline;
+    row.retryNotBefore = null;
+    row.currentExecutionId = null;
+    row.completedAt = null;
+    return 'requeued';
   }
 
   async getOccurrence(slotId: string): Promise<OccurrenceRow | null> {
