@@ -49,6 +49,18 @@ export interface OccurrenceRow {
   startedAt: number | null;
   completedAt: number | null;
   lastError: string | null;
+  /**
+   * Operator recovery attempts granted for this occurrence.
+   *
+   * Automatic retry keeps `maxAttempts`; a grant widens the dispatch ceiling by
+   * exactly one attempt per grant. Kept separate from `attemptCount` so the
+   * automatic history is never rewritten to look like fewer runs.
+   */
+  recoveryCount: number;
+  /** Bumped by every successful grant, so concurrent grants cannot both win. */
+  recoveryGeneration: number;
+  recoveryReason: string | null;
+  recoveredAt: number | null;
 }
 
 export interface ReconciliationSummary {
@@ -181,6 +193,37 @@ export interface ExecutionStore {
     errorClass?: string;
     result?: string;
   }): Promise<void>;
+  /**
+   * Executions still holding this occurrence.
+   *
+   * The recovery gate refuses while any of these exist: granting another attempt
+   * over a live one would put two runs on one credential and one set of side
+   * effects.
+   */
+  countOpenExecutionsForSlot(slotId: string): Promise<number>;
+  /** Reviews recorded against one occurrence, whatever their state. */
+  listReviewsForSlot(slotId: string): Promise<ReviewRecord[]>;
+  /**
+   * Grant one operator recovery attempt.
+   *
+   * A single conditional UPDATE keyed on the state the caller observed: the same
+   * terminal generation can be granted exactly once, so two operators clicking
+   * together produce one recovery, not two. `attempt_count` is NOT reset — the
+   * next dispatch is attempt_count + 1, which is what makes it a fourth attempt
+   * rather than a rewritten first one.
+   *
+   * The occurrence is returned to `pending` and nothing is dispatched here:
+   * normal reconciliation and credential admission still decide when it runs.
+   */
+  grantRecoveryAttempt(input: {
+    slotId: string;
+    reason: string;
+    actor: string;
+    nowMs: number;
+    dispatchDeadline: number;
+    expectedStatus: SlotStatus;
+    expectedGeneration: number;
+  }): Promise<'requeued' | 'conflict' | 'not-found'>;
   setSlotStatus(
     slotId: string,
     status: SlotStatus,
