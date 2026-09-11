@@ -1,47 +1,77 @@
-# PixivFlow 独立调度器实例（拆两台：TelePost 与 PixivFlow 各一台 Fly 机器）
+# PixivFlow: the execution worker (its own app, its own machine, its own volume).
 #
-# 与「合一台」的 fly/deploy.fly-multi-bot.toml 相对：这里只跑 pixivflow scheduler。
-# 这是「低成本架构」的常驻半边：PixivFlow 维护 scheduler/cron，必须 24/7 常驻。
+# One fixed machine with one fixed volume, on purpose. PixivFlow is a stateful
+# durable worker: the slot ledger, the delivery outbox, the credential and the
+# rate-limit state all live on that volume. "One machine per execution" would put
+# the ledger on a filesystem that dies with the machine.
 #
-# 投递走 Flycast（<telepost-app>.flycast）：私网 + 经 Fly Proxy + 支持 auto-start。
-# 注意不要用 .internal（6PN 直连不经过 Proxy，无法唤醒 stopped 的 TelePost）。
+# Lifecycle is decided in three places, and all three are required:
+#   1. Stopped by default. An idle worker should not be billed or hold memory.
+#   2. Woken by the clock. The Cloudflare Worker POSTs an authenticated trigger to
+#      this app; the Fly proxy starts the stopped machine and then forwards
+#      (auto_start_machines = true). That is why there is no machine-management
+#      API token or machine id anywhere in the trigger path.
+#   3. Stops itself when the ledger is empty. schedulerRuntime.exitWhenIdle makes
+#      the process exit once no slot is pending/running and no delivery is
+#      outstanding. `restart policy = "no"` is the other half of this: with a
+#      platform restart policy the machine would come straight back up and the
+#      "stopped" state could never be reached.
 #
-# 部署步骤：
-#   fly apps create <your-pixivflow-app>
-#   fly volumes create pixivflow_data --size 1 -r iad
-#   fly secrets set -a <your-pixivflow-app> \
-#       PIXIV_REFRESH_TOKEN=... TELEPOST_BOT1_SUBMIT_TOKEN=... TELEPOST_BOT2_SUBMIT_TOKEN=...
-#   # TelePost 那台分配 Flycast 私网地址（只需一次）：
-#   fly ips allocate-v6 --private -a <your-telepost-app>
-#   # 把 config.json 放进卷（可用 fly sftp shell / fly ssh 挂载后写入）：
-#   #   deploy init 生成的 data/pixivflow/config.json（含 ${TELEPOST_API_BASE_URL} 占位符）
-#   fly deploy -c fly/deploy.pixivflow.toml
+# There is deliberately no http_service checks block. A probe that keeps hitting
+# this app would fight the stopped state: Fly's proxy would wake a machine that
+# just decided it had finished.
+#
+# Deploy (the app name comes from this file, so no -a):
+#   fly deploy -c fly/deploy.pixivflow.toml --ha=false
 
-app = "your-pixivflow-app"
-primary_region = "iad"
+app = 'pixivflow-scheduler'
+primary_region = 'iad'
+kill_signal = 'SIGTERM'
+kill_timeout = 60
 
 [build]
-  # 直接 `fly deploy -c fly/<本文件>`：dockerfile 路径按本 toml 所在的 fly/ 目录
-  # 解析，须用 ../docker/ 指回仓库根（写 docker/ 会报 fly/docker/... not found）。
-  dockerfile = "../docker/pixivflow.Dockerfile"
+  dockerfile = '../docker/pixivflow-scheduler.Dockerfile'
+  # Immutable by construction: a 40-char commit or a release tag, never a branch
+  # name. A branch name both defeats reproducibility and keeps the clone layer
+  # cached forever, so the image keeps running old code while claiming to be new.
+  #
+  # 2b6b44e = the run-to-completion lifecycle commit, now on master via PR #59.
+  # Once release-please publishes 2.19.0, pin the release tag instead; the image
+  # bakes the resolved commit either way, and scripts/verify-images.sh fails if
+  # the deployed commit is not this one.
+  [build.args]
+    PIXIVFLOW_REF = '2b6b44e5ad5ea68938ab05e2265d94ef2fad9090'
+    PIXIVFLOW_VERSION = '2.19.0-dev'
 
-[build.args]
-  PIXIVFLOW_VERSION = "2.12.3"
+[[mounts]]
+  source = 'pixivflow_data'
+  destination = '/app/data'
 
 [env]
-  TZ = "Asia/Shanghai"
-  PIXIV_DOWNLOADER_CONFIG = "/app/data/pixivflow/config.json"
-  # 拆两台：Flycast 私网投递（经 Fly Proxy，能 auto-start stopped 的 TelePost，不计 egress）。
-  TELEPOST_API_BASE_URL = "http://your-telepost-app.flycast"
-  NODE_OPTIONS = "--max-old-space-size=96 --expose-gc"
-  MALLOC_ARENA_MAX = "2"
-  PIXIV_DB_CACHE_KB = "4096"
+  # Absolute paths on purpose: the config is baked into the image, the ledger is
+  # on the volume, and neither depends on the process working directory.
+  PIXIV_DOWNLOADER_CONFIG = '/app/config/pixivflow.production.json'
+  PIXIV_DB_CACHE_KB = '4096'
+  NODE_ENV = 'production'
+  NODE_OPTIONS = '--max-old-space-size=384'
+  TZ = 'Asia/Shanghai'
+  # TelePost owns submission/review/publish. This is the only way PixivFlow can
+  # reach it: Flycast private network, no Telegram token, no channel id.
+  TELEPOST_API_BASE_URL = 'http://telesubmit-multi-bot.flycast'
 
-[mounts]
-  source = "pixivflow_data"
-  destination = "/app/data"
+[http_service]
+  internal_port = 8090
+  # The trigger carries a bearer token and answers immediately; TLS terminates at
+  # the Fly proxy.
+  force_https = true
+  # Wake a stopped machine on an inbound trigger, and never let the platform
+  # decide a run has finished: only PixivFlow's own ledger can say that.
+  auto_start_machines = true
+  auto_stop_machines = false
+  min_machines_running = 0
+  # No checks here. See the header.
 
-[vm]
-  cpu_kind = "shared"
-  cpus = 1
-  memory_mb = 256
+[restart]
+  # The process exiting is the intended end of a run. Restarting it would defeat
+  # the whole lifecycle.
+  policy = 'no'

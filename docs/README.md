@@ -5,8 +5,11 @@
 > a Go `deploy` CLI plus Docker Compose and Fly.io backends. New here? Follow
 > [SCENARIOS](SCENARIOS.md) → pick [Polling](POLLING.md) or [Webhook](WEBHOOK.md).
 >
-> English pages live under [`/en/`](en/), including the production serverless
-> architecture and operations reference.
+> English pages live under [`/en/`](en/).
+
+> **生产拓扑的唯一权威描述是 [架构与信任边界](ARCHITECTURE.md)。** 它把三个仓库的职责写成
+> 三句话：Cloudflare 只决定「何时唤醒」，PixivFlow 只决定「执行哪些 Pixiv 工作」，TelePost
+> 只决定「投稿如何审核与发布」。与它冲突的历史章节以它为准。
 
 这是 PixivFlow + TelePost 的部署套件：`deploy` CLI（Go 单二进制）+ Docker Compose +
 Fly.io，把 PixivFlow 的定时下载和 TelePost 的 Telegram 审核/发布串起来。按你的目标选一条路线:
@@ -52,22 +55,13 @@ Fly.io，把 PixivFlow 的定时下载和 TelePost 的 Telegram 审核/发布串
 | 文档 | 内容 |
 | --- | --- |
 | [SCHEDULING](SCHEDULING.md) | 定时投稿与停机的**单一事实源**：触发模型、Slot 幂等、重试不重复、决策树 |
-| [AUTOSTOP](AUTOSTOP.md) | Fly auto-stop 成本优化（历史方案，已被 SCHEDULING 取代，保留作参考） |
 | [PERFORMANCE](PERFORMANCE.md) | 内存调优：先测量、按影响排序的杠杆、256/512/1 GiB 三档与监控 |
 
-### 生产（无服务器控制平面）
+### 生产
 
 | 文档 | 内容 |
 | --- | --- |
-| [SERVERLESS-ARCHITECTURE](en/SERVERLESS-ARCHITECTURE.md) | 架构与不变量：Worker + D1 作为唯一时钟与账本，旧失败模式为何被构造消除（英文） |
-| [SERVERLESS-OPERATIONS](en/SERVERLESS-OPERATIONS.md) | 部署、迁移、凭据与账号管理、执行平面契约、可观测性与 runbook（英文） |
-| [SERVERLESS-CUTOVER](SERVERLESS-CUTOVER.md) | 上线步骤、回滚、验收判据与 Fly 退役（含状态说明） |
-
-### 进阶
-
-| 文档 | 内容 |
-| --- | --- |
-| [ARCHITECTURE](ARCHITECTURE.md) | Core Runtime vs 平台优化、进程模型、持久化与失败语义、信任边界 |
+| [ARCHITECTURE](ARCHITECTURE.md) | **三仓库职责契约的唯一权威描述**：三平面拓扑、生命周期、持久化与失败语义、凭据归属、信任边界、只读运维脚本 |
 
 ## 🔗 其他入口
 

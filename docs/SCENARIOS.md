@@ -39,7 +39,7 @@ sudo ./deploy pf latest --platform systemd     # 升级 PixivFlow（npm 重装 +
 ## Fly.io
 
 ```bash
-cp fly/deploy.fly-multi-bot.toml ./telesubmit.fly.toml   # 改 app 名与版本基线
+./deploy init <dir>            # 生成 telesubmit.fly.toml（业务端）与 pixivflow.fly.toml（执行端）
 ./deploy doctor --platform fly        # 检查 flyctl 登录等
 ./deploy deploy --platform fly        # 或 ./deploy tp latest --platform fly
 ```
@@ -49,7 +49,7 @@ Fly.io；目录里有 `docker-compose.yml` → Compose；Linux 有 systemctl →
 有公网不代表必须用 Webhook；无法稳定提供 HTTPS 入站时，Polling 更简单可靠。
 
 > Fly 默认**常驻（always-on）**。想省钱可开 auto-stop、或拆成 256 MiB 两台——那是
-> 可选优化，见 [AUTOSTOP.md](AUTOSTOP.md)。
+> 生产拓扑与生命周期见 [ARCHITECTURE.md](ARCHITECTURE.md)。
 
 ## 想要 WebUI 管理面板？
 
