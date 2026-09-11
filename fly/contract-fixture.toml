@@ -1,0 +1,15 @@
+# Branch-contract POSITIVE probe — comment-only fixture.
+#
+# Purpose: give a production-operation ("cutover") pull request exactly one
+# changed path that lies inside
+#   repository.git.productionOperations.operations.cutover.allowedPaths
+# — namely `fly/*.toml` — while having no runtime effect whatsoever.
+#
+# Nothing deploys from this file and nothing globs `fly/*.toml`; every deploy
+# command names its config explicitly (fly/deploy.*.toml, fly/pixivflow-*.toml).
+#
+# The branch is created from the exact current main HEAD and adds nothing else,
+# so the contract can only pass for the intended reason:
+#   merge-base(head, origin/main) == origin/main
+#   scope = valid
+# It is a read-only diagnostic: the PR is closed without merging.
