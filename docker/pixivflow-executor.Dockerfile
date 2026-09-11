@@ -36,7 +36,7 @@ FROM ${NODE_IMAGE}
 # callbacks). Downloaded media stays on the ephemeral filesystem and dies with
 # the machine.
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends python3 ca-certificates curl jq \
+    && apt-get install -y --no-install-recommends python3 ca-certificates curl jq xz-utils \
     && rm -rf /var/lib/apt/lists/*
 # ugoira -> GIF needs an ffmpeg with full codecs; the slim image has none.
 ADD https://johnvansickle.com/ffmpeg/releases/ffmpeg-release-amd64-static.tar.xz /tmp/ffmpeg.tar.xz
