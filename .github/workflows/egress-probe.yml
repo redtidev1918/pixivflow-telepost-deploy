@@ -1,0 +1,198 @@
+# Minimal Pixiv egress probe — GitHub-hosted runner datapoint.
+#
+# Reachability is not suitability: this job answers, with a handful of tiny
+# requests, whether THIS egress can reach the three independent Pixiv data
+# planes (OAuth / App API / media CDN). It never runs the business workload,
+# so it cannot drive the account into a penalty (2026-09-11:
+# pixivflow-telepost-deploy#43 documents the rate-limit starvation that makes
+# this probe a provider-qualification gate).
+#
+# Manual dispatch only — never a schedule: a probe that fires on its own is a
+# second clock, and this architecture has exactly one (the Cloudflare cron).
+#
+# The OAuth probe performs ONE real token refresh. Following the same rule as
+# the batch ("rotation is durable before success"), a rotated refresh token is
+# persisted to the control plane BEFORE this job can report success.
+
+name: Egress probe
+
+on:
+  workflow_dispatch:
+    inputs:
+      pixivflow_ref:
+        description: 'PixivFlow ref to check out (needs the diagnose egress command)'
+        required: false
+        type: string
+        default: 'master'
+      credential_key:
+        description: 'Pixiv credential alias to read from the control plane'
+        required: false
+        type: string
+        default: 'pixiv-main'
+      provider_label:
+        description: 'Provider label recorded in the report'
+        required: false
+        type: string
+        default: 'github-hosted-runner'
+      job_timeout_minutes:
+        description: 'Hard job bound'
+        required: false
+        type: choice
+        options: ['5', '10', '30']
+        default: '10'
+
+concurrency:
+  group: egress-probe-${{ inputs.credential_key }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: ${{ fromJSON(inputs.job_timeout_minutes || '10') }}
+    env:
+      CREDENTIAL_KEY: ${{ inputs.credential_key }}
+      CONTROL_SECRET: ${{ secrets.CALLBACK_SECRET }}
+      CONTROL_PLANE_URL: ${{ vars.CONTROL_PLANE_URL || 'https://pixivflow-control-plane.redtidev1918.workers.dev' }}
+      # The probe refreshes for real: READONLY must be false here, and the
+      # "Persist a rotated credential" step below is what makes that safe.
+      PIXIV_AUTH_READONLY: 'false'
+      PIXIV_CLIENT_ID: ${{ secrets.PIXIV_CLIENT_ID }}
+      PIXIV_CLIENT_SECRET: ${{ secrets.PIXIV_CLIENT_SECRET }}
+      PIXIV_DEVICE_TOKEN: ${{ secrets.PIXIV_DEVICE_TOKEN }}
+    steps:
+      - name: Resolve the Pixiv credential
+        env:
+          FALLBACK_TOKEN: ${{ secrets.PIXIV_REFRESH_TOKEN }}
+        run: |
+          set -euo pipefail
+          token=""
+          if response=$(curl -sS --max-time 20 -X POST \
+              -H "authorization: Bearer $CONTROL_SECRET" \
+              "${CONTROL_PLANE_URL%/}/credentials/${CREDENTIAL_KEY}/read" 2>/dev/null); then
+            token=$(printf '%s' "$response" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("value",""))' 2>/dev/null || true)
+          fi
+          source="control-plane"
+          if [ -z "$token" ]; then
+            token="$FALLBACK_TOKEN"
+            source="github-secret"
+          fi
+          if [ -z "$token" ]; then
+            echo "::error::no Pixiv credential available from the control plane or the fallback secret"
+            exit 1
+          fi
+          echo "::add-mask::$token"
+          printf 'PIXIV_REFRESH_TOKEN=%s\n' "$token" >> "$GITHUB_ENV"
+          echo "credential resolved from: $source"
+
+      - name: Checkout PixivFlow at the requested ref
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: redtidev1918/PixivFlow
+          ref: ${{ inputs.pixivflow_ref }}
+          path: pixivflow-src
+          persist-credentials: false
+
+      - uses: actions/setup-node@0a44ba7841725637a19e28fa30b79a866c81b0a6 # v4
+        with:
+          node-version: '24'
+
+      - name: Build PixivFlow
+        working-directory: pixivflow-src
+        run: |
+          npm ci
+          npm run build
+
+      - name: Identify the egress (provider/ASN, non-secret)
+        run: |
+          set -euo pipefail
+          if info=$(curl -sS --max-time 10 https://ipinfo.io/json 2>/dev/null); then
+            printf '%s\n' "$info" | jq -r '"egress: \(.ip) \(.org) \(.city), \(.country)"' | tee egress-network.txt
+          else
+            echo "egress: ipinfo lookup failed (non-fatal)" | tee egress-network.txt
+          fi
+
+      - name: Write the probe config
+        # The probe command reads the credential through the standard config
+        # loader; the file lives only on this ephemeral runner.
+        env:
+          PROBE_TOKEN: ${{ env.PIXIV_REFRESH_TOKEN }}
+        run: |
+          set -euo pipefail
+          python3 - "$PROBE_TOKEN" <<'PY'
+          import json, os, sys
+          config = {
+              "pixiv": {"refreshToken": sys.argv[1]},
+              "network": {"proxy": {"enabled": False}},
+              "storage": {"databasePath": os.path.join(os.getcwd(), "egress-probe.db")},
+          }
+          with open("egress.config.json", "w") as fh:
+              json.dump(config, fh)
+          PY
+
+      - name: Run the egress probe
+        id: probe
+        working-directory: pixivflow-src
+        # A probe exit of 2 means a data plane is unusable from this egress: the
+        # job fails so the qualification matrix cannot quietly record a PASS.
+        run: |
+          set -uo pipefail
+          set +e
+          node dist/index.js diagnose egress --json \
+            --provider "${{ inputs.provider_label }}" \
+            --region "$(curl -sS --max-time 10 https://ipinfo.io/country 2>/dev/null || echo unknown)" \
+            --no-proxy \
+            > ../egress-report.json
+          code=$?
+          echo "probe exit code: $code (0 ok / 1 degraded / 2 critical)"
+          python3 - <<'PY'
+          import json
+          with open("../egress-report.json") as fh:
+              report = json.load(fh)
+          with open(os.environ["GITHUB_STEP_SUMMARY"], "a") as fh:
+              fh.write("## Pixiv egress probe\n\n")
+              fh.write(f"- provider: `{report['provider']}`\n- verdict: **{report['verdict']}**\n\n")
+              for finding in report["findings"]:
+                  icon = {"ok": "✓", "warn": "⚠", "critical": "✗", "skipped": "·"}[finding["level"]]
+                  fh.write(f"- {icon} `{finding['code']}` — {finding['message']}\n")
+          PY
+          [ "$code" -ne 2 ] || exit 1
+
+      - name: Persist a rotated credential
+        # Same invariant as the batch: a rotated refresh token is durable in the
+        # control plane before the run may be reported as a success.
+        run: |
+          set -uo pipefail
+          rotated=$(python3 -c "import json;print(json.load(open('egress.config.json')).get('pixiv',{}).get('refreshToken',''))" 2>/dev/null || true)
+          if [ -z "$rotated" ] || [ "$rotated" = "$PIXIV_REFRESH_TOKEN" ]; then
+            echo "credential: unchanged by this run"
+            exit 0
+          fi
+          echo "::add-mask::$rotated"
+          echo "::warning::Pixiv returned a new refresh token; persisting it before the probe is recorded"
+          python3 -c "import json,sys;print(json.dumps({'value': sys.argv[1]}))" "$rotated" > /tmp/rotated.body
+          for attempt in 1 2 3 4 5; do
+            code=$(curl -sS -o /tmp/rotated.response -w '%{http_code}' --max-time 20 \
+              -X PUT -H "authorization: Bearer $CONTROL_SECRET" -H 'content-type: application/json' \
+              --data-binary @/tmp/rotated.body \
+              "${CONTROL_PLANE_URL%/}/credentials/${CREDENTIAL_KEY}" || echo 000)
+            echo "persist attempt $attempt -> HTTP $code"
+            [ "$code" = "200" ] && { rm -f /tmp/rotated.body /tmp/rotated.response; exit 0; }
+            sleep $((attempt * 5))
+          done
+          rm -f /tmp/rotated.body /tmp/rotated.response
+          echo "::error::a rotated refresh token could NOT be stored durably; treat this probe as failed"
+          exit 1
+
+      - name: Upload the report
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: egress-report
+          path: |
+            egress-report.json
+            egress-network.txt
+          if-no-files-found: warn
+          retention-days: 30
