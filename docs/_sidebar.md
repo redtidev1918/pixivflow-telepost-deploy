@@ -13,3 +13,4 @@
   - [性能与内存调优](/PERFORMANCE.md)
 - 生产
   - [架构与信任边界（职责契约）](/ARCHITECTURE.md)
+  - [事故：Pixiv 出口限流 2026-09-11](/incidents/2026-09-11-pixiv-egress-rate-limit.md)
