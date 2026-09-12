@@ -28,3 +28,6 @@ TelePost、Pixiv 或代理供应商处吊销并重新生成。仅删除当前文
 - 默认保持 `BIND_ADDRESS=127.0.0.1`；公网 Webhook 通过 TLS 反向代理暴露。
 - 给 Bot 最小频道权限，投稿 Token 按 Bot 隔离，定期轮换。
 - 更新前备份持久卷并检查 Release、镜像标签及构建来源证明。
+- 修改 CI / 脚本时遵守 [`docs/CREDENTIAL-HANDLING.md`](docs/CREDENTIAL-HANDLING.md)：
+  凭据**永不**成为 Actions artifact，凭据持久化失败一律 **FAIL CLOSED**，凭据只经
+  env / stdin 传递而**不进 argv**。
