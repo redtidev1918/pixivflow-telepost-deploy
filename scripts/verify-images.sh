@@ -53,36 +53,34 @@ else
 fi
 
 echo
-# 提交号只能从执行端自己的启动日志里读：镜像构建时被写进 PIXIVFLOW_REVISION。
-# PIXIVFLOW_REF 既可能是 40 位提交号，也可能是发布 tag；tag 必须先解析成提交号再取短号，
-# 因为镜像里写入的是解析后的提交，而不是 tag 字面量（否则这里会误报不一致）。
+# 提交号只能从执行端自己的启动日志里读：镜像构建时把它写进 PIXIVFLOW_REVISION，
+# 而 docker/pixivflow-scheduler.Dockerfile 里那行是
+#     ENV PIXIVFLOW_REVISION=${PIXIVFLOW_VERSION}+${PIXIVFLOW_REF}
+# ——写进去的是 build-arg 的**字面量**，不是解析后的提交。所以 PIXIVFLOW_REF 必须是
+# 40 位提交号：填 tag 时镜像只会自报 tag 名（实测 `2.19.0+v2.19.0`），"线上跑的到底是
+# 哪个提交" 就永远无法证明。
 #
-# tag 属于 PixivFlow 仓库，不属于本仓库。早先这里写的是 `git ls-remote origin`，而
-# origin 指向 pixivflow-telepost-deploy，那里永远没有 PixivFlow 的 tag，于是每次都退化
-# 成 SKIP——一项看起来在做、其实没做的核对。必须显式指向 PixivFlow 的远端。
-pixivflow_repo_url=${PIXIVFLOW_REPO_URL:-https://github.com/redtidev1918/PixivFlow.git}
+# 这里刻意不把 tag 解析成提交号来"兼容"：镜像里没有那个提交，核对通过只会是假象。填了
+# tag 就直接 FAIL，让不合格的部署喊出来。
+#
+# 早先的实现在 else 分支里用 `git ls-remote origin` 解析 tag，而 origin 指向本仓库
+# （pixivflow-telepost-deploy），那里永远没有 PixivFlow 的 tag，于是每次都退化成
+# SKIP——一项看起来在做、其实没做的核对。这也是它被换成显式判断的原因之一。
 expected_short=""
-if [[ "$pinned_pixivflow" =~ ^[0-9a-f]{7,40}$ ]]; then
-  expected_short=${pinned_pixivflow:0:12}
+if [[ ! "$pinned_pixivflow" =~ ^[0-9a-f]{40}$ ]]; then
+  fail "PIXIVFLOW_REF 不是 40 位提交号（${pinned_pixivflow}）：镜像只自报该字面量，无法证明提交来源"
+elif ! logs=$(fly logs -a "$pixivflow_app" --no-tail 2>/dev/null); then
+  skip "无法读取 ${pixivflow_app} 的日志"
 else
-  resolved=$(git ls-remote "$pixivflow_repo_url" "refs/tags/${pinned_pixivflow}^{}" 2>/dev/null | awk 'NR==1{print $1}')
-  [[ -z "$resolved" ]] && resolved=$(git ls-remote "$pixivflow_repo_url" "refs/tags/${pinned_pixivflow}" 2>/dev/null | awk 'NR==1{print $1}')
-  expected_short=${resolved:0:12}
-fi
-
-if [[ -z "$expected_short" ]]; then
-  skip "无法把 PIXIVFLOW_REF（${pinned_pixivflow}）解析成提交号，跳过提交一致性核对"
-elif logs=$(fly logs -a "$pixivflow_app" --no-tail 2>/dev/null); then
+  expected_short=${pinned_pixivflow:0:12}
   revision=$(printf '%s' "$logs" | grep -o 'PIXIVFLOW_REVISION[^ ]*' | tail -1)
   if [[ -z "$revision" ]]; then
     skip "执行端最近日志里没有版本行（机器可能还没被唤醒过）"
   elif [[ "$revision" == *"$expected_short"* ]]; then
-    ok "执行端报告的版本包含 ${expected_short}（解析自 ${pinned_pixivflow}）"
+    ok "执行端报告的版本包含 ${expected_short}（来自 PIXIVFLOW_REF）"
   else
-    fail "执行端报告的版本与固定提交不一致（期望含 ${expected_short}，解析自 ${pinned_pixivflow}）"
+    fail "执行端报告的版本与固定提交不一致（期望含 ${expected_short}，来自 PIXIVFLOW_REF）"
   fi
-else
-  skip "无法读取 ${pixivflow_app} 的日志"
 fi
 
 exit $(( failures > 0 ? 1 : 0 ))
