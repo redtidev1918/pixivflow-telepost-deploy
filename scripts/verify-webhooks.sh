@@ -93,7 +93,7 @@ print(obj.get("status", "API_ERROR"), obj.get("host") or "-",
       failures=$((failures + 1))
       ;;
     *)
-      echo "[FAIL] ${label}: getWebhookInfo 无响应"
+      echo "[FAIL] ${label}: getWebhookInfo 无响应（helper 退出码 ${rc}）"
       failures=$((failures + 1))
       ;;
   esac

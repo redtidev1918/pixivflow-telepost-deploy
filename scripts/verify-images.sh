@@ -54,15 +54,32 @@ fi
 
 echo
 # 提交号只能从执行端自己的启动日志里读：镜像构建时被写进 PIXIVFLOW_REVISION。
-if logs=$(fly logs -a "$pixivflow_app" --no-tail 2>/dev/null); then
+# PIXIVFLOW_REF 既可能是 40 位提交号，也可能是发布 tag；tag 必须先解析成提交号再取短号，
+# 因为镜像里写入的是解析后的提交，而不是 tag 字面量（否则这里会误报不一致）。
+#
+# tag 属于 PixivFlow 仓库，不属于本仓库。早先这里写的是 `git ls-remote origin`，而
+# origin 指向 pixivflow-telepost-deploy，那里永远没有 PixivFlow 的 tag，于是每次都退化
+# 成 SKIP——一项看起来在做、其实没做的核对。必须显式指向 PixivFlow 的远端。
+pixivflow_repo_url=${PIXIVFLOW_REPO_URL:-https://github.com/redtidev1918/PixivFlow.git}
+expected_short=""
+if [[ "$pinned_pixivflow" =~ ^[0-9a-f]{7,40}$ ]]; then
+  expected_short=${pinned_pixivflow:0:12}
+else
+  resolved=$(git ls-remote "$pixivflow_repo_url" "refs/tags/${pinned_pixivflow}^{}" 2>/dev/null | awk 'NR==1{print $1}')
+  [[ -z "$resolved" ]] && resolved=$(git ls-remote "$pixivflow_repo_url" "refs/tags/${pinned_pixivflow}" 2>/dev/null | awk 'NR==1{print $1}')
+  expected_short=${resolved:0:12}
+fi
+
+if [[ -z "$expected_short" ]]; then
+  skip "无法把 PIXIVFLOW_REF（${pinned_pixivflow}）解析成提交号，跳过提交一致性核对"
+elif logs=$(fly logs -a "$pixivflow_app" --no-tail 2>/dev/null); then
   revision=$(printf '%s' "$logs" | grep -o 'PIXIVFLOW_REVISION[^ ]*' | tail -1)
-  short=${pinned_pixivflow:0:12}
   if [[ -z "$revision" ]]; then
     skip "执行端最近日志里没有版本行（机器可能还没被唤醒过）"
-  elif [[ "$revision" == *"$short"* ]]; then
-    ok "执行端报告的版本包含 ${short}"
+  elif [[ "$revision" == *"$expected_short"* ]]; then
+    ok "执行端报告的版本包含 ${expected_short}（解析自 ${pinned_pixivflow}）"
   else
-    fail "执行端报告的版本与固定提交不一致（期望含 ${short}）"
+    fail "执行端报告的版本与固定提交不一致（期望含 ${expected_short}，解析自 ${pinned_pixivflow}）"
   fi
 else
   skip "无法读取 ${pixivflow_app} 的日志"
