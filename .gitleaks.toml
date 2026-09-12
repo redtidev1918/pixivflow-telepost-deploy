@@ -1,0 +1,59 @@
+# gitleaks configuration — pixivflow-telepost-deploy
+#
+# Goal: no real credential can enter the repository again, while values that are
+# provably not secrets stay legal.
+#
+# Scope note: used by .github/workflows/gitleaks.yml, which runs
+# gitleaks-action with GITLEAKS_LOG_OPTS (git mode). Gitignored runtime data
+# (`data/`) is therefore never scanned in CI and needs no allowlist entry.
+#
+# HARD RULE (verified 2026-09-12 with gitleaks 8.30.1): inside a single
+# [[allowlists]] block, `paths` and `regexes` are OR-ed, not AND-ed. A
+# directory-level `paths` entry therefore exempts *every* file below it from
+# scanning. This file previously allowlisted `^data/` and `security-fixes/`,
+# which made any real credential hidden in those trees undetectable. Never
+# allowlist by directory here; allowlist by exact value or unambiguous shape.
+
+[extend]
+useDefault = true
+
+# ---------------------------------------------------------------------------
+# 1. Unambiguously synthetic values, redaction markers and placeholder
+#    credential templates shipped in *.example.json.
+#
+# Value-shape only, deliberately WITHOUT any `paths` entry (see hard rule above).
+# ---------------------------------------------------------------------------
+[[allowlists]]
+description = "Synthetic fixtures, redaction markers and placeholder templates (shape-only)"
+regexes = [
+  # Telegram bot tokens whose secret part is literally 35 x 'A'.
+  '''\d{8,10}:A{35}''',
+  # Telegram-shaped tokens carrying an explicit synthetic marker.
+  '''\d{8,10}:[A-Za-z0-9_-]*(?:EXAMPLE|SYNTHETIC|FAKE|DUMMY|PLACEHOLDER|NOT_A_REAL|REDACTED)[A-Za-z0-9_-]*''',
+  # Synthetic Telegram chat id used by fixtures.
+  '''-1001234567890''',
+  # Placeholder credential templates shipped in *.example.json.
+  '''(refreshToken|deviceToken)\s*:\s*"(?:YOUR|EXAMPLE|PLACEHOLDER|CHANGE)[A-Za-z0-9_-]*"''',
+  # Fingerprints / redaction markers that are safe to commit.
+  '''sha256:[0-9a-f]{64}''',
+  '''<REDACTED>''',
+]
+
+# ---------------------------------------------------------------------------
+# 2. Pixiv's public-by-design OAuth client credential.
+#
+# Protocol constant copied from Pixiv's own Android app, published verbatim by
+# many open-source clients. NOT a user secret, not rotatable by the operator.
+#
+# Pinned to the EXACT value on purpose: an earlier revision allowlisted it by
+# field shape, which silently exempted *any* provider's credential placed in a
+# clientSecret/clientId field (a real GCP API key survived 5/5 variants).
+#
+# Investigation trail: 2026-09-12 account audit, finding #3.
+# ---------------------------------------------------------------------------
+[[allowlists]]
+description = "Pixiv public OAuth client secret (protocol constant) — pinned exact value"
+regexTarget = "secret"
+regexes = [
+  '''^lsACyCD94FhDUtGTXi3QzcFE2uU1hqtDaKeqrdwj$''',
+]
