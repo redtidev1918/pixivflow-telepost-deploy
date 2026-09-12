@@ -42,6 +42,16 @@ kill_timeout = 60
   # rescued by resolving the tag in the verifier: the value has to be in the image.
   # scripts/verify-images.sh therefore rejects a non-commit PIXIVFLOW_REF outright.
   #
+  # f331cd4 = v2.19.4 (released 2026-09-13). Carries the remote-failure semantics
+  # fix: a delivery endpoint can answer HTTP 2xx while the record it persisted is
+  # already terminally failed, and because that record is keyed by OUR idempotency
+  # key a retry only returns the same broken record. Core used to parse such a
+  # reused envelope as `idempotent_replay`, record the ledger `delivered` and
+  # promote the Slot cell to `submitted` — a remote failure reported as end-to-end
+  # success. A terminal downstream status (failed/rejected/invalid/expired) now
+  # outranks the transport-level 2xx: the ledger records `failed` and the cell
+  # settles `failed`, never `submitted`.
+  #
   # 699f027 = v2.19.3 (released 2026-09-13). Carries the pager cursor fix. The
   # illustration and novel search pagers used to pass the cursor inside the search
   # options, which the kit ignores (it reads searchPage's SECOND POSITIONAL
@@ -63,8 +73,8 @@ kill_timeout = 60
   # 065ad62 = v2.19.1 (released 2026-09-12), the first release that also carries
   # the Telegram credential-detection rules added after 2.19.0.
   [build.args]
-    PIXIVFLOW_REF = '699f027bb45abad30d86b2e0d1b5fd6be05e7d0e'
-    PIXIVFLOW_VERSION = '2.19.3'
+    PIXIVFLOW_REF = 'f331cd4bb164f327f07254d5541edff111ccd426'
+    PIXIVFLOW_VERSION = '2.19.4'
 
 [[mounts]]
   source = 'pixivflow_data'
