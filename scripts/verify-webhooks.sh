@@ -50,39 +50,54 @@ check_bot() {
     return 0
   fi
   checked=$((checked + 1))
-  local body
-  body=$(curl -s --max-time 20 "https://api.telegram.org/bot${token}/getWebhookInfo" 2>/dev/null)
-  if [[ -z "$body" ]]; then
-    echo "[FAIL] ${label}: getWebhookInfo 无响应"
-    failures=$((failures + 1))
-    return 0
-  fi
-  local rc=0
-  BODY="$body" python3 - "$label" "$expected_host" <<'PY' || rc=$?
-import json, os, sys
-label, expected = sys.argv[1], sys.argv[2]
+
+  # token 经**继承环境变量**交给 helper，URL 由 helper 在进程内拼接；
+  # token 从不进入 argv、不打印、不落文件。
+  # 旧实现 `curl -s ".../bot${token}/getWebhookInfo"` 会把 token 放进 curl 的 argv，
+  # 同机上任何用户 `ps` 一下就能读走，也会写进 shell history / 进程审计日志。
+  local out rc=0
+  out=$(TG_WEBHOOK_CHECK_TOKEN="$token" python3 "$repo_dir/scripts/tg_webhook_check.py" \
+         --label "$label" --expected-host "$expected_host" --env TG_WEBHOOK_CHECK_TOKEN) || rc=$?
+
+  local status host pending
+  status=""
+  host=""
+  pending=""
+  if [[ -n "$out" ]]; then
+    read -r status host pending < <(printf '%s' "$out" | python3 -c '
+import json, sys
 try:
-    payload = json.loads(os.environ["BODY"])
+    obj = json.load(sys.stdin)
 except Exception:
-    print(f"[FAIL] {label}: 响应不是 JSON")
-    raise SystemExit(1)
-if not payload.get("ok"):
-    # 401 说明 token 无效；这里只报告结论，不复述任何响应细节。
-    print(f"[FAIL] {label}: Telegram 拒绝该 token（{payload.get('description', 'unknown')}）")
-    raise SystemExit(1)
-result = payload.get("result") or {}
-url = result.get("url") or ""
-if not url:
-    print(f"[FAIL] {label}: 没有注册 webhook（用户投稿不会被接收）")
-    raise SystemExit(1)
-host = url.split("/")[2] if "://" in url else url
-if host != expected:
-    print(f"[FAIL] {label}: webhook 指向 {host}，期望 {expected}（投稿会被错误的一方吞掉）")
-    raise SystemExit(1)
-pending = result.get("pending_update_count")
-print(f"[OK]   {label}: webhook 归属 {host}（待处理更新 {pending}）")
-PY
-  if [[ $rc -ne 0 ]]; then failures=$((failures + 1)); fi
+    raise SystemExit(0)
+p = obj.get("pending_update_count")
+print(obj.get("status", "API_ERROR"), obj.get("host") or "-",
+      p if isinstance(p, int) else "-")
+' 2>/dev/null)
+  fi
+
+  case "${status:-API_ERROR}" in
+    OK)
+      echo "[OK]   ${label}: webhook 归属 ${host}（待处理更新 ${pending}）"
+      ;;
+    NO_WEBHOOK)
+      echo "[FAIL] ${label}: 没有注册 webhook（用户投稿不会被接收）"
+      failures=$((failures + 1))
+      ;;
+    HOST_MISMATCH)
+      echo "[FAIL] ${label}: webhook 指向 ${host}，期望 ${expected_host}（投稿会被错误的一方吞掉）"
+      failures=$((failures + 1))
+      ;;
+    INVALID_TOKEN)
+      echo "[FAIL] ${label}: Telegram 拒绝该 token（或本地值是占位符/旧值）"
+      failures=$((failures + 1))
+      ;;
+    *)
+      echo "[FAIL] ${label}: getWebhookInfo 无响应"
+      failures=$((failures + 1))
+      ;;
+  esac
+  return 0
 }
 
 check_bot BOT1 "${BOT1_TOKEN:-}"
