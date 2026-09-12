@@ -42,6 +42,17 @@ kill_timeout = 60
   # rescued by resolving the tag in the verifier: the value has to be in the image.
   # scripts/verify-images.sh therefore rejects a non-commit PIXIVFLOW_REF outright.
   #
+  # 699f027 = v2.19.3 (released 2026-09-13). Carries the pager cursor fix. The
+  # illustration and novel search pagers used to pass the cursor inside the search
+  # options, which the kit ignores (it reads searchPage's SECOND POSITIONAL
+  # argument), so the effective cursor stayed null and every iteration re-fetched
+  # page 1. On a fallback day whose page 1 is entirely newer than endDate the walk
+  # can neither include nor stop, so it never terminated: /v1/search/illust was
+  # re-issued until the run burned the full 1800000ms schedule timeout under 429
+  # pressure. The pager now advances the cursor, and a cursor that fails to advance
+  # (the same next twice, or an A -> B -> A cycle) fails deterministically with
+  # PaginationError instead of spinning.
+  #
   # 4b69380 = v2.19.2 (released 2026-09-12). This is the first release that carries
   # all three fixes behind the frozen-production incident: the caller signal is now
   # combined with the per-request timeout, a Slot abandoned by its own timeout is
@@ -52,8 +63,8 @@ kill_timeout = 60
   # 065ad62 = v2.19.1 (released 2026-09-12), the first release that also carries
   # the Telegram credential-detection rules added after 2.19.0.
   [build.args]
-    PIXIVFLOW_REF = '4b6938041a100666d57d59dcd1abcf0292602e34'
-    PIXIVFLOW_VERSION = '2.19.2'
+    PIXIVFLOW_REF = '699f027bb45abad30d86b2e0d1b5fd6be05e7d0e'
+    PIXIVFLOW_VERSION = '2.19.3'
 
 [[mounts]]
   source = 'pixivflow_data'
