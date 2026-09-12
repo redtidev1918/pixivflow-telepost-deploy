@@ -42,11 +42,18 @@ kill_timeout = 60
   # rescued by resolving the tag in the verifier: the value has to be in the image.
   # scripts/verify-images.sh therefore rejects a non-commit PIXIVFLOW_REF outright.
   #
+  # 4b69380 = v2.19.2 (released 2026-09-12). This is the first release that carries
+  # all three fixes behind the frozen-production incident: the caller signal is now
+  # combined with the per-request timeout, a Slot abandoned by its own timeout is
+  # terminalised instead of staying recoverable (which is what made the recovery
+  # sweep re-dispatch the same occurrence forever), and a notification producer can
+  # no longer enqueue against a delivery target that has no notificationUrl.
+  #
   # 065ad62 = v2.19.1 (released 2026-09-12), the first release that also carries
   # the Telegram credential-detection rules added after 2.19.0.
   [build.args]
-    PIXIVFLOW_REF = '065ad6260150ff511e290ad19984ea0a1f80142c'
-    PIXIVFLOW_VERSION = '2.19.1'
+    PIXIVFLOW_REF = '4b6938041a100666d57d59dcd1abcf0292602e34'
+    PIXIVFLOW_VERSION = '2.19.2'
 
 [[mounts]]
   source = 'pixivflow_data'
