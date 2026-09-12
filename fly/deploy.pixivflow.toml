@@ -31,17 +31,22 @@ kill_timeout = 60
 
 [build]
   dockerfile = '../docker/pixivflow-scheduler.Dockerfile'
-  # Immutable by construction: a 40-char commit or a release tag, never a branch
-  # name. A branch name both defeats reproducibility and keeps the clone layer
-  # cached forever, so the image keeps running old code while claiming to be new.
+  # Immutable by construction: a 40-char commit, never a branch name and never a
+  # release tag. A branch name both defeats reproducibility and keeps the clone
+  # layer cached forever, so the image keeps running old code while claiming to be
+  # new. A tag is reproducible but NOT self-describing: the image's runtime ENV is
+  # PIXIVFLOW_REVISION=${PIXIVFLOW_VERSION}+${PIXIVFLOW_REF}, i.e. it echoes the
+  # build-arg LITERAL. Pinning `v2.19.0` made the machine report
+  # `2.19.0+v2.19.0` (measured 2026-09-12), so "which commit is running?" became
+  # unanswerable and scripts/verify-images.sh could only fail. A tag pin cannot be
+  # rescued by resolving the tag in the verifier: the value has to be in the image.
+  # scripts/verify-images.sh therefore rejects a non-commit PIXIVFLOW_REF outright.
   #
-  # v2.19.0 = the released tag carrying the run-to-completion lifecycle commit
-  # (2b6b44e, master via PR #59). The tag is immutable, so the clone layer stays
-  # reproducible; scripts/verify-images.sh fails if the deployed commit is not
-  # the commit this tag resolves to.
+  # 065ad62 = v2.19.1 (released 2026-09-12), the first release that also carries
+  # the Telegram credential-detection rules added after 2.19.0.
   [build.args]
-    PIXIVFLOW_REF = 'v2.19.0'
-    PIXIVFLOW_VERSION = '2.19.0'
+    PIXIVFLOW_REF = '065ad6260150ff511e290ad19984ea0a1f80142c'
+    PIXIVFLOW_VERSION = '2.19.1'
 
 [[mounts]]
   source = 'pixivflow_data'
