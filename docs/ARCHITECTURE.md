@@ -102,6 +102,24 @@ PixivFlow 平时停止，不跑任务时不占机器成本。唤醒与停机各�
 - `/health` 不返回投稿标题、标签、用户或凭据；API 根端口默认绑定 loopback。
 - 代理能观察出站目标与流量元数据，应视为受信基础设施，订阅 URL 也按 Secret 管理。
 
+## 执行面出口资格
+
+**控制面兼容不等于执行面兼容。** PixivFlow 能否跑通，取决于它的**出口**能否稳定访问 Pixiv 的
+几个彼此独立的数据面——这必须分别取证，不能从「能鉴权、能解析主题」推断出来：
+
+| 数据面 | 端点 |
+| --- | --- |
+| OAuth | `oauth.secure.pixiv.net` |
+| App API | `app-api.pixiv.net` |
+| 媒体 CDN | `i.pximg.net`（请求携带 `Referer: https://app-api.pixiv.net/`） |
+
+2026-09-11 的真实事故（[记录](/incidents/2026-09-11-pixiv-egress-rate-limit.md)）就是这样：
+GitHub-hosted runner 能鉴权、能解析主题，但在生产级负载下持续 429 / penalty 升级，死在批次
+看门狗上，产不出一次待审核。
+
+因此：出口是**可替换的、需先取得资格的执行资源**。它不改变上面任何一条契约——`pixiv-main` 最多
+只有一个在跑的生产执行，**出口永远不是第二个调度器**，也不拥有任何状态。
+
 ## 自托管（docker-compose）与本文的关系
 
 `docker-compose.yml` + `docker/combined.Dockerfile` 是**单机自托管**路径：所有角色在一个容器内，
