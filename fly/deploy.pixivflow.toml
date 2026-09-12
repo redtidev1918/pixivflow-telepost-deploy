@@ -35,13 +35,13 @@ kill_timeout = 60
   # name. A branch name both defeats reproducibility and keeps the clone layer
   # cached forever, so the image keeps running old code while claiming to be new.
   #
-  # 2b6b44e = the run-to-completion lifecycle commit, now on master via PR #59.
-  # Once release-please publishes 2.19.0, pin the release tag instead; the image
-  # bakes the resolved commit either way, and scripts/verify-images.sh fails if
-  # the deployed commit is not this one.
+  # v2.19.0 = the released tag carrying the run-to-completion lifecycle commit
+  # (2b6b44e, master via PR #59). The tag is immutable, so the clone layer stays
+  # reproducible; scripts/verify-images.sh fails if the deployed commit is not
+  # the commit this tag resolves to.
   [build.args]
-    PIXIVFLOW_REF = '2b6b44e5ad5ea68938ab05e2265d94ef2fad9090'
-    PIXIVFLOW_VERSION = '2.19.0-dev'
+    PIXIVFLOW_REF = 'v2.19.0'
+    PIXIVFLOW_VERSION = '2.19.0'
 
 [[mounts]]
   source = 'pixivflow_data'
