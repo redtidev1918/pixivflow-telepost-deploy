@@ -3,6 +3,26 @@
 > 发布说明面向普通用户：写「对用户有什么改变」，不写内部实现细节（模块名、CI job、配置键）；
 > 技术细节放进代码注释或 `docs/`。每个 Release 的正文由本文件对应版本段自动生成。
 
+## [1.13.0](https://github.com/redtidev1918/pixivflow-telepost-deploy/compare/v1.12.0...v1.13.0) (2026-09-11)
+
+
+### Features
+
+* **admission:** make the credential lock atomic, and stop treating a race as an error ([#36](https://github.com/redtidev1918/pixivflow-telepost-deploy/issues/36)) ([9659a4d](https://github.com/redtidev1918/pixivflow-telepost-deploy/commit/9659a4d3e62fc72eaf525469564811ec480ef63a))
+* **control-plane:** Fly Machines execution provider ([#46](https://github.com/redtidev1918/pixivflow-telepost-deploy/issues/46)) ([ecc4103](https://github.com/redtidev1918/pixivflow-telepost-deploy/commit/ecc41039a19e34733bcd4292db5ae95ebd85df36))
+* **governance:** install the production-operation branch contract ([#56](https://github.com/redtidev1918/pixivflow-telepost-deploy/issues/56)) ([f2f0c04](https://github.com/redtidev1918/pixivflow-telepost-deploy/commit/f2f0c0420e8deb3790037bcceb4c8233980032f6))
+
+
+### Bug Fixes
+
+* **docker:** ship workspace packages in the executor image ([#54](https://github.com/redtidev1918/pixivflow-telepost-deploy/issues/54)) ([6b4ad7d](https://github.com/redtidev1918/pixivflow-telepost-deploy/commit/6b4ad7dc2d46d98201eb8af3d12cc7c1414978a9))
+* **fly:** authenticate executor callbacks with FLY_EXECUTOR_SECRET ([#49](https://github.com/redtidev1918/pixivflow-telepost-deploy/issues/49)) ([30199ee](https://github.com/redtidev1918/pixivflow-telepost-deploy/commit/30199eee243f5f39cd93286b7cbda1a11733c0ab))
+* **fly:** read/persist the Pixiv credential under the /control prefix ([#51](https://github.com/redtidev1918/pixivflow-telepost-deploy/issues/51)) ([13db89a](https://github.com/redtidev1918/pixivflow-telepost-deploy/commit/13db89a2507d7f89cdf1f7085e8a4c518b9e0185))
+* **fly:** 修正 deploy.telepost.toml 的 restart 段为表数组 ([#66](https://github.com/redtidev1918/pixivflow-telepost-deploy/issues/66)) ([df26e76](https://github.com/redtidev1918/pixivflow-telepost-deploy/commit/df26e7686fcd31fae38e8ed8b02f485538b647f5))
+* **plane:** durable 状态真正放回卷上 + 正式入口只认权威 Fly 配置 ([#67](https://github.com/redtidev1918/pixivflow-telepost-deploy/issues/67)) ([71b4c7c](https://github.com/redtidev1918/pixivflow-telepost-deploy/commit/71b4c7c7b6e035d226108ef00781ef6feb6632b9))
+* **verify:** 显式导出的 bot token 必须优先于 .env ([#69](https://github.com/redtidev1918/pixivflow-telepost-deploy/issues/69)) ([5118b6e](https://github.com/redtidev1918/pixivflow-telepost-deploy/commit/5118b6e0a55b536646bc2b90feebbc2f74c43110))
+* **verify:** 未授权触发核对必须用 POST ([#68](https://github.com/redtidev1918/pixivflow-telepost-deploy/issues/68)) ([90fc4cb](https://github.com/redtidev1918/pixivflow-telepost-deploy/commit/90fc4cbf3cc2c7d147df4eae2a6b003a0498981f))
+
 ## [1.12.0](https://github.com/redtidev1918/pixivflow-telepost-deploy/compare/v1.11.0...v1.12.0) (2026-09-11)
 
 
