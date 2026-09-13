@@ -85,6 +85,9 @@ scheduler 可不可以多实例、这个配置应该改在哪里」，不需要�
 
 ## Phase 3 —— `single-machine-worker-sleep` 实现
 
+**状态：进行中（部分完成）。** supervisor 组件与它的测试已落地（`supervisor/`），包括设计文档要求的环境白名单守护测试。**尚未完成**：容器镜像、平台配置、可执行部署步骤与
+端到端验证——所以矩阵里 preset 仍是 `implemented=false` / `support=experimental`。
+
 **目标**：把「业务常驻 + 执行进程按需」从设计变成实现，并取得 `tested` 证据。
 
 | 项 | 内容 |
@@ -105,15 +108,39 @@ scheduler 可不可以多实例、这个配置应该改在哪里」，不需要�
 3. 两个 Bot 的 `publisher` 与按需 `executor` 在 512 MiB 下的真实峰值是多少？
    ——答：实现后测量，回填 `docs/operations/performance.md`。
 
-**验收标准**：
+**已完成（有测试守护）**：
 
-- 无任务时 `executor` 进程不存在，机器从未进入 `stopped`。
-- 一次触发后进程出现，账本空了之后进程退出，全程机器常驻。
-- 触发后立刻探测触发端口，探针**没有**把已退出的进程拉回来。
-- 部署期间 `publisher` 的私聊投稿与 webhook 全程可用。
-- 实现完成后，矩阵的 `presets.single-machine-worker-sleep.status` 必须同步更新为
-  `implemented: true`、`support` 升级为 `beta`；`docs/architectures/single-machine-worker-sleep.md`
-  的「仅设计」提示同步移除。
+- 执行侧容器镜像 `docker/worker-sleep.Dockerfile`（PixivFlow 运行时 + supervisor 二进制，
+  无 HEALTHCHECK，CI 构建）；
+- supervisor 常驻占住触发端口，鉴权契约与 `split-worker` 执行端一致，迁移时时钟侧不用改；
+- 只有通过鉴权的 POST 才 spawn：GET 探测得到 404、错误令牌得到 401，都不会拉起进程；
+- 同一时刻只有一个 executor（SI-4），退出后不重启，supervisor 不因空闲杀子进程；
+- 能区分正常收工 / 被信号杀死 / supervisor 自己发起的停止三种结局；
+- 环境白名单 deny-by-default，真实子进程继承验证，Telegram 凭据被拒付（SI-1）。
+
+**已完成（续）**：
+
+- compose 形态：`docker-compose.worker-sleep.yml` 覆盖层（不是第二份拓扑来源），由
+  `scripts/validate.sh` 渲染合并模型并断言「健康检查已禁用、端口分工存在、业务侧未被改动」。
+
+**未完成（因此 preset 仍不可部署）**：
+
+- Fly 1×512 MiB 与 systemd 两种形态都没有配置。Fly 形态需要第三份 `fly/*.toml`，与
+  `control-plane/test/deployment-contract.test.ts` 的「只有两份 Fly 配置」冲突；
+  要推进就得先决定：是给该契约加一条「仅限矩阵已声明的 preset」的例外，
+  还是让 sleep preset 只支持 compose/systemd；
+- 端到端验证：`publisher` 常驻下的私聊投稿与 webhook 全程可用、账本空了之后进程退出、
+  **触发后立刻探测确认探针没有把子进程拉回来**、机器全程未进入 `stopped`；
+- 内存峰值实测（512 MiB 下两个角色的真实占用）。
+
+**转正条件**：上述验收全部通过后，才把矩阵的 `status.implemented` 置为 `true`、
+`support` 升为 `beta`。可执行清单与要记录的内存量见
+[worker-sleep 端到端验收](operations/worker-sleep-acceptance.md)。**在那之前不要改这两个字段。**
+
+**本轮未能执行端到端验收**：本机没有可用的容器运行时（docker daemon 未运行，
+colima/podman/lima 均未安装），本地 `.env` 也只是占位值，因此既跑不了 compose 冒烟，
+也拿不到真实 512 MiB 主机与 test bot。`scripts/smoke-worker-sleep-compose.sh` 与验收手册
+已经写好，但**尚未运行过**——不把未执行的验证写成已通过。
 
 ---
 

@@ -27,7 +27,7 @@ scheduling semantics.
 | Your situation | Pick |
 | --- | --- |
 | I have one VPS / NAS / home machine | `single-host` |
-| I only have one 512 MiB Fly Machine | `single-machine-worker-sleep` (**designed only, not implemented today**) |
+| I only have one 512 MiB Fly Machine | `single-machine-worker-sleep` (**not deployable yet**: orchestration implemented, image and platform config missing) |
 | I want the lowest Fly bill | `split-worker` |
 | Reliability matters most | `split-worker` |
 | I have a VPS + a home server | `remote-worker` |
@@ -111,7 +111,7 @@ Download the `deploy-<os>-<arch>` binary from
 | Preset | Support level | Status | In one sentence |
 | --- | --- | --- | --- |
 | [`single-host`](docs/en/architectures/single-host.md) | Stable | implemented, CI-covered | One machine runs every role |
-| [`single-machine-worker-sleep`](docs/en/architectures/single-machine-worker-sleep.md) | Experimental | **designed only, not implemented** | One machine; the executor process spawns on demand and exits when idle |
+| [`single-machine-worker-sleep`](docs/en/architectures/single-machine-worker-sleep.md) | Experimental | **process orchestration implemented (`supervisor/`), preset not deployable yet** | One machine; the executor process spawns on demand and exits when idle |
 | [`split-worker`](docs/en/architectures/split-worker.md) | Stable | implemented, tested, **current production** | Executor and service each get a machine and a volume |
 | [`remote-worker`](docs/en/architectures/remote-worker.md) | Beta | implemented, no end-to-end test | The two roles run across machines and networks |
 
@@ -180,6 +180,7 @@ fly/deploy.telepost.toml         Single topology source for the service (always-
 fly/deploy.pixivflow.toml        Single topology source for the executor (stopped by default, exits after runs)
 control-plane/                   Cloudflare thin clock: cron -> schedule id -> one authenticated POST
 docker/                          Image definitions (passthrough, commit-pinned scheduler, single-host combined)
+supervisor/                      On-demand process orchestration for single-machine-worker-sleep (Go)
 pixivflow/config/*.example.json  Safe templates for multiple schedules
 config/                          Non-sensitive channel/review policy templates
 scripts/                         Bootstrap, validation, read-only production checks

@@ -31,6 +31,7 @@
   - [故障排查](/operations/troubleshooting.md)
   - [性能与内存调优](/operations/performance.md)
   - [多 Bot：加第 N 个频道](/operations/multi-bot.md)
+  - [worker-sleep 端到端验收（512 MiB）](/operations/worker-sleep-acceptance.md)
 - 参考
   - [部署契约（统一部署模型）](/reference/deployment-contract.md)
   - [部署清单 deployment.manifest.json](/reference/deployment-manifest.md)

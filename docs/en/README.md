@@ -43,7 +43,7 @@ architecture page; `architecture_docs_test.go` enforces that.
 | Preset | Support level | Implementation status | In one sentence | Docs |
 | --- | --- | --- | --- | --- |
 | `single-host` | Stable | implemented, CI-covered, not production-proven | One machine runs every role: TelePost and PixivFlow as separate containers, sharing one `data` directory. | [single-host.md](architectures/single-host.md) |
-| `single-machine-worker-sleep` | Experimental | **designed only, not implemented in this repository** | One machine: the service stays resident, the executor exists as a child process only while there is work and exits when idle. | [single-machine-worker-sleep.md](architectures/single-machine-worker-sleep.md) |
+| `single-machine-worker-sleep` | Experimental | **components implemented, preset not deployable** | One machine: the service stays resident, the executor exists as a child process only while there is work and exits when idle. | [single-machine-worker-sleep.md](architectures/single-machine-worker-sleep.md) |
 | `split-worker` | Stable | implemented, tested, **current production** | The executor and the service each get their own machine and volume. | [split-worker.md](architectures/split-worker.md) |
 | `remote-worker` | Beta | implemented, no end-to-end test | The two roles communicate across machines and networks. | [remote-worker.md](architectures/remote-worker.md) |
 

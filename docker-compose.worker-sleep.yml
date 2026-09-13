@@ -1,0 +1,48 @@
+# worker-sleep 覆盖层（preset: single-machine-worker-sleep）
+#
+# 用法：
+#   docker compose -f docker-compose.yml -f docker-compose.worker-sleep.yml up -d
+#
+# 它**不是**第二份拓扑来源：拓扑仍然只由 docker-compose.yml 定义，这一层只把「常驻
+# executor」换成「常驻 supervisor + 按需 executor」。服务名、卷、网络、角色归属都没变，
+# 所以 SI-7（共享物理卷 + 互不相交的角色子目录）继续成立。
+#
+# 为什么必须是覆盖层而不是 profile：Compose 里没有 profile 的服务永远启动，而
+# docker-compose.yml 的 pixivflow 服务正是无 profile 的。用 profile 表达「要么常驻执行端、
+# 要么按需执行端」会让默认的 `docker compose up -d` 静默少起一个执行端——那是破坏默认路径，
+# 不是新增一种部署方式。
+
+services:
+  pixivflow:
+    # 同一个服务名、同一个卷、同一个网络：换的只是运行这个角色的镜像与进程模型。
+    # 镜像里 ENTRYPOINT 就是 supervisor，CMD 会被忽略，因此不需要额外的 command。
+    image: ${WORKER_SLEEP_IMAGE:-ghcr.io/redtidev1918/pixivflow-sleep:latest}
+    # 触发入口必须真的能被容器外调用到：容器内的 127.0.0.1 只有容器自己可见，宿主机、
+    # 宿主 cron/systemd timer 都到不了。所以 supervisor 监听容器网络地址，再由 compose 把
+    # 它只发布到宿主机 loopback —— 暴露面精确等于「宿主机本地」，不是公网。
+    ports:
+      # host 侧只绑 127.0.0.1；8090:8090 里的容器端口是 supervisor 的对外端口。
+      - "127.0.0.1:${WORKER_SLEEP_TRIGGER_PORT:-8090}:8090"
+    environment:
+      # supervisor 常驻占住对外触发端口，executor 子进程用另一个端口，由它转发。
+      # 不用 network_mode: host：那会把容器直接塞进宿主网络栈，同时丢掉服务名解析
+      # （executor 投递走的是 http://telepost:8080 容器网络地址）。
+      SUPERVISOR_LISTEN: 0.0.0.0:8090
+      # 子进程端口只在同一个容器内可见，**永远不发布**。
+      SUPERVISOR_CHILD_TRIGGER: 127.0.0.1:8091
+      # 子进程命令必须与基础镜像的 scheduler 入口一致，且必须是单条命令：
+      # supervisor 用 `sh -c "exec <cmd>"` 启动，不留包装 shell。
+      # 可覆盖：默认就是基础镜像的 scheduler 入口。冒烟脚本用一个假实现顶替它，
+      # 运维在排查时也能临时替换；写死会让人没法在不改仓库的情况下验证链路。
+      SUPERVISOR_CHILD_CMD: ${SUPERVISOR_CHILD_CMD:-node dist/index.js scheduler}
+      # 触发令牌：supervisor 用它鉴权（没有它 supervisor 拒绝启动），子进程也会用自己的
+      # 副本再校验一次。未配置时 fail-closed，不会因为一次探测就拉起进程。
+      SCHEDULER_TRIGGER_TOKEN: ${SCHEDULER_TRIGGER_TOKEN:-}
+    # 必须清掉基础服务里那条指向触发端口的健康检查：在本 preset 下，探测会把刚刚按账本
+    # 收工的 executor 子进程重新拉起来，形成停不下来的循环。
+    # 允许被检查的只有 supervisor 自己的 /healthz，而那由运维在平台侧决定。
+    healthcheck:
+      disable: true
+    # 不覆盖 mem_limit：本 preset 省的是「空闲时 executor 不占内存」，而 mem_limit 是上限、
+    # 不是预留，换了覆盖层并不会让这个容器更省。两个容器的限额之和必须装进机器预算，
+    # 由 `deploy manifest` 按矩阵档位核对（当前默认 320m + 256m = 576 MiB 会提示偏差）。

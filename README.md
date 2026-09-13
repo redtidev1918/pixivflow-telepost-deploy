@@ -25,7 +25,7 @@
 | 你的情况 | 推荐 |
 | --- | --- |
 | 我只有一台 VPS / NAS / 家用机 | `single-host` |
-| 我只有一个 512 MiB 的 Fly Machine | `single-machine-worker-sleep`（**当前仅设计，未实现**） |
+| 我只有一个 512 MiB 的 Fly Machine | `single-machine-worker-sleep`（**当前不可部署**：进程编排已实现，缺镜像与平台配置） |
 | 我希望最省 Fly 费用 | `split-worker` |
 | 我最在意可靠性 | `split-worker` |
 | 我有 VPS + 家用服务器 | `remote-worker` |
@@ -102,7 +102,7 @@ deploy doctor && deploy deploy           # 自检 → 一键部署
 | Preset | 支持等级 | 实现状态 | 一句话 |
 | --- | --- | --- | --- |
 | [`single-host`](docs/architectures/single-host.md) | Stable | 已实现，CI 覆盖 | 一台机器跑全部角色 |
-| [`single-machine-worker-sleep`](docs/architectures/single-machine-worker-sleep.md) | Experimental | **仅设计，未实现** | 一台机器，执行进程按需拉起、空闲即退出 |
+| [`single-machine-worker-sleep`](docs/architectures/single-machine-worker-sleep.md) | Experimental | **进程编排已实现（`supervisor/`），preset 仍不可部署** | 一台机器，执行进程按需拉起、空闲即退出 |
 | [`split-worker`](docs/architectures/split-worker.md) | Stable | 已实现、已测试、**当前生产** | 执行端与业务端各一台机器、各一个卷 |
 | [`remote-worker`](docs/architectures/remote-worker.md) | Beta | 已实现，未经端到端测试 | 两个角色跨机器跨网络 |
 
@@ -166,6 +166,7 @@ fly/deploy.telepost.toml         业务端唯一拓扑来源（常驻）
 fly/deploy.pixivflow.toml        执行端唯一拓扑来源（平时停止、跑完退出）
 control-plane/                   Cloudflare 薄时钟：cron → schedule id → 一次带令牌的 POST
 docker/                          镜像定义（透传层、按提交号构建的调度镜像、单机合体镜像）
+supervisor/                      single-machine-worker-sleep 的按需进程编排（Go）
 pixivflow/config/*.example.json  多计划安全模板
 config/                          非敏感频道/审核策略模板
 scripts/                         初始化、校验、只读生产核对

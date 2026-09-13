@@ -25,7 +25,7 @@ this file and the four preset pages define the second,
 | Preset | Support level | Implementation status | In one sentence | Docs |
 | --- | --- | --- | --- | --- |
 | `single-host` | Stable | implemented, CI-covered, not production-proven | One machine runs every role, two containers sharing one data directory | [single-host.md](single-host.md) |
-| `single-machine-worker-sleep` | Experimental | **design only, not implemented in this repository** | One machine: the service stays resident, the executor is spawned on demand and exits when idle | [single-machine-worker-sleep.md](single-machine-worker-sleep.md) |
+| `single-machine-worker-sleep` | Experimental | **components implemented, preset not deployable** | One machine: the service stays resident, the executor is spawned on demand and exits when idle | [single-machine-worker-sleep.md](single-machine-worker-sleep.md) |
 | `split-worker` | Stable | implemented, tested, **current production** | Executor and service each on their own machine and their own volume | [split-worker.md](split-worker.md) |
 | `remote-worker` | Beta | implemented, not end-to-end tested | The two roles communicate across machines and networks | [remote-worker.md](remote-worker.md) |
 
@@ -109,7 +109,7 @@ matrix, so you do not have to guess.
 
 | Condition | Notes |
 | --- | --- |
-| Any combination of `single-machine-worker-sleep` | The preset has a design and no implementation |
+| Any combination of `single-machine-worker-sleep` | The orchestration is implemented but the preset is not deployable: no image and no platform config |
 
 ### INVALID
 

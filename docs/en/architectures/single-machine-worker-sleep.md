@@ -33,26 +33,38 @@ If the goal is **lowering the compute bill**, this preset cannot help; go to
 ```text
 Machine (always on)
 │
-├─ TelePost supervisor           always-on
-│    ├─ publisher                always-on
-│    ├─ telegram-ingress         always-on
-│    └─ clock(internal)          always-on / tiny
+├─ host-local clock (systemd timer / cron)                  external, no cloud service needed
 │
-├─ PixivFlow child process       no work → no process
-│                                work    → spawn
-│                                done + grace → exit
+├─ container telepost (upstream TelePost image; this preset does not change it)  always-on
+│    ├─ publisher                                                               always-on
+│    └─ telegram-ingress                                                        always-on
 │
-└─ one volume
+├─ container pixivflow-sleep (this image: docker/worker-sleep.Dockerfile)        always-on
+│    └─ supervisor (this repository's supervisor/)                              always-on
+│         └─ executor child process                       no work → no process
+│                                                         work    → spawn
+│                                                         done + grace → exit
+│
+└─ one physical volume, two disjoint role namespaces (SI-7)
      ├─ data/bot{N}/             per-bot SQLite, runtime-policy.json
      └─ data/pixivflow/          pixivflow.db, download cache, outbox
 ```
 
-The `executor` is not a container but a child process spawned by the resident supervisor. Both bots
-share the same resident `publisher`, so adding bots only adds Python child processes on the
+**Two resident containers and one on-demand child process.** Nothing on the machine ever stops; the
+`executor` is not a container but a child process spawned by the resident supervisor. The service
+side is still an unmodified upstream TelePost image.
+
+**Process orchestration belongs to the deployment layer, not to TelePost.** The thing that spawns
+the executor is this repository's `supervisor/` component (Go, stdlib only), not a TelePost feature —
+the business repository does not implement deployment orchestration, and the deployment repository
+does not implement business logic.
+
+Both bots share the same resident `publisher`, so adding bots only adds Python child processes on the
 `publisher` side, not machines.
 
-`executor` and `publisher` communicate over `loopback-http`, never through a proxy, an overlay or
-the public internet.
+`executor` and `publisher` communicate over the **platform's own transport** (the container-network
+service name on compose, loopback on systemd), never through a proxy, an overlay or the public
+internet. The exact addresses are in the Network section below.
 
 ---
 
@@ -79,8 +91,26 @@ processing concurrency must be hard-limited rather than left to the operating sy
 | --- | --- | --- | --- |
 | `publisher` | `always-on` | not applicable | never stops |
 | `telegram-ingress` | `always-on` | not applicable | never stops |
-| `clock` | `always-on` | not applicable | not applicable |
+| `clock` | **external** (host `systemd timer` / `cron`) | not applicable | not applicable |
 | `executor` | `spawn-on-demand` | the supervisor spawns it when a trigger arrives | **the `executor`'s own ledger** (`exitWhenIdle`) |
+
+**The clock is a host-local external timer today, not an in-process cron.** The supervisor implements no
+cron, so `clock=internal` is still a **design** here and must not be described as implemented until it
+is. It also means this preset needs no Cloudflare or any cloud service — a `systemd timer` or `cron`
+is enough:
+
+```text
+systemd timer / cron
+        │  POST http://127.0.0.1:8090/internal/schedules/{id}/run
+        ▼
+supervisor (resident, owns 8090)
+        │  spawns only after authentication, then forwards to 127.0.0.1:8091
+        ▼
+executor child process (exists on demand)
+        │  delivers over the container network: http://telepost:8080/api/bot{N}/v1/submissions
+        ▼
+publisher (resident)
+```
 
 ```text
 no work                    trigger
@@ -156,10 +186,29 @@ corrupting the whole volume still hits both roles.
 
 ## Network
 
-| Item | Value |
-| --- | --- |
-| `executor` → `publisher` | `loopback-http`, `http://127.0.0.1:8080/api/bot{N}/v1/submissions` |
-| Trigger ingress | the `executor` trigger port in the same process (designed value 8090), visible on loopback only |
+**Which transport delivery uses depends on the platform form**; do not state it as unconditionally loopback:
+
+| Item | Compose form (implemented) | systemd form (planned) | Fly form |
+| --- | --- | --- | --- |
+| `executor` → `publisher` | **container network** `http://telepost:8080/api/bot{N}/v1/submissions` | loopback `http://127.0.0.1:8080` | not implemented |
+| Trigger ingress | host `127.0.0.1:8090` → supervisor | same | not implemented |
+| supervisor → `executor` child | container loopback `127.0.0.1:8091` (**never published**) | same | not implemented |
+| `telegram-ingress` | `webhook` (public HTTPS) or `polling` | same | not implemented |
+| Egress | `direct` or `proxy`; prefer an **external** proxy on a 512 MiB machine | same | not implemented |
+
+**Three addresses that must not be conflated:**
+
+```text
+host 127.0.0.1:8090        compose publishes only the supervisor's 8090, to host loopback;
+                           8091 is never published and exists only inside the worker-sleep container
+container telepost:8080    what the executor delivers to: the service name on the container network,
+                           not 127.0.0.1
+in-container 127.0.0.1:8091  where the supervisor forwards to the child
+```
+
+In the compose form delivery is not host loopback: the two roles live in two containers, so the service
+name is the only correct address. Loopback delivery applies only to the systemd form, where both roles
+are plain processes on one host.
 | `telegram-ingress` | `webhook` (public HTTPS) or `polling` (no ingress) |
 | Egress | `direct` or `proxy`; on a 512 MiB machine prefer an external proxy |
 
@@ -198,8 +247,11 @@ it is a useful fact when debugging "the machine behaves oddly after a delivery".
   that allowlist must exist before this preset may be marked implemented.
 - **`review` and `publish` are unprotected.** The `split-worker` property "an executor crash/OOM
   does not affect Telegram" does not hold here.
-- **Not implemented today.** No configuration or code in this repository implements this process
-  arrangement.
+- **Only partly implemented.** The supervisor component (`supervisor/`) is implemented and tested,
+  including the environment-allowlist test this page requires; but the preset is **not deployable**:
+  there is no image and no platform configuration, and the deployment steps are still a design. The
+  matrix therefore keeps it at `implemented=false` / `support=experimental` until the whole path is
+  executable.
 
 ---
 
@@ -231,18 +283,113 @@ hardest kind to debug.
 
 ---
 
+## Implementation status
+
+| Component | Status | Location |
+| --- | --- | --- |
+| Supervisor binary | **implemented** (Go, stdlib only) | `supervisor/` (main.go / server.go / child.go) |
+| Environment allowlist | **implemented and tested** | `supervisor/child.go` + `supervisor/supervisor_test.go` |
+| Execution-side container image | **implemented** (built in CI) | `docker/worker-sleep.Dockerfile` |
+| Compose form (overlay) | **implemented and validated** | `docker-compose.worker-sleep.yml` |
+| Fly / systemd form | missing | — |
+
+### Platform status and the promotion rule (two independent dimensions)
+
+| Platform | Status | Artifacts |
+| --- | --- | --- |
+| `docker-compose` | **beta** (implemented and CI-validated; end-to-end acceptance not run) | `docker-compose.worker-sleep.yml` + `docker/worker-sleep.Dockerfile` |
+| `systemd` | planned | — |
+| `flyio` | planned | — |
+
+**A preset's implementation status is not "every platform is done".** The rule is that after at least
+one official deployment path completes `documented → implemented → CI-validated → end-to-end
+accepted`, the preset may become `implemented=true` with `support=beta`. Today it stops at the
+end-to-end step: the compose form is implemented and CI-validated, but two full rounds have not been
+run on a real 512 MiB host, so the matrix still says `implemented=false`.
+
+The Fly form is **not** the compose two-container arrangement moved into a new config file: it
+requires **one Fly Machine and one image** running TelePost, the resident supervisor and the
+on-demand child together. That needs a combined worker-sleep runtime first; otherwise the added
+config would be a second Machine and the preset's name would stop being true.
+| Deployment steps | still a design | this page |
+
+What the supervisor already does is guarded by tests that spawn real child processes:
+
+- it holds the trigger port resident, with a path and auth contract **identical** to the
+  `split-worker` executor (`POST /internal/schedules/{scheduleId}/run` + Bearer), so migrating costs
+  the clock nothing;
+- only an **authenticated** POST spawns the executor: a probe (GET) gets 404 and a wrong token gets
+  401, and neither spawns anything — the "one probe resurrects the child" loop is cut;
+- exactly one executor at a time (SI-4); after the child exits it is **not** restarted;
+- the supervisor **never** kills the child for being idle: the stop decision belongs to the
+  executor's own ledger;
+- it distinguishes three outcomes: normal `exit(0)`, killed by a signal (OOM/crash), and a stop the
+  supervisor itself requested;
+- on shutdown it forwards the signal to the child and leaves no orphan;
+- the environment handed to the child is a **deny-by-default allowlist**: only `PIXIV_*`,
+  `SCHEDULER_*`, `*_SUBMIT_TOKEN` and generic runtime variables pass; any Telegram credential name
+  makes it refuse to start the child.
+
+### The port split belongs to the supervisor
+
+```text
+8090  the supervisor's resident public trigger port   <- the clock still POSTs here, same path and auth
+8091  the executor child's own trigger port           <- the supervisor forwards to it
+```
+
+The supervisor refuses a configuration where both ports are the same, and it **specifies the child's
+trigger port for it** (via `SCHEDULER_TRIGGER_PORT`): making an operator align two ports by hand is a
+silent mismatch source — the child holds 8090 while the supervisor waits on 8091, which shows up as
+"triggers always return 503" while both sides look correct on their own.
+
+The image has **no** `HEALTHCHECK` and explicitly clears any inherited from the base image: a probe
+pointing at the executor's trigger port would resurrect the just-exited child. The only thing allowed
+to be checked is the supervisor's own `/healthz`, configured by the operator on the platform side and
+deliberately not baked into the image.
+
 ## Deployment steps
 
-**Not executable today.** This is a design contract; the implementation is a later stage, see
-Phase 3 of [ROADMAP-MULTI-ARCH.md (中文)](/ROADMAP-MULTI-ARCH.md).
+**The compose form is executable; the Fly and systemd forms have no configuration yet.**
 
-Once implemented, the steps should look like this:
+### Compose form (implemented)
 
-1. Prepare one volume; both `data/bot{N}/` and `data/pixivflow/` live on it.
-2. Deploy the resident `publisher` and confirm direct-message submission works and webhook or
-   polling is established.
-3. Configure the resident supervisor: spawn the `executor` when a trigger arrives, and do not
-   restart it after it exits.
+```bash
+WORKER_SLEEP_IMAGE=<execution-side image> \
+docker compose -f docker-compose.yml -f docker-compose.worker-sleep.yml up -d
+```
+
+The overlay is **not** a second topology source: the topology is still defined only by
+`docker-compose.yml`, and this layer only turns the `pixivflow` service from "resident executor" into
+"resident supervisor + on-demand executor" — same service name, same volume, same network, so role
+ownership and SI-7 are unchanged. The service side (`telepost`) keeps its own health check untouched.
+
+Why not a profile: in Compose, a service without a profile always starts, and `pixivflow` is exactly
+that. Expressing "either a resident executor or an on-demand one" with profiles would make the
+default `docker compose up -d` silently start one fewer executor — that breaks the default path
+rather than adding a deployment method.
+
+`scripts/validate.sh` renders the merged model to JSON and asserts: the image is the execution-side
+one, the **health check is disabled**, the port split is present, and the `telepost` service is
+unchanged. Without that health-check assertion, a probe would resurrect the child that just finished
+by its own ledger.
+
+### Fly and systemd forms
+
+**Missing.** The Fly form needs this preset's own machine topology, i.e. a third `fly/*.toml`, which
+collides with the "exactly two Fly configs" contract — that needs a decision, see Phase 3 of
+[ROADMAP-MULTI-ARCH.md (中文)](/ROADMAP-MULTI-ARCH.md).
+
+### The full compose steps
+
+1. Prepare one volume; both `data/bot{N}/` and `data/pixivflow/` live on it, mounted into both
+   containers.
+2. Deploy the resident `publisher` (unmodified upstream TelePost image) and confirm direct-message
+   submission works and webhook or polling is established.
+3. Configure the resident supervisor (`SUPERVISOR_CHILD_CMD` / `SCHEDULER_TRIGGER_TOKEN` /
+   `SUPERVISOR_LISTEN` / `SUPERVISOR_CHILD_TRIGGER`): spawn the `executor` when a trigger arrives, and do not
+   restart it after it exits. `SUPERVISOR_CHILD_CMD` must be a **single command** (the supervisor
+   runs `sh -c "exec <cmd>"`; leaving a wrapper shell around would distort signals and exit
+   status); use a wrapper script if you need pipes or multiple steps.
 4. In the `executor` configuration set `schedulerRuntime.mode`, `exitWhenIdle=true`, `idleGraceMs`
    and `maxLifetimeMs`, and confirm that **no** health check points at the `executor` trigger port.
 5. Verify: with no work the `executor` process does not exist; after one trigger the process

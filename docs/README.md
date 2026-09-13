@@ -51,7 +51,7 @@ Docker Compose 与 Fly.io 三种后端交付。
 | Preset | 支持等级 | 文档 |
 | --- | --- | --- |
 | `single-host` | Stable | [单机一体化](architectures/single-host.md) |
-| `single-machine-worker-sleep` | Experimental（仅设计） | [单机 + 执行进程休眠](architectures/single-machine-worker-sleep.md) |
+| `single-machine-worker-sleep` | Experimental（不可部署） | [单机 + 执行进程休眠](architectures/single-machine-worker-sleep.md) |
 | `split-worker` | Stable（当前生产） | [分离执行端](architectures/split-worker.md) |
 | `remote-worker` | Beta | [远端执行端](architectures/remote-worker.md) |
 
@@ -73,7 +73,7 @@ Docker Compose 与 Fly.io 三种后端交付。
 | --- | --- |
 | [总览](architectures/overview.md) | Preset 矩阵、支持等级、角色落点、功能开关、合法与非法组合、平台支持 |
 | [single-host](architectures/single-host.md) | 一台机器跑全部角色；Compose 参考实现 |
-| [single-machine-worker-sleep](architectures/single-machine-worker-sleep.md) | 一台机器，业务常驻、执行进程按需；**仅设计，未实现** |
+| [single-machine-worker-sleep](architectures/single-machine-worker-sleep.md) | 一台机器，业务常驻、执行进程按需；**进程编排已实现，preset 仍不可部署** |
 | [split-worker](architectures/split-worker.md) | 当前生产：两台机器、两个卷、外部时钟、执行端平时停止 |
 | [remote-worker](architectures/remote-worker.md) | 跨机器跨网络；placement 组合（云-云 / 云-家 / 家-云） |
 | [迁移契约](architectures/migration.md) | 哪些数据必须搬、哪些不需要、迁移顺序、迁移期禁忌 |
