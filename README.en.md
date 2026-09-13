@@ -7,216 +7,216 @@
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Docs](https://img.shields.io/badge/Docs-documentation_site-6366f1?style=flat-square)](https://redtidev1918.github.io/pixivflow-telepost-deploy/)
 
-A deployment kit for running Pixiv auto-posting for real: PixivFlow scrapes works by
-topic or ranking, TelePost handles review and channel publishing. One config covers an
-overseas VPS, a mainland-China server, a NAT-only host without public ingress, a local
-macOS/Linux machine, and Fly.io. The default (Compose) topology runs two independent
-containers — a TelePost multi-bot supervisor and a PixivFlow scheduler — each pulling a
-`ghcr` image and talking over HTTP, sized for 512 MiB machines with no WebUI.
+A deployment kit built for running Pixiv auto-posting for real. It wires two upstream projects
+into one deployable system:
 
-Production has exactly one webhook owner (TelePost) and one execution ledger (PixivFlow). There
-was once a second implementation claiming to be authoritative: the submission bot's webhook
-pointed at a Cloudflare Worker and every user submission was silently dropped. That
-implementation and its acceptance scripts are deleted, and the guard tests under
-`control-plane/test/` keep them from returning.
+| Component | Owns | Does not own |
+| --- | --- | --- |
+| [PixivFlow](https://github.com/redtidev1918/PixivFlow) | Fetching works by theme/ranking, selection, downloads, reliable delivery | Anything Telegram-channel related |
+| [TelePost](https://github.com/redtidev1918/TelePost) | Receiving submissions, human review, publishing to channels | Pixiv login or scheduling |
 
-## Production topology: two apps and one clock
+**One business model; several deployment topologies.** The same business semantics can run on
+one VPS, on one 512 MiB machine, or split across two machines. What changes is where roles run,
+which of them may sleep, who wakes whom, and who holds credentials — not the review flow or the
+scheduling semantics.
 
-There is exactly one production topology, and it has three planes (full contract in
-**[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)**):
+---
 
-- **Cloudflare only decides *when to wake* something up**: cron → schedule id → a
-  single token-bearing POST. It computes no occurrence and writes no business table.
-  See `control-plane/` and [docs/SCHEDULING.md](docs/SCHEDULING.md).
-- **PixivFlow** (`fly/deploy.pixivflow.toml`): its own machine and volume, **stopped by
-  default**, woken by the trigger through the platform proxy, and it exits on its own
-  once its own ledger is empty (`exitWhenIdle`).
-- **TelePost** (`fly/deploy.telepost.toml`): **always on**, the only holder of Telegram
-  credentials and the only component that can publish to a channel. Nothing reaches a
-  channel without human approval.
+## Which deployment should I pick?
 
-Without Fly: **Docker Compose** is a single-machine self-host path (every role inside one
-container) and does not have the same boundaries as the production topology above; the
-difference is spelled out at the end of ARCHITECTURE. systemd/bare metal is the same story.
+| Your situation | Pick |
+| --- | --- |
+| I have one VPS / NAS / home machine | `single-host` |
+| I only have one 512 MiB Fly Machine | `single-machine-worker-sleep` (**designed only, not implemented today**) |
+| I want the lowest Fly bill | `split-worker` |
+| Reliability matters most | `split-worker` |
+| I have a VPS + a home server | `remote-worker` |
+| Pixiv egress quality matters most | `remote-worker` |
+| I just want it running as fast as possible | `single-host` |
 
-Scheduled posting, wake-up, shutdown, slot idempotency and no-duplicate delivery are described
-in [docs/SCHEDULING.md](docs/SCHEDULING.md).
-
-## Features
-
-- **Topic-driven auto-posting**: scrapes "yesterday's most popular" works by Pixiv topic
-  (tag-space inference) or daily ranking, takes Top N illustrations and novels, and
-  excludes AI-generated works using Pixiv's official `illust_ai_type` flag.
-- **Chinese-novel filtering**: `franc-min` language detection plus `strictLanguageFilter`
-  so only Chinese novels are posted.
-- **Review group with reply chains**: API submissions land in a review group first;
-  multi-page galleries are packed into Telegram albums of ≤10 with albums replying to each
-  other. Approved posts reuse the Telegram `file_id`, so media is never uploaded twice.
-- **Full caption templating**: title, note, tags, original link and spoiler policy are all
-  templated; NSFW inclusion and the Telegram spoiler mask are independent, so an R-18 tag
-  does not mask anything by default. Tags are sanitised into clickable hashtags
-  (`r-18 → #r18`).
-- **Multiple network modes**: Polling / Webhook / optional Mihomo proxy, all exposing the
-  same `api/botN/v1/*` interface.
-- **Low-memory friendly**: runs in 512 MiB — small albums with automatic per-image fallback,
-  per-page forced GC and tunable health-check parameters.
-- **Remote updates**: under Compose/systemd PixivFlow hot-reloads its config when the file
-  changes; the Fly production image ships its config instead. A TelePost OWNER can persist
-  policy for the current bot via `/botconfig`, and bulk changes apply through a scripted short restart.
-- **Never silent, never duplicate**: an empty final candidate list still posts to the review
-  group; PixivFlow's persistent outbox prevents lost notifications during short outages and
-  TelePost's SQLite idempotency records prevent duplicate notifications after restarts.
-
-## Network modes
-
-| Machine | How to start | TelePost mode |
-|---|---|---|
-| No public ingress; Telegram/Pixiv reachable | `docker compose up -d` | AUTO picks Polling |
-| Domain with inbound 80/443 | `docker compose --profile webhook up -d` | AUTO picks Webhook |
-| Mainland China, proxy required | `docker compose --profile proxy up -d` | Polling + Mihomo |
-| Fly.io | one command per app: `fly deploy -c fly/deploy.telepost.toml` and `fly deploy -c fly/deploy.pixivflow.toml` | Webhook |
-| Linux VPS (systemd, no Docker) | `deploy --platform systemd` | Polling (runs from source) |
-
-Both Polling and Webhook expose the same `http://127.0.0.1:8080/api/botN/v1/*`, so
-PixivFlow's delivery config does not change with the network mode. If webhook registration
-fails, AUTO falls back to Polling.
-
-## The `deploy` CLI
-
-A single Go binary for Windows / macOS / Linux with zero runtime dependencies (no Python,
-no shell scripts, no venv, no pip) and no need to clone this repository.
-
-### One-shot deployment on a fresh machine
-
-Install only **Docker** plus this one binary; three commands get you running:
-
-```bash
-deploy init mybot        # 1) scaffold a deployment directory (embedded compose/.env/templates, guided Bot setup)
-cd mybot
-deploy doctor && deploy deploy   # 2) self-check -> 3) deploy (docker compose pull/up + health check)
+```text
+Only one machine?
+├─ Yes
+│  ├─ RAM >= 1 GiB ─────────────────► single-host
+│  ├─ RAM = 512 MiB
+│  │  ├─ Save RAM, accept always-on machine billing ─► single-machine-worker-sleep
+│  │  └─ Save the bill ─────────────► split-worker
+│  └─ RAM = 256 MiB ────────────────► single-host, service roles only
+└─ No
+   ├─ Using Fly.io ──────────────────► split-worker
+   └─ Already have multiple nodes ───► remote-worker
 ```
 
-`init` generates a Polling-mode `.env` and a two-bot example config, then asks which
-scenario you want: **Webhook** (with a domain; fills `WEBHOOK_*` and suggests
-`--profile webhook`), **China + Mihomo proxy** (fills proxy/subscription values and suggests
-`--profile proxy`), or **Fly.io** (generates `telesubmit.fly.toml` and suggests secrets plus
-`--platform fly`). Pressing Enter keeps Polling. In non-interactive mode (pipe/CI) it stays
-silent and only writes placeholder config.
+The full comparison table, commonly misconfigured combinations, and the most common confusion —
+**process sleep is not machine sleep** — are in
+[**Which deployment should I pick?**](docs/en/getting-started/choose-architecture.md).
 
-### Getting it
+---
 
-Option 1: download `deploy-<os>-<arch>` (linux/darwin/windows × amd64/arm64) from
-[Releases](https://github.com/redtidev1918/pixivflow-telepost-deploy/releases), extract,
-rename to `deploy`, and `chmod +x` on Linux/macOS.
+## Quickstart (default `single-host`)
 
-Option 2: build from source (requires Go 1.22+):
-
-```bash
-go build -o deploy .
-```
-
-### Usage
-
-```bash
-./deploy init <dir>             # fresh deployment: scaffold a directory and fill in bot details
-./deploy doctor                 # environment self-check (dependencies/config/login/network)
-./deploy tp latest              # upgrade TelePost to latest and deploy (or pin e.g. 2.10.41)
-./deploy pf 2.10.31             # upgrade PixivFlow to a specific version (ugoira->GIF needs >=2.10.31)
-# production: set PIXIVFLOW_REF (40-char commit) in fly/deploy.pixivflow.toml, then fly deploy
-./deploy status                 # status / health
-./deploy logs 200               # last 200 log lines
-./deploy version                # tool and current config version
-```
-
-Platform auto-detection (default `--platform auto`): `telesubmit.fly.toml` present and
-flyctl logged in → Fly.io; otherwise `docker-compose.yml` → Docker Compose; otherwise
-`systemctl` on Linux → systemd. You can also pass `--platform fly|compose|systemd`.
-
-Common options: `--dry-run` (preview only, change nothing), `--verbose` (echo full command
-output), `--retries N` (retry failed deployments), `--no-color`. Every run writes a full log
-to `/tmp/deploy-logs/` (`%TEMP%` on Windows) and prints the path on failure.
-
-## Quick start (Docker Compose)
-
-Requires Docker 24+ and Compose v2. `bootstrap.sh` / `validate.sh` additionally need bash and
-python3 for local generation and validation only.
+Requires Docker 24+ and Compose v2.
 
 ```bash
 git clone https://github.com/redtidev1918/pixivflow-telepost-deploy
 cd pixivflow-telepost-deploy
-./scripts/bootstrap.sh
-```
-
-Edit `.env` and fill in at least `BOT1_TOKEN`, `BOT1_CHANNEL_ID` and `BOT1_OWNER_ID`. To
-enable PixivFlow also fill in `PIXIV_REFRESH_TOKEN` and the `TELEPOST_BOT1_SUBMIT_TOKEN`
-generated by the bot's `/gen_token`. Then edit `data/pixivflow/config.json` (based on
-`pixivflow/config/fly-two-bots.example.json`), replacing the sample topics with your tags,
-adjusting the cron, and flipping the plans you want to `"enabled": true`.
-
-```bash
+./scripts/bootstrap.sh                 # generates .env and data/pixivflow/config.json
+# Edit .env: set at least BOT1_TOKEN, BOT1_CHANNEL_ID, BOT1_OWNER_ID
+# Edit data/pixivflow/config.json: your tags, cron settings, and set plans to "enabled": true
 ./scripts/validate.sh
 docker compose up -d
-docker compose ps
 curl http://127.0.0.1:8080/health
 ```
 
-Prebuilt images are pulled from GHCR (public): `TELEPOST_IMAGE` and `PIXIVFLOW_IMAGE` are
-built by their own repositories, so no local image build is needed here (except
-Caddy/Mihomo under `--profile webhook/proxy`). Pin both variables to explicit release tags
-in production; `latest` is fine for a first look but upgrades on the next pull.
+Don't want to clone the repo? `deploy` is a single Go binary (Windows / macOS / Linux, no runtime
+dependencies) — three commands deploy to a fresh machine:
 
-## Memory tiers
+```bash
+deploy init mybot                        # wizard-generated deployment directory
+cd mybot
+deploy doctor && deploy deploy          # self-checks, then one-command deploy
+```
 
-Compose decouples `telepost` and `pixivflow` into **two containers**, with `mem_limit`
-defaults sized for a 512 MiB machine: **telepost 320m + pixivflow 192m** (tunable via
-`TELEPOST_MEMORY_LIMIT` / `PIXIVFLOW_MEMORY_LIMIT`).
+Download the `deploy-<os>-<arch>` binary from
+[Releases](https://github.com/redtidev1918/pixivflow-telepost-deploy/releases).
 
-| Tier | Combination | How |
-|---|---|---|
-| **256 MiB** | Single bot, no PixivFlow | Start only telepost: `docker compose up -d telepost` with `TELEPOST_MEMORY_LIMIT=256m` |
-| **512 MiB** (default) | Two bots + PixivFlow | Defaults: telepost 320m + pixivflow 192m |
-| **≥1 GiB** | The above with headroom / WebUI | Raise `TELEPOST_MEMORY_LIMIT=512m`, `PIXIVFLOW_MEMORY_LIMIT=384m` |
+**Full steps, verification checklist, and entry points for the other presets**:
+[Quickstart](docs/en/getting-started/quickstart.md).
 
-## Optional PixivFlow WebUI (needs ≥1 GiB)
+---
 
-It is not part of the kit's combined image. Before exposing it publicly, set both
-`WEBUI_USERNAME` and `WEBUI_PASSWORD` (Basic Auth is enabled only when both are non-empty).
-Container build commands and the shared-volume startup are in the Chinese
-[README section](/README.md) and [SCENARIOS](/SCENARIOS.md).
+## Features
 
-## Security boundaries
+- **Automatic themed posting**: fetch "yesterday's hottest" by Pixiv theme (tag-space derivation)
+  or daily rankings; take the top N illustrations and novels each; exclude AI works using Pixiv's
+  official `illust_ai_type` flag.
+- **Chinese-language novel filtering**: `franc-min` language detection plus
+  `strictLanguageFilter` — Chinese novels only.
+- **Review group + reply chains**: multi-page sets are packed into albums of up to 10 images,
+  chained together via automatic replies; after approval, `file_id`s are reused so nothing is
+  uploaded twice. **Nothing reaches a channel before a human approves it.**
+- **Full caption templates**: title / description / tags / source link / spoiler policy are all
+  templatable; tags are sanitised into clickable hashtags.
+- **Multiple network modes**: polling / webhook / optional proxy, one `api/botN/v1/*` surface.
+- **Low-memory friendly**: runs in 512 MiB; small albums with automatic single-image fallback on
+  failure, forced GC per page, tunable health-check parameters.
+- **No silent failures, no duplicates**: even an empty result notifies the review group; a
+  persistent outbox prevents lost deliveries; SQLite idempotency keys prevent duplicates after
+  restarts.
 
-- `.env`, `data/`, `proxy-data/` and upload temp files are gitignored.
-- Bot tokens, Pixiv refresh tokens, submit tokens and proxy subscription URLs belong only in
-  `.env` or platform secrets — never in JSON templates, git history or chat screenshots.
-- The root API binds to `127.0.0.1` by default; Webhook goes through a Caddy reverse proxy.
-- Before changing channels, process pending submissions in the old review group and confirm
-  the bot is an administrator of the new channel.
+---
 
-Public-repository CI checks for common token formats and untracked runtime paths, and the
-Docker build context excludes local secrets and data via `.dockerignore`. Automated checks
-are not a substitute for rotation: if a credential ever reached an issue, log, screenshot or
-git history, revoke it immediately.
+## Supported deployment architectures
+
+| Preset | Support level | Status | In one sentence |
+| --- | --- | --- | --- |
+| [`single-host`](docs/en/architectures/single-host.md) | Stable | implemented, CI-covered | One machine runs every role |
+| [`single-machine-worker-sleep`](docs/en/architectures/single-machine-worker-sleep.md) | Experimental | **designed only, not implemented** | One machine; the executor process spawns on demand and exits when idle |
+| [`split-worker`](docs/en/architectures/split-worker.md) | Stable | implemented, tested, **current production** | Executor and service each get a machine and a volume |
+| [`remote-worker`](docs/en/architectures/remote-worker.md) | Beta | implemented, no end-to-end test | The two roles run across machines and networks |
+
+Each preset page has a fixed section order: who it is for, topology, resource requirements,
+lifecycle, where state lives, network, strengths, weaknesses, failure model, cost model,
+deployment steps, and migration paths.
+
+The machine-readable authority (roles, presets, support levels, feature switches, legal and
+illegal combinations, resource profiles, security invariants) is
+[`docs/reference/architecture-matrix.json`](docs/reference/architecture-matrix.json);
+`architecture_docs_test.go` enforces in CI that the documentation matches it.
+
+---
+
+## Three concepts that must not be conflated
+
+```text
+Logical architecture (fixed)   Who owns which decision — independent of deployment method
+Deployment topology (variable) Where roles run, who may sleep, who wakes whom
+Resource profile (variable)    How much RAM each running unit gets
+```
+
+- **The `executor` never owns Telegram tokens, channels, or review decisions.** Co-location is a
+  physical fact; ownership never merges. See the [role contract (Chinese)](docs/concepts/roles.md).
+- **The `publisher` never sleeps**: a cold-starting submission bot is, from the user's point of
+  view, a broken bot.
+- **Process sleep is not machine sleep; saving RAM is not saving the compute bill.**
+  See [lifecycle (Chinese)](docs/concepts/lifecycle.md).
+
+---
 
 ## Documentation
 
-Full documentation site: <https://redtidev1918.github.io/pixivflow-telepost-deploy/>
+Docs site: <https://redtidev1918.github.io/pixivflow-telepost-deploy/>
+(Chinese is authoritative; English mirrors cover the choose-an-architecture, deploy, and operate
+paths.)
 
-| Document | Content |
-| :-- | :-- |
-| [Download](docs/download.md) | Per-platform `deploy` binaries (auto-updated on every release) |
-| [English docs index](docs/en/README.md) | English entry point |
-| [SCENARIOS](docs/SCENARIOS.md) | Deployment scenario cheat sheet (Chinese) |
-| [SCHEDULING](docs/SCHEDULING.md) | Scheduled posting, shutdown, slot idempotency (Chinese) |
-| [ARCHITECTURE](docs/ARCHITECTURE.md) | Architecture and trust boundaries (Chinese) |
+| I want to… | Read |
+| --- | --- |
+| Decide which deployment to use | [Choose an architecture](docs/en/getting-started/choose-architecture.md) |
+| Get the first bot running from zero | [Quickstart](docs/en/getting-started/quickstart.md) |
+| Understand roles and ownership | [Role contract (Chinese)](docs/concepts/roles.md) |
+| Understand sleep, wake, shutdown | [Lifecycle (Chinese)](docs/concepts/lifecycle.md) |
+| Understand scheduling and slot idempotency | [Scheduling (Chinese)](docs/concepts/scheduling.md) |
+| Know where credentials live and where the boundary is | [Credentials (Chinese)](docs/concepts/credentials.md) |
+| Deploy to Fly.io | [Fly.io](docs/en/platforms/flyio.md) |
+| Deploy to a VPS | [Docker](docs/en/platforms/docker.md) / [VPS and bare metal](docs/en/platforms/vps.md) |
+| Out of memory / OOM | [Performance and memory (Chinese)](docs/operations/performance.md) |
+| Troubleshooting | [Troubleshooting (Chinese)](docs/operations/troubleshooting.md) |
+| Move from one architecture to another | [Migration contract (Chinese)](docs/architectures/migration.md) |
+| The authority for each concept | [Deployment contract](docs/en/reference/deployment-contract.md) |
+| The multi-architecture plan | [Roadmap (Chinese)](docs/ROADMAP-MULTI-ARCH.md) |
+
+All pages: [documentation index](docs/en/README.md).
+
+---
+
+## Layout
+
+```text
+deploy.go / init.go / go.mod     One-command deployment tool (single Go binary, shipped in releases)
+deploy_test.go                   CLI tests
+architecture_docs_test.go        Documentation consistency tests (presets / matrix / links / contract)
+docker-compose.yml               compose topology: telepost + pixivflow + optional Caddy / Mihomo
+fly/deploy.telepost.toml         Single topology source for the service (always-on)
+fly/deploy.pixivflow.toml        Single topology source for the executor (stopped by default, exits after runs)
+control-plane/                   Cloudflare thin clock: cron -> schedule id -> one authenticated POST
+docker/                          Image definitions (passthrough, commit-pinned scheduler, single-host combined)
+pixivflow/config/*.example.json  Safe templates for multiple schedules
+config/                          Non-sensitive channel/review policy templates
+scripts/                         Bootstrap, validation, read-only production checks
+docs/                            Documentation: architectures, concepts, platforms, operations, reference
+proxy/                           Optional Mihomo image
+data/                            Databases, download cache, outbox, live config (not committed)
+```
+
+---
+
+## Security boundaries
+
+- `.env`, `data/`, `proxy-data/`, and upload temp files are gitignored.
+- Bot tokens, Pixiv refresh tokens, submission tokens, and proxy subscription URLs live only in
+  `.env` or platform secrets — never in JSON templates, Git history, or chat screenshots.
+- Under `split-worker` and `remote-worker`, the executor holds **no Telegram tokens or channel
+  IDs**, so it cannot post to a channel directly, bypass review, or become the webhook owner.
+  Under `single-host` and `single-machine-worker-sleep` the two roles share one machine, so this
+  boundary **does not hold**. `control-plane/test/webhook-ownership.test.ts` statically guards the
+  former.
+- The Telegram webhook has exactly one owner: TelePost registers it at startup; no script in this
+  repository ever registers it.
+- The root API binds to `127.0.0.1` by default; webhook ingress goes through a reverse proxy.
+- If a credential has ever entered an issue, log, screenshot, or Git history, rotate it
+  immediately — automated checks are no substitute for rotation.
+
+Full rules: [credentials (Chinese)](docs/concepts/credentials.md), [SECURITY.md](SECURITY.md).
+
+---
 
 ## Contributing
 
-- Architecture and component boundaries: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
-- Adding the Nth channel (multi-bot): [docs/MULTI-BOT.md](docs/MULTI-BOT.md)
-- Contributing code: [CONTRIBUTING.md](CONTRIBUTING.md)
+- Contributing: [CONTRIBUTING.md](CONTRIBUTING.md)
+  (after changes, run `go test ./...`, `./scripts/validate.sh --examples`, and
+  `(cd control-plane && npm test)`)
 - Usage and troubleshooting: [SUPPORT.md](SUPPORT.md)
-- Reporting vulnerabilities privately: [SECURITY.md](SECURITY.md)
+- Private vulnerability reports: [SECURITY.md](SECURITY.md)
 - Code of conduct: [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md)
 
 Upstream projects: [PixivFlow](https://github.com/redtidev1918/PixivFlow) ·
@@ -226,6 +226,8 @@ Upstream projects: [PixivFlow](https://github.com/redtidev1918/PixivFlow) ·
 
 [MIT](LICENSE)
 
-This project is not affiliated with Pixiv, Telegram or Fly.io. Deployers should only handle
-content they have the right to download, store and publish, and must comply with platform
-terms, copyright requirements and local law.
+This project is not affiliated with or officially endorsed by Pixiv, Telegram, or Fly.io.
+Operators should only process content they have the right to download, store, and publish, and must
+comply with platform terms, copyright requirements, and local law. The project neither sets
+channel content policy on an operator's behalf nor provides any guarantee of evading platform
+restrictions or regulation.
