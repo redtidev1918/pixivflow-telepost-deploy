@@ -58,6 +58,15 @@ fi
 
 if command -v docker >/dev/null && docker compose version >/dev/null 2>&1; then
   if docker compose --env-file .env.example config --quiet; then ok "Docker Compose model"; else fail "Docker Compose model"; fi
+  # worker-sleep 覆盖层：合并后的模型必须成立，而且必须真的把「按需执行端」表达对
+  # （最关键的一条是健康检查被禁用）。断言逻辑在 check_compose_overlay.py。
+  if docker compose -f docker-compose.yml -f docker-compose.worker-sleep.yml \
+      --env-file .env.example config --format json 2>/dev/null \
+      | python3 scripts/check_compose_overlay.py; then
+    ok "worker-sleep compose overlay"
+  else
+    fail "worker-sleep compose overlay"
+  fi
 else
   echo "[SKIP] Docker Compose is unavailable"
 fi

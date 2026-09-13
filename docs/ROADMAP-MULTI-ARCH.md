@@ -118,11 +118,17 @@ scheduler 可不可以多实例、这个配置应该改在哪里」，不需要�
 - 能区分正常收工 / 被信号杀死 / supervisor 自己发起的停止三种结局；
 - 环境白名单 deny-by-default，真实子进程继承验证，Telegram 凭据被拒付（SI-1）。
 
+**已完成（续）**：
+
+- compose 形态：`docker-compose.worker-sleep.yml` 覆盖层（不是第二份拓扑来源），由
+  `scripts/validate.sh` 渲染合并模型并断言「健康检查已禁用、端口分工存在、业务侧未被改动」。
+
 **未完成（因此 preset 仍不可部署）**：
 
-- 平台配置：Fly 1×512 MiB / compose / systemd 三种形态都没写。Fly 形态与「只有两份 Fly 配置」
-  的契约冲突（`control-plane/test/deployment-contract.test.ts`），compose 形态与「不要另起
-  一份 compose 变体」的契约冲突——两者都需要先决定怎么表达，不能靠新增文件绕过去；
+- Fly 1×512 MiB 与 systemd 两种形态都没有配置。Fly 形态需要第三份 `fly/*.toml`，与
+  `control-plane/test/deployment-contract.test.ts` 的「只有两份 Fly 配置」冲突；
+  要推进就得先决定：是给该契约加一条「仅限矩阵已声明的 preset」的例外，
+  还是让 sleep preset 只支持 compose/systemd；
 - 端到端验证：`publisher` 常驻下的私聊投稿与 webhook 全程可用、账本空了之后进程退出、
   **触发后立刻探测确认探针没有把子进程拉回来**、机器全程未进入 `stopped`；
 - 内存峰值实测（512 MiB 下两个角色的真实占用）。

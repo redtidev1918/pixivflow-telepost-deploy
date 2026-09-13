@@ -251,7 +251,8 @@ hardest kind to debug.
 | Supervisor binary | **implemented** (Go, stdlib only) | `supervisor/` (main.go / server.go / child.go) |
 | Environment allowlist | **implemented and tested** | `supervisor/child.go` + `supervisor/supervisor_test.go` |
 | Execution-side container image | **implemented** (built in CI) | `docker/worker-sleep.Dockerfile` |
-| Platform configuration (Fly / compose / systemd) | missing | — |
+| Compose form (overlay) | **implemented and validated** | `docker-compose.worker-sleep.yml` |
+| Fly / systemd form | missing | — |
 | Deployment steps | still a design | this page |
 
 What the supervisor already does is guarded by tests that spawn real child processes:
@@ -290,11 +291,37 @@ deliberately not baked into the image.
 
 ## Deployment steps
 
-**Partly executable**: the image already builds (`docker/worker-sleep.Dockerfile`), but no platform
-configuration (Fly / compose / systemd) exists yet, so the full path is still not executable.
-Landing it is the rest of Phase 3, see [ROADMAP-MULTI-ARCH.md (中文)](/ROADMAP-MULTI-ARCH.md).
+**The compose form is executable; the Fly and systemd forms have no configuration yet.**
 
-The target shape is:
+### Compose form (implemented)
+
+```bash
+WORKER_SLEEP_IMAGE=<execution-side image> \
+docker compose -f docker-compose.yml -f docker-compose.worker-sleep.yml up -d
+```
+
+The overlay is **not** a second topology source: the topology is still defined only by
+`docker-compose.yml`, and this layer only turns the `pixivflow` service from "resident executor" into
+"resident supervisor + on-demand executor" — same service name, same volume, same network, so role
+ownership and SI-7 are unchanged. The service side (`telepost`) keeps its own health check untouched.
+
+Why not a profile: in Compose, a service without a profile always starts, and `pixivflow` is exactly
+that. Expressing "either a resident executor or an on-demand one" with profiles would make the
+default `docker compose up -d` silently start one fewer executor — that breaks the default path
+rather than adding a deployment method.
+
+`scripts/validate.sh` renders the merged model to JSON and asserts: the image is the execution-side
+one, the **health check is disabled**, the port split is present, and the `telepost` service is
+unchanged. Without that health-check assertion, a probe would resurrect the child that just finished
+by its own ledger.
+
+### Fly and systemd forms
+
+**Missing.** The Fly form needs this preset's own machine topology, i.e. a third `fly/*.toml`, which
+collides with the "exactly two Fly configs" contract — that needs a decision, see Phase 3 of
+[ROADMAP-MULTI-ARCH.md (中文)](/ROADMAP-MULTI-ARCH.md).
+
+### The full compose steps
 
 1. Prepare one volume; both `data/bot{N}/` and `data/pixivflow/` live on it, mounted into both
    containers.

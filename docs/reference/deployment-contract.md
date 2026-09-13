@@ -110,7 +110,7 @@ resource_profile: 512m           # 见 enums / resourceProfiles
 | 架构 Preset 定义 | `architecture-matrix.json` + `architectures/*.md` | README、`fly/*.toml` 注释、compose 注释 |
 | Preset 矩阵（支持等级） | `architecture-matrix.json` `presets.*.status` | 任何第二处 `唯一生产拓扑` 说法 |
 | Fly 拓扑 | `fly/deploy.pixivflow.toml` + `fly/deploy.telepost.toml`（仅两份） | 第三份 `*.toml` |
-| Compose 拓扑 | `docker-compose.yml` | 另起一份 compose 变体 |
+| Compose 拓扑 | `docker-compose.yml`（preset 覆盖层 `docker-compose.worker-sleep.yml` 只换执行侧的运行方式，不是第二份来源） | 另起一份拓扑定义 |
 | 调度契约 | [concepts/scheduling.md](../concepts/scheduling.md) | 段落式复述 |
 | 凭据契约 | [concepts/credentials.md](../concepts/credentials.md) | 任何打印凭据的脚本 |
 | 部署清单（部署编译器的输入） | [deployment-manifest.md](deployment-manifest.md) + 矩阵 `manifest` | 由清单推导出的平台分支 |
