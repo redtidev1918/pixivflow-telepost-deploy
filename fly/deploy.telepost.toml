@@ -21,14 +21,16 @@ primary_region = 'iad'
     # Pin the released TelePost image. Never `latest`: a floating reference makes
     # "the same config" produce different code on different days.
     #
-    # 2.17.6 (tag v2.17.6) classifies media from the FINAL artifact instead of
-    # source metadata: a big original that compresses under the photo limit, or
-    # a high-resolution small-byte image that needs one downscale, is sent as a
-    # photo instead of being permanently demoted to a document, and galleries
-    # keep source order instead of splitting into a photo album + document album.
-    # Animations are never staticized, and a Telegram-rejected photo is retried
-    # once (bounded) before falling back to document.
-    TELEPOST_IMAGE = 'ghcr.io/redtidev1918/telepost:2.17.6'
+    # 2.18.0 adds the Telegram Mini App (submission + moderation UI) as a
+    # presentation adapter over the canonical HTTP API: server-side initData
+    # verification, RBAC, shared refetch application command, /me/submissions,
+    # review mutations. Bot/API/refetch behavior is unchanged (additive).
+    # Requires MINIAPP_ENABLED + MINIAPP_SESSION_SECRET to expose the session
+    # endpoint; without them the Mini App surface stays closed (§152-§153).
+    #
+    # 2.17.6 classifies media from the FINAL artifact instead of source
+    # metadata; 2.18.0 keeps that behavior.
+    TELEPOST_IMAGE = 'ghcr.io/redtidev1918/telepost:2.18.0'
 
 [[mounts]]
   source = 'data'
@@ -50,6 +52,11 @@ primary_region = 'iad'
   # Review-group refetch reaches the sleeping PixivFlow executor through Fly's
   # HTTPS proxy; PIXIVFLOW_REFETCH_TOKEN is a separate shared Secret.
   PIXIVFLOW_REFETCH_BASE_URL = 'https://pixivflow-scheduler.fly.dev'
+  # Telegram Mini App (optional). When enabled, the webapp dist/ must be hosted
+  # on this domain under /app/ (see docs/MINIAPP.md); MINIAPP_SESSION_SECRET is
+  # a separate shared Secret (≥32 chars, never the bot token).
+  MINIAPP_ENABLED = 'false'
+  MINIAPP_SESSION_TTL = '1800'
 
 [http_service]
   internal_port = 8080
