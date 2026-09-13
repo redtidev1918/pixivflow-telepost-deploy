@@ -73,7 +73,7 @@ TelePost。
 | Preset | 支持等级 | 实现状态 | 机器数 | `executor` 生命周期 | Telegram 凭据边界 | 关键契约 |
 | --- | --- | --- | --- | --- | --- | --- |
 | `single-host` | Stable | 已实现，CI 覆盖 | 1 | `always-on` | host=false | 一个 `./data` 物理卷、互不相交的角色子目录；pixivflow 容器只收 `BOT*_SUBMIT_TOKEN`；容器网络投递 |
-| `single-machine-worker-sleep` | Experimental | **仅设计，未实现** | 1 | `spawn-on-demand` | host=false | 机器永不停机；只有 `executor` 进程退出；supervisor 用环境白名单 spawn，Telegram secret 不继承；停机决策权归 `executor` 账本 |
+| `single-machine-worker-sleep` | Experimental | **未实现**（supervisor 已实现） | 1 | `spawn-on-demand` | host=false | 机器永不停机；只有 `executor` 进程退出；supervisor 用环境白名单 spawn，Telegram secret 不继承；停机决策权归 `executor` 账本 |
 | `split-worker` | Stable | 已实现、已测试、**当前生产** | 2 + 时钟 | `wake-run-exit` | host=true | 两份 Fly 配置 + 两个卷；执行端无健康检查、无平台 auto-stop、`restart.policy=never` |
 | `remote-worker` | Beta | 已实现，未经端到端测试 | 2（可跨平台） | `wake-run-exit` 或 `always-on` | host=true | 私网叠加网或公网 HTTPS；bearer 认证在私网上也必须开启 |
 
@@ -178,6 +178,7 @@ if SINGLE_HOST:   ...
 | `fly/deploy.telepost.toml` | 业务端唯一拓扑来源 | 不包含 Pixiv/调度配置 |
 | `pixivflow/config/production.json` | 执行端随镜像发布的运行配置 | 不是可热改的运行中状态 |
 | `docker/` | 按提交号固定或按发布版本透传的镜像定义 | 不是业务代码 |
+| `supervisor/` | `single-machine-worker-sleep` 的常驻进程编排：鉴权后按需 spawn executor，退出后不重启 | 不是业务逻辑：它不知道 schedule 是什么，也不做空闲判定 |
 | `scripts/` | 只读运维与验收脚本 | 不写业务状态、不注册 webhook |
 | `docs/reference/architecture-matrix.json` | preset / 角色 / 组合 / 档位 / 不变量 / manifest 契约的机器可读权威 | 不是可执行配置 |
 | `manifest.go` + `deployment.manifest.json` | 部署清单：读取/推断并对照矩阵校验「这是一套什么部署」 | **不是运行时依赖**：业务代码永不读它 |
@@ -205,7 +206,13 @@ if SINGLE_HOST:   ...
 8. **不要在日志、脚本输出或报告里打印任何密钥**。只输出「已配置 / 缺失 / 就绪」。
 9. **不要让业务代码感知部署平台**（见第 3 节）。
 10. **不要把尚未实现的 preset 写成可用**。`single-machine-worker-sleep` 当前
-    `implemented=false`；改它的文档必须同步改矩阵的 `status` 字段。
+    `implemented=false`（supervisor 组件已实现，但缺镜像与平台配置）；改它的文档必须同步改矩阵
+    的 `status` 字段。
+11. **不要在 `supervisor/` 里实现空闲判定**：停机决策权只属于 executor 自己的账本。禁止写
+    「空闲 N 秒就杀掉子进程」这类定时器——它会把下载中的批次截断，而这是本 preset 唯一的致命误配。
+12. **不要放宽环境白名单**：传给 executor 子进程的环境是 deny-by-default 白名单
+    （`PIXIV_*` / `SCHEDULER_*` / `*_SUBMIT_TOKEN` + 通用运行变量）。`supervisor/child.go` 对
+    Telegram 凭据名有第二道拒付检查，改白名单必须同时改测试。
 
 ---
 
@@ -231,9 +238,10 @@ deploy manifest --check                        # 有 deployment.manifest.json �
 - 部署清单（Phase 2）已完成：`deploy manifest` 是部署编译器的输入。下一步是 Phase 3 的
   `single-machine-worker-sleep` 运行时实现——**必须先有清单，再写编排**，否则会重新出现
   「文档一套 preset、脚本一套 if/else、CLI 第三套判断」。
-- `single-machine-worker-sleep` 只有设计。实现计划见
+- `single-machine-worker-sleep` 的 supervisor 组件已实现并有测试（`supervisor/`），但 preset
+  **仍不可部署**：缺容器镜像、平台配置与端到端验证。剩下的事见
   [`docs/ROADMAP-MULTI-ARCH.md`](docs/ROADMAP-MULTI-ARCH.md) 的 Phase 3；
-  实现后必须把矩阵的 `status.implemented` 与 `support` 一并更新。
+  全部验收通过前，矩阵的 `status.implemented` 与 `support` 不许改。
 - compose 的默认内存限额（320m + 256m = 576 MiB）与矩阵 `512m` 档（320 + 192）不一致；
   `deploy manifest` 会显式报告该偏差而不抹平。修哪一边需要单独决定，见
   [`docs/reference/deployment-manifest.md`](docs/reference/deployment-manifest.md)。

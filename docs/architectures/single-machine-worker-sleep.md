@@ -174,7 +174,9 @@ Machine (always on)
   白名单；在该测试存在之前，本 preset 不得标记为已实现。
 - **`review` 与 `publish` 不受保护。** `split-worker` 里「执行端崩溃/OOM 不影响 Telegram」
   这条性质在这里不成立。
-- **目前没有实现。** 本仓库没有任何配置或代码实现这个进程编排。
+- **只实现了一部分。** supervisor 组件（`supervisor/`）已实现并有测试，包括设计要求的
+  **环境白名单守护测试**；但本 preset 仍**不可部署**：没有镜像、没有平台配置，部署步骤依然是
+  设计。因此矩阵里它保持 `implemented=false` / `support=experimental`，直到整条路径可执行。
 
 ---
 
@@ -205,16 +207,41 @@ Machine (always on)
 
 ---
 
+## 实现状态
+
+| 组件 | 状态 | 位置 |
+| --- | --- | --- |
+| supervisor 二进制 | **已实现**（Go，仅标准库） | `supervisor/`（main.go / server.go / child.go） |
+| 环境白名单 | **已实现并有测试** | `supervisor/child.go` + `supervisor/supervisor_test.go` |
+| 容器镜像 | 缺失 | —— |
+| Fly / compose 配置 | 缺失 | —— |
+| 部署步骤 | 仍是设计 | 本页 |
+
+supervisor 已经能做的事，都有真实子进程的测试守护：
+
+- 常驻占住触发端口，路径与鉴权契约与 `split-worker` 的执行端**完全一致**
+  （`POST /internal/schedules/{scheduleId}/run` + Bearer），所以迁移时时钟侧不用改；
+- 只有**通过鉴权**的 POST 才拉起 executor：探测（GET）得到 404，令牌错误得到 401，
+  两者都不会 spawn —— 「一次探测把刚退出的子进程拉回来」的循环就此断掉；
+- 同一时刻只有一个 executor（SI-4）；子进程退出后**不重启**；
+- supervisor **不会**因空闲杀掉子进程：停机决策权只属于 executor 自己的账本；
+- 能区分「正常 exit(0)」「被信号杀死（OOM/崩溃）」「supervisor 自己发起的停止」三种结局；
+- 收到停止信号时把信号转给子进程，不留孤儿；
+- 传给子进程的环境是 **deny-by-default 白名单**：只有 `PIXIV_*`、`SCHEDULER_*`、
+  `*_SUBMIT_TOKEN` 与通用运行变量放行；任何 Telegram 凭据名一律拒绝启动子进程。
+
 ## 部署步骤
 
-**当前不可执行。** 这是设计契约；实现属于下一阶段，见
-[ROADMAP-MULTI-ARCH.md](../ROADMAP-MULTI-ARCH.md) 的 Phase 3。
+**当前不可执行。** 下面是目标形态，落地属于 Phase 3 剩余部分，见
+[ROADMAP-MULTI-ARCH.md](../ROADMAP-MULTI-ARCH.md)。
 
 实现完成后，步骤形态应当是：
 
 1. 准备一个卷，`data/bot{N}/` 与 `data/pixivflow/` 都落在卷上。
 2. 部署常驻 `publisher`，确认私聊投稿可用、webhook 或 polling 已建立。
-3. 配置常驻 supervisor：触发到来时 spawn `executor`，`executor` 退出后不重启它。
+3. 配置常驻 supervisor（`SUPERVISOR_CHILD_CMD` / `SCHEDULER_TRIGGER_TOKEN` /
+   `SUPERVISOR_LISTEN` / `SUPERVISOR_CHILD_TRIGGER`）：触发到来时 spawn `executor`，
+   `executor` 退出后不重启它。
 4. 在 `executor` 的配置里设 `schedulerRuntime.mode`、`exitWhenIdle=true`、`idleGraceMs`、
    `maxLifetimeMs`，并确认**没有**任何指向 `executor` 触发端口的健康检查。
 5. 验证：无任务时 `executor` 进程不存在；一次触发后进程出现；账本空了之后进程退出；

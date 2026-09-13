@@ -23,7 +23,7 @@
 | Preset | 支持等级 | 实现状态 | 一句话 | 文档 |
 | --- | --- | --- | --- | --- |
 | `single-host` | Stable | 已实现、CI 覆盖、未在生产验证 | 一台机器跑全部角色，两个容器共享一个 data 目录 | [single-host.md](single-host.md) |
-| `single-machine-worker-sleep` | Experimental | **仅设计，本仓库未实现** | 一台机器：业务常驻，执行进程按需拉起、空闲即退出 | [single-machine-worker-sleep.md](single-machine-worker-sleep.md) |
+| `single-machine-worker-sleep` | Experimental | **组件已实现，preset 不可部署** | 一台机器：业务常驻，执行进程按需拉起、空闲即退出 | [single-machine-worker-sleep.md](single-machine-worker-sleep.md) |
 | `split-worker` | Stable | 已实现、已测试、**当前生产** | 执行端与业务端各自一台机器、各自一个卷 | [split-worker.md](split-worker.md) |
 | `remote-worker` | Beta | 已实现、未经端到端测试 | 两个角色跨机器跨网络通信 | [remote-worker.md](remote-worker.md) |
 
