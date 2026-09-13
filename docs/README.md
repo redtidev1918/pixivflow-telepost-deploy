@@ -36,6 +36,7 @@ Docker Compose 与 Fly.io 三种后端交付。
 | 某次定时投稿没跑出来 | [调度运维手册](operations/scheduling.md)（证据链、排查顺序、admission 日志与终态） |
 | 备份或恢复 | [备份与恢复](operations/backup.md) → [持久状态与卷](concepts/state.md) |
 | 升级或回滚 | [升级与回滚](operations/upgrades.md) |
+| 清理时钟上不再使用的 Cloudflare secret | [Cloudflare 时钟废弃 secret 清理](operations/cloudflare-secret-retirement.md)（清单与计划，**未执行**） |
 | 换一种部署架构 | [架构迁移契约](architectures/migration.md) |
 | 理解调度、槽位、幂等 | [调度与 occurrence](concepts/scheduling.md) → [投递与 outbox](concepts/delivery.md) |
 | 理解谁能休眠、谁唤醒谁 | [生命周期](concepts/lifecycle.md) |

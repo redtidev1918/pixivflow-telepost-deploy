@@ -27,6 +27,7 @@
 - 运维
   - [监控与只读核对](/operations/monitoring.md)
   - [调度运维手册：一次触发断在哪一步](/operations/scheduling.md)
+  - [Cloudflare 时钟废弃 secret 清理](/operations/cloudflare-secret-retirement.md)
   - [备份与恢复](/operations/backup.md)
   - [升级与回滚](/operations/upgrades.md)
   - [故障排查](/operations/troubleshooting.md)
