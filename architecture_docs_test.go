@@ -118,6 +118,15 @@ func mustRead(t *testing.T, rel string) string {
 	return string(raw)
 }
 
+func mustReadRaw(t *testing.T, rel string) []byte {
+	t.Helper()
+	raw, err := os.ReadFile(rel)
+	if err != nil {
+		t.Fatalf("read %s: %v", rel, err)
+	}
+	return raw
+}
+
 // markdownFiles walks a directory and returns every .md path relative to the repo root.
 func markdownFiles(t *testing.T, dir string) []string {
 	t.Helper()
@@ -381,65 +390,149 @@ func TestNoSecondDeclarationOfTheOnlyProductionTopology(t *testing.T) {
 // 4. split-worker 的安全契约没有被破坏
 // ---------------------------------------------------------------------------
 
-func TestSplitWorkerSafetyContract(t *testing.T) {
+func TestCredentialAndStateContract(t *testing.T) {
 	m := loadMatrix(t)
 
-	pixivflow := mustRead(t, "fly/deploy.pixivflow.toml")
-	telepost := mustRead(t, "fly/deploy.telepost.toml")
+	// --- SI-1 is a global logical-ownership invariant ---------------------
+	var si1, si7 *struct {
+		ID       string   `json:"id"`
+		Applies  []string `json:"applies"`
+		Enforced []string `json:"enforcedBy"`
+	}
+	for i := range m.SecurityInvariants {
+		switch m.SecurityInvariants[i].ID {
+		case "SI-1":
+			si1 = &m.SecurityInvariants[i]
+		case "SI-7":
+			si7 = &m.SecurityInvariants[i]
+		}
+	}
+	if si1 == nil {
+		t.Fatalf("security invariant SI-1 missing from the matrix")
+	}
+	for _, name := range []string{"single-host", "single-machine-worker-sleep", "split-worker", "remote-worker"} {
+		if !contains(si1.Applies, name) {
+			t.Errorf("SI-1 must apply to %s: the executor never holds Telegram credentials in any preset", name)
+		}
+	}
 
-	// SI-1：执行端配置里不得出现任何 Telegram 令牌或频道 ID。
+	// --- structured credentialBoundary fields on every preset -------------
+	wantIsolation := map[string]bool{
+		"single-host": false, "single-machine-worker-sleep": false,
+		"split-worker": true, "remote-worker": true,
+	}
+	for name, want := range wantIsolation {
+		cb, ok := m.Presets[name].CredentialBoundary["executorHoldsTelegramCredentials"]
+		if !ok {
+			t.Errorf("preset %s: credentialBoundary.executorHoldsTelegramCredentials missing", name)
+		} else if cb != false {
+			t.Errorf("preset %s: executorHoldsTelegramCredentials must be false, got %v", name, cb)
+		}
+		iso, ok := m.Presets[name].CredentialBoundary["hostCredentialIsolation"]
+		if !ok {
+			t.Errorf("preset %s: credentialBoundary.hostCredentialIsolation missing", name)
+		} else if iso != want {
+			t.Errorf("preset %s: hostCredentialIsolation must be %v, got %v", name, want, iso)
+		}
+	}
+
+	// --- SI-7 state namespaces --------------------------------------------
+	if si7 == nil {
+		t.Fatalf("security invariant SI-7 (disjoint state namespaces) missing from the matrix")
+	}
+	for _, name := range []string{"single-host", "single-machine-worker-sleep", "split-worker", "remote-worker"} {
+		if !contains(si7.Applies, name) {
+			t.Errorf("SI-7 must apply to %s", name)
+		}
+	}
+
+	// --- combination rules carry exactly one verdict each -----------------
+	verdicts := map[string]map[string]bool{}
+	// CombinationRules is a raw map in this struct; re-decode it from JSON for simplicity.
+	rawMatrix := struct {
+		CombinationRules map[string][]map[string]any `json:"combinationRules"`
+	}{}
+	if err := json.Unmarshal(mustReadRaw(t, matrixPath), &rawMatrix); err != nil {
+		t.Fatalf("re-parse combinationRules: %v", err)
+	}
+	for bucket, rules := range rawMatrix.CombinationRules {
+		for _, rule := range rules {
+			id, _ := rule["id"].(string)
+			if id == "" {
+				continue
+			}
+			if verdicts[id] == nil {
+				verdicts[id] = map[string]bool{}
+			}
+			verdicts[id][bucket] = true
+		}
+	}
+	for id, buckets := range verdicts {
+		if len(buckets) > 1 {
+			t.Errorf("combination rule %q carries more than one verdict: %v", id, buckets)
+		}
+	}
+	if _, ok := verdicts["wake-run-exit-without-external-clock"]; !ok {
+		t.Errorf("invalid rule wake-run-exit-without-external-clock missing")
+	}
+	if buckets, ok := verdicts["wake-run-exit-without-external-clock"]; ok && !buckets["invalid"] {
+		t.Errorf("wake-run-exit + clock=internal must be invalid only, got %v", buckets)
+	}
+	if _, ok := verdicts["shared-volume-between-roles"]; ok {
+		t.Errorf("removed rule shared-volume-between-roles must not reappear; the invariant is overlapping-state-namespaces")
+	}
+	if _, ok := verdicts["co-located-roles"]; ok {
+		t.Errorf("removed rule co-located-roles must not reappear; use co-located-hosts")
+	}
+	if _, ok := verdicts["overlapping-state-namespaces"]; !ok || !verdicts["overlapping-state-namespaces"]["invalid"] {
+		t.Errorf("invalid rule overlapping-state-namespaces missing")
+	}
+
+	// --- single-host compose proves SI-1 structurally ---------------------
+	compose := mustRead(t, "docker-compose.yml")
+	pixivflowBlock := regexp.MustCompile(`(?s)
+  pixivflow:
+(.*?)(?:
+  [a-z0-9_-]+:|
+  [a-z0-9_-]+:&|\z)`).FindStringSubmatch(compose)
+	if pixivflowBlock == nil {
+		t.Fatalf("could not locate the pixivflow service block in docker-compose.yml")
+	}
+	if regexp.MustCompile(`BOT[0-9]+_(TOKEN|CHANNEL_ID|OWNER_ID|WEBHOOK_SECRET_TOKEN)`).MatchString(pixivflowBlock[1]) {
+		t.Errorf("the single-host pixivflow service receives a Telegram credential; SI-1 holds for every preset")
+	}
+	if !strings.Contains(pixivflowBlock[1], "SUBMIT_TOKEN") {
+		t.Errorf("the single-host pixivflow service lost BOT*_SUBMIT_TOKEN; it would have no way to deliver")
+	}
+
+	// --- split-worker lifecycle constraints remain intact ----------------
+	pixivflowFly := mustRead(t, "fly/deploy.pixivflow.toml")
+	telepostFly := mustRead(t, "fly/deploy.telepost.toml")
 	telegramKey := regexp.MustCompile(`(?im)^\s*BOT[0-9]+_(TOKEN|CHANNEL_ID|OWNER_ID|REVIEW_CHAT_ID|WEBHOOK_SECRET_TOKEN)\s*=`)
-	if matches := telegramKey.FindAllString(pixivflow, -1); len(matches) > 0 {
-		t.Errorf("fly/deploy.pixivflow.toml holds Telegram credentials (SI-1 violation): %v", matches)
+	if matches := telegramKey.FindAllString(pixivflowFly, -1); len(matches) > 0 {
+		t.Errorf("fly/deploy.pixivflow.toml holds Telegram credentials (SI-1): %v", matches)
 	}
-	// 执行端的凭据经平台 secret 注入（fly secrets set），配置文件里不得出现任何 Telegram 键；
-	// 这一条已由上面的 telegramKey 检查覆盖。
-
-	// SI-2：业务端是 webhook owner，必须保持 force_https = false（Flycast 明文投递）。
-	if !strings.Contains(telepost, "force_https = false") {
-		t.Errorf("fly/deploy.telepost.toml lost force_https = false; Flycast delivery would 301 into a dead end")
+	if strings.Contains(pixivflowFly, "checks]") {
+		t.Errorf("fly/deploy.pixivflow.toml declares a health check; a probe would wake a finished machine (SI-5)")
 	}
-	if !strings.Contains(telepost, "auto_stop_machines = false") || !strings.Contains(telepost, "min_machines_running = 1") {
-		t.Errorf("fly/deploy.telepost.toml must stay resident (auto_stop_machines = false, min_machines_running = 1)")
+	if regexp.MustCompile(`(?m)^\s*auto_stop_machines\s*=\s*(true|"stop"|"suspend")`).MatchString(pixivflowFly) {
+		t.Errorf("fly/deploy.pixivflow.toml enables platform auto-stop (SI-5)")
 	}
-
-	// SI-5：执行端没有健康检查、没有平台 auto-stop、没有重启策略。
-	if strings.Contains(pixivflow, "checks]") {
-		t.Errorf("fly/deploy.pixivflow.toml declares a health check; a probe would wake a machine that just decided it had finished (SI-5)")
+	if !strings.Contains(pixivflowFly, `policy = 'never'`) && !strings.Contains(pixivflowFly, `policy = "never"`) {
+		t.Errorf("fly/deploy.pixivflow.toml must set restart policy to 'never'")
 	}
-	if regexp.MustCompile(`(?m)^\s*auto_stop_machines\s*=\s*(true|"stop"|"suspend")`).MatchString(pixivflow) {
-		t.Errorf("fly/deploy.pixivflow.toml enables platform auto-stop; the executor must stop itself via its own ledger (SI-5)")
+	if !strings.Contains(telepostFly, "force_https = false") {
+		t.Errorf("fly/deploy.telepost.toml lost force_https = false; Flycast delivery would 301")
 	}
-	if !strings.Contains(pixivflow, `policy = 'never'`) && !strings.Contains(pixivflow, `policy = "never"`) {
-		t.Errorf("fly/deploy.pixivflow.toml must set restart policy to 'never' so the machine can reach 'stopped'")
+	if !strings.Contains(telepostFly, "auto_stop_machines = false") || !strings.Contains(telepostFly, "min_machines_running = 1") {
+		t.Errorf("fly/deploy.telepost.toml must stay resident")
 	}
 
-	// 矩阵侧：SI-1 必须应用于 split-worker 与 remote-worker，且不适用于共置 preset。
-	for _, inv := range m.SecurityInvariants {
-		if inv.ID != "SI-1" {
-			continue
-		}
-		for _, must := range []string{"split-worker", "remote-worker"} {
-			if !contains(inv.Applies, must) {
-				t.Errorf("security invariant SI-1 no longer applies to %s", must)
-			}
-		}
-		for _, forbidden := range []string{"single-host", "single-machine-worker-sleep"} {
-			if contains(inv.Applies, forbidden) {
-				t.Errorf("security invariant SI-1 must not claim to apply to %s (roles are co-located there)", forbidden)
-			}
-		}
-	}
-
-	// 文档侧：split-worker 页必须把这条边界写清楚，共置 preset 页必须承认边界不成立。
-	splitDoc := mustRead(t, "docs/architectures/split-worker.md")
-	if !regexp.MustCompile(`没\*{0,4}有\*{0,4}任何.{0,4}Telegram`).MatchString(splitDoc) {
-		t.Errorf("docs/architectures/split-worker.md must state that the executor holds no Telegram token")
-	}
-	for _, coLocated := range []string{"docs/architectures/single-host.md", "docs/architectures/single-machine-worker-sleep.md"} {
-		doc := mustRead(t, coLocated)
-		if !strings.Contains(doc, "不成立") {
-			t.Errorf("%s must state that the split-worker credential boundary does not hold for a co-located preset", coLocated)
+	// --- the unimplemented sleep preset documents its allowlist ----------
+	sleepDoc := mustRead(t, "docs/architectures/single-machine-worker-sleep.md")
+	for _, want := range []string{"环境白名单", "BOT*_TOKEN", "hostCredentialIsolation"} {
+		if !strings.Contains(sleepDoc, want) {
+			t.Errorf("single-machine-worker-sleep.md must document %q (supervisor env allowlist contract)", want)
 		}
 	}
 }
@@ -510,9 +603,14 @@ func TestDocsDoNotResurrectRemovedTopologies(t *testing.T) {
 }
 
 func TestDocsAvoidVagueLanguage(t *testing.T) {
-	// 这些词把决策推回给读者。文档要么给出确定值，要么写明这是真实的未知项。
+	// 这些词把决策推回给读者。只扫契约页与入口页——运维叙述（backup/troubleshooting
+	// 等）允许使用条件性语言；契约页要么给出确定值，要么写明这是真实的未知项。
 	banned := []string{"通常", "视情况", "差不多", "建议自行配置"}
-	scopes := append(markdownFiles(t, "docs"), "README.md", "AGENTS.md")
+	var scopes []string
+	for _, dir := range []string{"docs/architectures", "docs/concepts", "docs/reference", "docs/getting-started"} {
+		scopes = append(scopes, markdownFiles(t, dir)...)
+	}
+	scopes = append(scopes, "README.md", "AGENTS.md")
 	for _, file := range scopes {
 		if _, ok := readIfExists(t, file); !ok {
 			continue

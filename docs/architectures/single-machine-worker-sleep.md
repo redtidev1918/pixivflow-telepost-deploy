@@ -126,8 +126,9 @@ Machine (always on)
 | 下载缓存与元数据 | `data/pixivflow/` 下的相对路径 | 必须是相对路径，见下 |
 | 投递 outbox | 同上，manifest 引用文件 | 跨 `executor` 进程重启保留 |
 
-**一个卷，两个角色的子目录。** 卷就是状态边界这句话在这里是有代价的：两个角色共用同一个卷，
-`executor` 写坏目录会影响 `publisher`。接受这个代价是本 preset 的前提之一。
+**一个物理卷，两个互不相交的角色命名空间（SI-7）。** TelePost 只写 `data/bot{N}/`，executor
+只写 `data/pixivflow/`；supervisor spawn executor 时只能把它自己的命名空间暴露给子进程。
+命名空间重叠才是非法组合；共享物理卷本身合法。
 
 > **路径规则（commit `71b4c7c` 的教训）：** PixivFlow 的配置加载器会把「落在配置文件所在目录
 > 之外」的绝对路径按自己的默认值改写并回写配置，改写结果是 `/app/downloads`——**在卷之外**。
@@ -166,8 +167,11 @@ Machine (always on)
 - **`executor` 与 `publisher` 同故障域。** 机器级故障同时影响投稿与执行。
 - **下载期间内存竞争。** 必须严格限制下载并发与图像处理并发，否则 OOM 会打到 `publisher`，
   用户看到的是投稿机器人坏掉。
-- **`executor` 持有 Telegram 凭据**（同一台机器、同一个文件系统）。隔离只能靠 supervisor
-  只把 Pixiv 凭据传给子进程这一约定，**不是**结构保证。
+- **主机级凭据隔离不成立**（矩阵字段 `hostCredentialIsolation=false`；同一台机器、同一个文件系统），但 executor 进程**不持有** Telegram
+  凭据（SI-1 全局成立）。隔离靠 supervisor 的**环境白名单**：spawn executor 时只传 Pixiv 与调度
+  凭据（`PIXIV_*`、`SCHEDULER_TRIGGER_TOKEN`、`TELEPOST_BOT*_SUBMIT_TOKEN`），绝不继承
+  `BOT*_TOKEN` / `BOT*_CHANNEL_ID` / `BOT*_WEBHOOK_SECRET_TOKEN`。实现时必须有一条测试守护这份
+  白名单；在该测试存在之前，本 preset 不得标记为已实现。
 - **`review` 与 `publish` 不受保护。** `split-worker` 里「执行端崩溃/OOM 不影响 Telegram」
   这条性质在这里不成立。
 - **目前没有实现。** 本仓库没有任何配置或代码实现这个进程编排。

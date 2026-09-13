@@ -149,7 +149,7 @@ Compose allocates by default against a machine-wide 512 MiB budget: **telepost 3
 
 Compose is **all-in-one on one machine**: one failure domain, one shared volume, executor and
 service side co-located. Current Fly production is [`split-worker`](../architectures/split-worker.md)
-(two machines, two volumes, credential boundary holds). Their business semantics are identical —
+(two machines, two volumes, host credential isolation holds). Their business semantics are identical —
 only the deployment facts differ, which is the core of this kit's upgrade from "the only production
 topology" to a deployment matrix. Migration path: [migration.md (中文)](/architectures/migration.md).
 

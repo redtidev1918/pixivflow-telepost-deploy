@@ -66,9 +66,10 @@
 
 - 执行端在共置 preset 下**仍然**不得把审核逻辑拿进来「顺手做掉」。它跨进程调用的是同一个
   投稿接口，只是目标地址从 Flycast 变成容器网络地址。
-- 共置 preset 的凭据边界确实不成立（见 [credentials.md](./credentials.md)），但那是一条
-  **已记录的部署限制**，不是「因此可以把角色合并」的许可。矩阵里它的危害写在
-  `combinationRules.supportedWithLimitations` 的 `co-located-roles`。
+- 共置 preset 下变化的是**主机级凭据隔离**（`hostCredentialIsolation=false`），不是逻辑所有权：
+  `executor` 单元在任何 preset 下都不接收 Telegram bot token 与频道 ID（`SI-1`，全局成立）；
+  共置只是说同机进程理论上能从共享环境读到业务端的 secret。见 [credentials.md](./credentials.md)
+  与矩阵 `combinationRules.supportedWithLimitations.co-located-hosts`。
 
 ## 每个角色绝不拥有什么
 

@@ -10,7 +10,7 @@
 ## Who it is for
 
 People who want the executor to **cost nothing to compute while idle**, good fault isolation and a
-clean credential boundary, and accept more components plus the need for an external wake-up clock.
+clean host credential isolation, and accept more components plus the need for an external wake-up clock.
 
 ## Topology
 

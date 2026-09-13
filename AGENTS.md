@@ -54,8 +54,12 @@ TelePost。
 
 - **共置只是物理事实，所有权永不合并。** `single-host` 把两个角色放进同一台机器，
   但 `executor` 不因此获得审核或发布权，`publisher` 不因此获得 Pixiv 登录或槽位调度权。
-- **`executor` 永不持有 Telegram 令牌或频道 ID。** 见第 2 节的边界表：这条在部分 preset
-  下**不成立**，但即使物理上成立，逻辑所有权也不变。
+- **`executor` 在任何 preset 下都不拥有、不接收 Telegram 令牌、频道 ID、owner id 或
+  webhook secret（SI-1，全局）。** 共置改变的是主机级隔离（`hostCredentialIsolation=false`）：
+  同机进程理论上能读到业务端的 secret，但这不构成 executor 持有它的许可。
+  `single-machine-worker-sleep` 下 supervisor 必须用环境白名单 spawn executor 子进程。
+- **状态命名空间绝不重叠（SI-7）。** 允许共享物理卷 + 互不相交的角色子目录
+  （`./data/pixivflow/**` vs `./data/botN/**`）；禁止两个角色写同一个数据库或命名空间。
 - **发布必须经人工审核。** `review.enabled=false` 是非法组合，不是可配置项。
 - **每个 Pixiv 凭据最多一个活跃生产执行。** 出口是可替换的、需先取得资格的执行资源，
   它永远不是第二个调度器，也不拥有任何状态。
@@ -68,10 +72,13 @@ TelePost。
 
 | Preset | 支持等级 | 实现状态 | 机器数 | `executor` 生命周期 | Telegram 凭据边界 | 关键契约 |
 | --- | --- | --- | --- | --- | --- | --- |
-| `single-host` | Stable | 已实现，CI 覆盖 | 1 | `always-on` | **不成立**（同机同卷） | 一个 `./data`，按角色分子目录；容器网络投递 |
-| `single-machine-worker-sleep` | Experimental | **仅设计，未实现** | 1 | `spawn-on-demand` | **不成立**（同机同卷） | 机器永不停机；只有 `executor` 进程退出；停机决策权归 `executor` 账本 |
-| `split-worker` | Stable | 已实现、已测试、**当前生产** | 2 + 时钟 | `wake-run-exit` | **成立** | 两份 Fly 配置 + 两个卷；执行端无健康检查、无平台 auto-stop、`restart.policy=never` |
-| `remote-worker` | Beta | 已实现，未经端到端测试 | 2（可跨平台） | `wake-run-exit` 或 `always-on` | **成立** | 私网叠加网或公网 HTTPS；bearer 认证在私网上也必须开启 |
+| `single-host` | Stable | 已实现，CI 覆盖 | 1 | `always-on` | host=false | 一个 `./data` 物理卷、互不相交的角色子目录；pixivflow 容器只收 `BOT*_SUBMIT_TOKEN`；容器网络投递 |
+| `single-machine-worker-sleep` | Experimental | **仅设计，未实现** | 1 | `spawn-on-demand` | host=false | 机器永不停机；只有 `executor` 进程退出；supervisor 用环境白名单 spawn，Telegram secret 不继承；停机决策权归 `executor` 账本 |
+| `split-worker` | Stable | 已实现、已测试、**当前生产** | 2 + 时钟 | `wake-run-exit` | host=true | 两份 Fly 配置 + 两个卷；执行端无健康检查、无平台 auto-stop、`restart.policy=never` |
+| `remote-worker` | Beta | 已实现，未经端到端测试 | 2（可跨平台） | `wake-run-exit` 或 `always-on` | host=true | 私网叠加网或公网 HTTPS；bearer 认证在私网上也必须开启 |
+
+「host」列是 `hostCredentialIsolation`（主机级凭据隔离）。**另一列不存在但恒成立**：
+`executorHoldsTelegramCredentials` 在四个 preset 下全部为 `false`——见第 1 节与 SI-1。
 
 ### Preset 专属契约速查
 
@@ -89,12 +96,16 @@ single-machine-worker-sleep:
 split-worker:
   separate machines, separate volumes
   executor 机器可以停止；唤醒 = 触发请求经平台代理；停机 = executor 自己的账本
-  凭据边界成立：执行镜像里没有任何 Telegram 令牌
+  hostCredentialIsolation=true：执行镜像里没有任何 Telegram 令牌
 
 remote-worker:
   executor 是远端可替换执行资源
   同一 production schedule 最多一个 active executor
   私网不等于已认证
+
+所有 preset 共同:
+  executorHoldsTelegramCredentials = false（SI-1，全局）
+  状态命名空间互不重叠；共享物理卷只允许配互不相交的角色子目录（SI-7）
 ```
 
 ### 合法与非法组合
@@ -105,7 +116,7 @@ remote-worker:
 | --- | --- |
 | 执行端 `wake-run-exit` + `clock=internal` | **非法**：停止的进程无法触发自己的 cron |
 | `review.enabled=false` | **非法**：未经人工批准就发布 |
-| `executor` 与 `publisher` 共用一个状态卷 | **非法**：卷就是状态边界 |
+| 两个角色写同一个状态命名空间（即使共享物理卷） | **非法**：共享卷 + 互不相交的角色子目录合法；命名空间重叠才非法（SI-7） |
 | 同一套 schedule 有两个时钟 | **非法**：重复触发幂等，凭据争用不是 |
 
 ---

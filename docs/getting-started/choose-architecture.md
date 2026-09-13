@@ -16,7 +16,7 @@
 | 我有 VPS + 家用服务器 | [`remote-worker`](../architectures/remote-worker.md) | 两个角色各在一台机器上，经私网或公网 HTTPS 通信 |
 | 我最在意 Pixiv 出口质量 | [`remote-worker`](../architectures/remote-worker.md) | 可以把执行端单独放在出口已取得资格的机器上 |
 | 我只想最快跑起来 | [`single-host`](../architectures/single-host.md) | 不需要 Fly、不需要 Cloudflare、不需要域名 |
-| 我不想让执行端碰到 Telegram 凭据 | [`split-worker`](../architectures/split-worker.md) 或 [`remote-worker`](../architectures/remote-worker.md) | 只有这两个 preset 的凭据边界成立 |
+| 我不想让执行端碰到 Telegram 凭据 | [`split-worker`](../architectures/split-worker.md) 或 [`remote-worker`](../architectures/remote-worker.md) | 只有这两个 preset 具备主机级凭据隔离（executor 在任何 preset 下都不持有 Telegram 凭据，SI-1） |
 
 ---
 

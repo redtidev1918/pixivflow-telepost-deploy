@@ -52,12 +52,12 @@ Support level and implementation status are two different things; never merge th
 Role ids match `docs/concepts/roles.md`: `clock`, `executor`, `publisher`, `telegram-ingress`,
 `state`, `network`.
 
-| Preset | `clock` | `executor` | `publisher` | `telegram-ingress` | State layout | Does the executor hold Telegram credentials |
-| --- | --- | --- | --- | --- | --- | --- |
-| `single-host` | in-machine `internal` | same-host container, resident | same-host container, resident | same host, webhook or polling | one volume, per-role subdirectories | **Yes** (the boundary does not hold) |
-| `single-machine-worker-sleep` | in-machine `internal` | same-host child process, on demand | same host, resident | same host, webhook or polling | one volume, per-role subdirectories | **Yes** (the boundary does not hold) |
-| `split-worker` | Cloudflare (`cloudflare`) | own machine, `wake-run-exit` | own machine, resident | on the service machine, webhook or polling | two volumes, one per machine | No |
-| `remote-worker` | `internal` / `cloudflare` / `external` | own host, `wake-run-exit` or resident | own host, resident | on the service host, webhook or polling | one volume per host | No |
+| Preset | `clock` | `executor` | `publisher` | `telegram-ingress` | State layout | Executor holds Telegram credentials (SI-1) | Host credential isolation |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| `single-host` | in-machine `internal` | same-host container, resident | same-host container, resident | same host, webhook or polling | shared volume, disjoint role subdirectories | **No** | **No** |
+| `single-machine-worker-sleep` | in-machine `internal` | same-host child process, on demand | same host, resident | same host, webhook or polling | shared volume, disjoint role subdirectories | **No** | **No** |
+| `split-worker` | Cloudflare (`cloudflare`) | own machine, `wake-run-exit` | own machine, resident | on the service machine, webhook or polling | two volumes, one per machine | **No** | **Yes** |
+| `remote-worker` | `internal` / `cloudflare` / `external` | own host, `wake-run-exit` or resident | own host, resident | on the service host, webhook or polling | one volume per host | **No** | **Yes** |
 
 **Co-location is a physical fact, not a semantic merge.** Even when `single-host` puts both roles
 on one machine, the `executor` does not thereby gain review or publish rights, and the `publisher`
@@ -104,9 +104,7 @@ matrix, so you do not have to guess.
 | --- | --- |
 | `telegramIngress=webhook` but no public HTTPS ingress | Needs a tunnel or reverse proxy; otherwise use polling |
 | `bots>=3` and any unit budget of 512 MiB | One process per bot, memory grows linearly; without a larger profile you get OOM |
-| `single-host` / `single-machine-worker-sleep` | The executor holds Telegram credentials; the split-worker credential boundary does not apply |
-| The executor is `wake-run-exit` but uses `clock=internal` | It cannot hold at runtime. It is listed here because it is the most common misconfiguration and should be checked first when debugging |
-
+| `single-host` / `single-machine-worker-sleep` | Host credential isolation is absent (shared host environment); the executor unit still receives no Telegram credential (SI-1 holds for every preset) |
 ### EXPERIMENTAL
 
 | Condition | Notes |
@@ -119,7 +117,7 @@ matrix, so you do not have to guess.
 | --- | --- |
 | Executor `wake-run-exit` + `clock=internal` | A stopped process cannot fire its own cron; nothing would ever wake it |
 | `review.enabled=false` | Publishing without human approval is outside the product contract |
-| `executor` and `publisher` share one state volume | The volume is the state boundary; sharing it makes both roles recoverable together and destroys failure isolation |
+| Two roles write the same state namespace (even on one shared physical volume) | A shared physical volume with disjoint role-owned subdirectories is legal; overlapping namespaces are invalid (SI-7) |
 | `search=enabled` and the same unit also runs the executor with a 512 MiB budget | The tokeniser dictionary plus the downloader exceed the budget |
 | Bundled proxy + the `256m` profile | The proxy alone costs 50–100 MiB |
 | Two clocks firing the same schedule set | Duplicate triggering is idempotent; credential contention is not |

@@ -21,30 +21,36 @@
 
 | ID | 陈述 | 适用范围 | 守护 |
 | --- | --- | --- | --- |
-| `SI-1` | `split-worker` 执行端不持有任何 Telegram bot token 与 channel id | `split-worker`、`remote-worker` | `control-plane/test/webhook-ownership.test.ts`、`fly/deploy.pixivflow.toml` |
+| `SI-1` | 执行端在**任何 preset** 下都不拥有、不接收任何 Telegram bot token / channel id / owner id / webhook secret；TelePost 永远是 Telegram 凭据的唯一拥有者 | 全部 preset | `webhook-ownership.test.ts`、`fly/deploy.pixivflow.toml`、`docker-compose.yml`（pixivflow 仅得 `BOT*_SUBMIT_TOKEN`）、`architecture_docs_test.go` |
 | `SI-2` | TelePost 是唯一 Telegram webhook owner；本仓库不注册、不删除 webhook | 全部 preset | `webhook-ownership.test.ts`、`scripts/verify-webhooks.sh` |
 | `SI-3` | 没有人工审核决定，任何组件都不得发布到频道 | 全部 preset | `no-business-state.test.ts`、本页 |
 | `SI-4` | 同一 Pixiv 凭据最多存在一个活跃的生产执行 | 全部 preset | [scheduling.md](./scheduling.md)、本页 |
 | `SI-5` | 执行端的停机决定只属于它自己的账本，绝不属于平台探针 | `split-worker`、`single-machine-worker-sleep`、`remote-worker`（`wake-run-exit`） | `fly/deploy.pixivflow.toml`、[lifecycle.md](./lifecycle.md) |
 | `SI-6` | 业务代码不得按部署平台分支 | 全部 preset | `AGENTS.md` |
+| `SI-7` | 不同角色的状态命名空间绝不重叠；共享物理卷只允许配互不相交的角色子目录 | 全部 preset | `docker-compose.yml` 挂载、[state.md](./state.md)、`architecture_docs_test.go` |
 
-`SI-1` 的关键不是「执行端目前恰好没带」，而是**结构上没有**：执行端镜像的 `[env]` 里不存在
-任何 `TELEGRAM` / `BOT*_TOKEN` / `CHANNEL_ID` 键，投递目标只允许 `httpMultipart` 指向
-`/v1/submissions`。持有 Telegram 凭据会让执行端成为 webhook owner 候选，并能绕过审核发布。
+`SI-1` 的关键不是「执行端目前恰好没带」，而是**结构上没有**：执行端配置里不存在
+任何 `BOT*_TOKEN` / `BOT*_CHANNEL_ID` / `BOT*_WEBHOOK_SECRET_TOKEN` 键，投递只走投稿接口。
+持有 Telegram 凭据会让执行端成为 webhook owner 候选，并能绕过审核发布。这条对所有 preset 成立。
 
-## 凭据边界随 preset 变化
+## 逻辑所有权不变；主机级隔离随 preset 变化
 
-**边界不是「业务规则」，是「部署事实」。** 同一台机器无法阻止一个进程读到同一份 secret。
+要区分两个独立的字段：
 
-| Preset | 执行端是否持有 Telegram 凭据 | 边界是否成立 |
+| 字段 | 含义 | 取值 |
 | --- | --- | --- |
-| `single-host` | 是 | **不成立**（共置，一个卷，一份 `.env`） |
-| `single-machine-worker-sleep` | 是 | **不成立**（同一台机器与文件系统） |
-| `split-worker` | 否 | 成立（两机两卷，执行端镜像无 Telegram 键） |
-| `remote-worker` | 否 | 成立（凭据分离在两个宿主） |
+| `executorHoldsTelegramCredentials` | executor 单元/进程是否**接收** Telegram 凭据（逻辑所有权，SI-1） | 四个 preset 全部为 `false` |
+| `hostCredentialIsolation` | executor 与 publisher 是否身处**不同主机/不同 secret 域**（部署事实） | 共置 preset 为 `false`；`split-worker` / `remote-worker` 为 `true` |
 
-矩阵把共置 preset 的这条限制记在 `combinationRules.supportedWithLimitations.co-located-roles`：
-「执行端持有 Telegram 凭据；split-worker 的凭据边界不适用。这是**已记录的限制，不是疏忽**。」
+| Preset | executor 持有 Telegram 凭据 | 主机级凭据隔离 | 结构保证 |
+| --- | --- | --- | --- |
+| `single-host` | **否** | **不成立**（同主机、同一份 `.env`） | compose 只给 pixivflow 传 `BOT*_SUBMIT_TOKEN`；但同机进程理论上能读到共享环境 |
+| `single-machine-worker-sleep` | **否** | **不成立**（同一台机器与文件系统） | supervisor 必须用**环境白名单** spawn executor：只传 Pixiv/调度凭据，绝不继承 `BOT*_TOKEN` / `BOT*_CHANNEL_ID` / `BOT*_WEBHOOK_SECRET_TOKEN` |
+| `split-worker` | **否** | 成立 | 两机两 secret 域，执行端镜像无 Telegram 键 |
+| `remote-worker` | **否** | 成立 | 凭据分离在两个宿主，投稿接口是唯一入口 |
+
+共置的限制记在矩阵 `combinationRules.supportedWithLimitations.co-located-hosts`：缺的是主机级
+隔离，不是逻辑所有权；「同机理论上能读到」不构成「executor 可以持有」的许可。
 
 > **共置不会让角色合并。** 即使 `single-host` 把两个角色放进同一台机器，执行端仍不得把审核
 > 逻辑拿进来「顺手做掉」；它跨进程调用的是同一个投稿接口，只是地址从 Flycast 变成容器网络

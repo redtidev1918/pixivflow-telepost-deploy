@@ -230,7 +230,7 @@
       "state": "own-volume | own-volume-subdirectory",
       "lifecycle": "always-on",
       "credentials": [],
-      "cardinality": "each stateful role owns its own volume; volumes are never shared between roles",
+      "cardinality": "each stateful role owns a disjoint state namespace; multiple namespaces may live on one shared physical volume as role-owned subdirectories, but two roles never write the same database or namespace",
       "failureDomain": "state loss is unrecoverable; a volume snapshot is the only backup"
     },
     {
@@ -331,7 +331,7 @@
         "state": {
           "unit": "host",
           "layout": "shared-volume",
-          "note": "one ./data directory, per-role subdirectories; there is no volume-level isolation between roles"
+          "note": "one shared ./data volume mounted into both containers; legal because namespaces are disjoint: PixivFlow writes ./data/pixivflow/** only, TelePost writes ./data/botN/** only (SI-7)"
         },
         "network": {
           "transport": "container-network",
@@ -374,8 +374,9 @@
         "en": "Billed as a host; everything runs resident, so there is no sleep-based saving."
       },
       "credentialBoundary": {
-        "executorHoldsTelegramCredentials": true,
-        "note": "Roles are co-located, so the Telegram token and the Pixiv credential share a machine. The split-worker boundary does NOT hold here. This is a documented limitation, not an oversight."
+        "executorHoldsTelegramCredentials": false,
+        "hostCredentialIsolation": false,
+        "note": "Roles share one host, one .env and one filesystem; only host-level isolation is absent. The pixivflow unit still receives no BOT*_TOKEN and no CHANNEL_ID (docker-compose.yml passes BOT*_SUBMIT_TOKEN only). Logical ownership never merges; a co-located host can still read the publisher's secret from the shared environment, so hostCredentialIsolation=false is a documented deployment fact, not an ownership grant."
       },
       "migration": {
         "from": [
@@ -451,7 +452,7 @@
         "state": {
           "unit": "machine",
           "layout": "shared-volume",
-          "note": "one volume, per-role subdirectories"
+          "note": "one shared volume with disjoint role-owned subdirectories; the executor child mounts only its own namespace (SI-7)"
         },
         "network": {
           "transport": "loopback-http",
@@ -496,8 +497,9 @@
         "en": "The machine is billed resident; sleeping the worker saves RAM, never compute billing."
       },
       "credentialBoundary": {
-        "executorHoldsTelegramCredentials": true,
-        "note": "One machine, one filesystem. The split-worker credential boundary does NOT hold. Isolation depends on the supervisor only passing Pixiv credentials to the child."
+        "executorHoldsTelegramCredentials": false,
+        "hostCredentialIsolation": false,
+        "note": "One host and one filesystem; host-level isolation is absent. The resident supervisor MUST spawn the executor child with an allowlist environment: Pixiv and scheduler credentials only, never inherited BOT*_TOKEN / BOT*_CHANNEL_ID / BOT*_WEBHOOK_SECRET_TOKEN. The executor process holds no Telegram credential even though the host does."
       },
       "invariants": [
         "process sleep != machine sleep; the machine is never stopped and no platform auto-stop is used",
@@ -663,7 +665,8 @@
       },
       "credentialBoundary": {
         "executorHoldsTelegramCredentials": false,
-        "note": "The executor image holds no Telegram token and no channel id, so it cannot publish and cannot become a webhook owner."
+        "hostCredentialIsolation": true,
+        "note": "The executor machine and image hold no Telegram token and no channel id, so it cannot publish and cannot become a webhook owner."
       },
       "invariants": [
         "no health check on the executor: a probe is a request and would wake a machine that just decided it had finished",
@@ -830,6 +833,7 @@
       },
       "credentialBoundary": {
         "executorHoldsTelegramCredentials": false,
+        "hostCredentialIsolation": true,
         "note": "The executor host holds Pixiv and submit tokens only; the relay is HTTPS or an overlay network, and the submit API is the only path into the publisher."
       },
       "invariants": [
@@ -967,14 +971,9 @@
         "limitation": "each bot is a process; expect OOM without a larger profile"
       },
       {
-        "id": "co-located-roles",
+        "id": "co-located-hosts",
         "when": "preset is single-host or single-machine-worker-sleep",
-        "limitation": "the executor holds Telegram credentials; the split-worker credential boundary does not apply"
-      },
-      {
-        "id": "clock=internal with wake-run-exit",
-        "when": "the executor's own process registers cron but the executor is expected to be stopped",
-        "limitation": "invalid at runtime; listed here only because it is a common misconfiguration to look for"
+        "limitation": "hostCredentialIsolation=false: roles share host, .env and filesystem, so a co-located process can read the publisher's secret from the shared environment. The executor unit itself still receives no Telegram credential (SI-1); the supervisor spawns it with an allowlist environment."
       }
     ],
     "experimental": [
@@ -996,11 +995,6 @@
         "why": "publication without human approval is outside the product contract"
       },
       {
-        "id": "shared-volume-between-roles",
-        "when": "executor and publisher share a state volume",
-        "why": "the volume is the state boundary; sharing it makes both roles recoverable together and destroys failure isolation"
-      },
-      {
         "id": "search-on-512m",
         "when": "search=enabled and a unit budget is 512 MiB, while that unit also runs PixivFlow",
         "why": "the tokenizer dictionary plus the downloader exceed the budget"
@@ -1016,9 +1010,14 @@
         "why": "two clocks contend for the same Pixiv credential; duplicates are idempotent, contention is not"
       },
       {
-        "id": "executor-with-telegram-credentials-in-split-worker",
-        "when": "preset=split-worker and the executor holds any Telegram token or channel id",
-        "why": "it would make the executor a candidate webhook owner and allow publishing outside review"
+        "id": "executor-with-telegram-credentials",
+        "when": "the executor unit/process holds any Telegram bot token, channel id, owner id or webhook secret, in any preset",
+        "why": "it would make the executor a candidate webhook owner and allow publishing outside review; SI-1 holds for every preset, co-location changes host isolation only"
+      },
+      {
+        "id": "overlapping-state-namespaces",
+        "when": "two roles write the same database or state namespace, even when they share one physical volume",
+        "why": "a shared physical volume with disjoint role-owned subdirectories is legal (single-host does this); overlapping namespaces make both roles recover and corrupt together and destroy failure isolation (SI-7)"
       }
     ]
   },
@@ -1079,19 +1078,18 @@
   "securityInvariants": [
     {
       "id": "SI-1",
-      "statement": "The split-worker executor holds no Telegram bot token and no channel id.",
+      "statement": "The executor (PixivFlow) never owns or receives any Telegram bot token, channel id, owner id or webhook secret, in any preset. TelePost always owns Telegram credentials. Co-location merges hosts, never logical ownership; see hostCredentialIsolation for the deployment-fact axis.",
       "enforcedBy": [
         "control-plane/test/webhook-ownership.test.ts",
         "fly/deploy.pixivflow.toml",
-        "deploy.pixivflow.toml [env] contains no Telegram key"
+        "docker-compose.yml (pixivflow service receives BOT*_SUBMIT_TOKEN only)",
+        "architecture_docs_test.go"
       ],
       "applies": [
+        "single-host",
+        "single-machine-worker-sleep",
         "split-worker",
         "remote-worker"
-      ],
-      "doesNotApply": [
-        "single-host",
-        "single-machine-worker-sleep"
       ]
     },
     {
@@ -1148,6 +1146,21 @@
       ],
       "applies": [
         "all presets"
+      ]
+    },
+    {
+      "id": "SI-7",
+      "statement": "State namespaces owned by different roles must never overlap: a shared physical volume is legal only when each role writes a disjoint subdirectory it alone owns (e.g. ./data/pixivflow/** vs ./data/bot1/**). Two roles writing the same database or state namespace is invalid in every preset.",
+      "enforcedBy": [
+        "docker-compose.yml volume mounts",
+        "docs/concepts/state.md",
+        "architecture_docs_test.go"
+      ],
+      "applies": [
+        "single-host",
+        "single-machine-worker-sleep",
+        "split-worker",
+        "remote-worker"
       ]
     }
   ],

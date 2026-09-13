@@ -17,7 +17,7 @@
 | I have a VPS + a home server | [`remote-worker`](../architectures/remote-worker.md) | Each role on its own machine, communicating over a private network or public HTTPS |
 | I care most about Pixiv egress quality | [`remote-worker`](../architectures/remote-worker.md) | The executor can live alone on a machine whose egress is already qualified |
 | I just want it running as fast as possible | [`single-host`](../architectures/single-host.md) | No Fly, no Cloudflare, no domain |
-| I do not want the executor to touch Telegram credentials | [`split-worker`](../architectures/split-worker.md) or [`remote-worker`](../architectures/remote-worker.md) | Only these two presets have a credential boundary that holds |
+| I do not want the executor to touch Telegram credentials | [`split-worker`](../architectures/split-worker.md) or [`remote-worker`](../architectures/remote-worker.md) | Only these two presets provide host credential isolation (the executor holds no Telegram credential in any preset, SI-1) |
 
 ---
 

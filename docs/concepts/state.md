@@ -43,19 +43,29 @@
 枚举值 `stateLayout` = `own-volume` \| `own-volume-subdirectory` \| `shared-volume` \| `none`，
 定义在矩阵 `enums.stateLayout`。
 
-## 不变量：卷是状态边界，绝不共享
+## 不变量：状态命名空间绝不重叠（SI-7）
 
-`executor` 与 `publisher` **绝不共享同一个状态卷**。矩阵把 `shared-volume-between-roles` 列为
-`invalid` 组合，理由是：
+边界是**状态命名空间**，不是物理卷。规则只有一条：**每个角色只写它自己拥有的子目录，两个角色
+绝不写同一个数据库或同一份状态命名空间。**
 
-- 共用卷会让两个角色**一起可恢复、一起损坏**，故障隔离消失——这正是 `split-worker` 存在的意义。
-- 一个角色写坏共享目录会直接破坏另一个角色的状态。
-- 恢复顺序（先状态、后凭据、最后启动写者）在共享卷上无法按角色执行。
+合法：
 
-`single-host` 与 `single-machine-worker-sleep` 使用**一个卷**，这是它们的已知限制，而不是判据：
-矩阵在 `combinationRules.supportedWithLimitations` 的 `co-located-roles` 里明确记录了它，
-并说明「split-worker 的凭据边界在这些 preset 下不成立」。共置是物理事实，不是语义合并
-（见 [roles.md](./roles.md)）。
+```text
+共享物理卷 + 互不相交的角色子目录      single-host / single-machine-worker-sleep
+  ./data/pixivflow/**                  -> executor 独占
+  ./data/bot1/**  ./data/bot2/**       -> publisher 独占
+独立物理卷                            split-worker / remote-worker
+```
+
+非法（矩阵 `combinationRules.invalid.overlapping-state-namespaces`）：
+
+- 两个角色写同一个数据库文件或同一个状态目录——它们会**一起可恢复、一起损坏**。
+- 一个角色写进另一个角色的命名空间。
+- 恢复顺序（先状态、后凭据、最后启动写者）无法按角色执行。
+
+因此 `single-host` 把同一个 `./data` 挂进两个容器是合法的：compose 的挂载保证 PixivFlow 只写
+`./data/pixivflow/`，TelePost 只写 `./data/bot{N}/`。共享的是物理卷，不是状态所有权
+（见 [roles.md](./roles.md)）。要求**物理卷级**隔离时选择 `split-worker`。
 
 ## 绝不视为状态的东西
 
