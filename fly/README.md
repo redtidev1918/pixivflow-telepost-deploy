@@ -1,7 +1,7 @@
 # Fly 部署：两个应用
 
 本目录只有两份拓扑来源，各自对应一个 Fly 应用。完整契约见
-[../docs/ARCHITECTURE.md](../docs/ARCHITECTURE.md)。
+[../docs/architectures/split-worker.md](../docs/architectures/split-worker.md)。
 
 | 文件 | 应用 | 角色 | 关键参数 |
 | --- | --- | --- | --- |
