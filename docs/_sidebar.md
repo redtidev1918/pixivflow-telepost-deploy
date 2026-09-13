@@ -33,6 +33,7 @@
   - [多 Bot：加第 N 个频道](/operations/multi-bot.md)
 - 参考
   - [部署契约（统一部署模型）](/reference/deployment-contract.md)
+  - [部署清单 deployment.manifest.json](/reference/deployment-manifest.md)
   - [环境变量与资源档位](/reference/environment.md)
   - [架构矩阵 architecture-matrix.json](https://github.com/redtidev1918/pixivflow-telepost-deploy/blob/main/docs/reference/architecture-matrix.json)
   - [Roadmap：多架构实现计划](/ROADMAP-MULTI-ARCH.md)

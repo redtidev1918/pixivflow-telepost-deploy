@@ -113,6 +113,7 @@ resource_profile: 512m           # 见 enums / resourceProfiles
 | Compose 拓扑 | `docker-compose.yml` | 另起一份 compose 变体 |
 | 调度契约 | [concepts/scheduling.md](../concepts/scheduling.md) | 段落式复述 |
 | 凭据契约 | [concepts/credentials.md](../concepts/credentials.md) | 任何打印凭据的脚本 |
+| 部署清单（部署编译器的输入） | [deployment-manifest.md](deployment-manifest.md) + 矩阵 `manifest` | 由清单推导出的平台分支 |
 | 部署契约（本页） | 本文件 | README 里的「另一种说法」 |
 
 **禁止出现两个文件同时声明「唯一生产拓扑」。** 生产拓扑是 `split-worker`（`Recommended
@@ -120,6 +121,10 @@ Fly.io production topology`），但它是「当前生产」，不是「唯一�
 `docs-validation` 要防的漂移。
 
 ## Agent 与测试如何消费
+
+- `deploy manifest` 把本页的部署模型编译成一份可校验声明：读矩阵判定 preset、平台、
+  生命周期、档位与开关的合法性，非法组合直接以规则 id 报错（见
+  [部署清单](deployment-manifest.md)）。它**只**是编译器的输入——没有任何业务代码读它。
 
 - `architecture_docs_test.go` 校验：矩阵里的 preset 名在 `overview.md`、`AGENTS.md` 与各
   preset 文档中一致；标记为 `stable` 的 preset 必有对应文档；文档引用的配置文件存在；
