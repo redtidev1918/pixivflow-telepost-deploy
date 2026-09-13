@@ -41,7 +41,9 @@ type config struct {
 	listen string
 	// childTrigger：子进程（executor）的触发端口。supervisor 把通过鉴权的请求转发到这里。
 	childTrigger string
-	// childCmd：如何拉起 executor。用 sh -c 执行，便于写带参数的 node 命令。
+	// childCmd：如何拉起 executor。以 `sh -c "exec <childCmd>"` 启动，因此必须是**单条命令**
+	// （不能是管道或 && 链；需要更多逻辑就写个包装脚本）。exec 是刻意的：不留包装 shell，
+	// 信号与退出状态才直接来自 executor。
 	childCmd string
 	// token：触发令牌。为空时 fail-closed（503），绝不拉起任何进程。
 	token string

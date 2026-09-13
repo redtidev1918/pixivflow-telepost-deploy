@@ -23,6 +23,9 @@ func main() {
 		lines := os.Environ()
 		_ = os.WriteFile(dump, []byte(strings.Join(lines, "\n")+"\n"), 0o600)
 	}
+	if pidFile := os.Getenv("FAKE_PID_FILE"); pidFile != "" {
+		_ = os.WriteFile(pidFile, []byte(strconv.Itoa(os.Getpid())+"\n"), 0o600)
+	}
 	if marker := os.Getenv("FAKE_SPAWN_MARKER"); marker != "" {
 		f, err := os.OpenFile(marker, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600)
 		if err == nil {

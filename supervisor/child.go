@@ -102,6 +102,9 @@ func (c childState) describe() string {
 	}
 }
 
+// 注意：supervisor 通过 `sh -c "exec <childCmd>"` 启动子进程，因此进程树里没有包装 shell——
+// cmd.Process.Pid 就是 executor 本身的 pid，信号与退出状态都直接来自它。
+//
 // childProcess 是一个正在运行的 executor 子进程。
 type childProcess struct {
 	cmd    *exec.Cmd
@@ -178,7 +181,12 @@ func (sp *spawner) spawn(cfg config) (*childProcess, error) {
 		return nil, err
 	}
 
-	cmd := exec.Command("sh", "-c", cfg.childCmd)
+	// 用 `exec` 让 sh **替换**自己，而不是留一个包装 shell 当直接子进程。
+	// 少了这个 exec，信号会打在包装层上：Linux 上 SIGTERM 不会传到真正的 executor，
+	// 而子进程被 SIGKILL 时会以「exit 137」的形式汇报成普通退出码——本 preset 的生命周期
+	// 诊断（区分 OOM/崩溃与账本判定收工）就全靠不住了。
+	// 代价：childCmd 必须是**单条命令**（不能是管道或 && 链）；需要更多逻辑就写一个包装脚本。
+	cmd := exec.Command("sh", "-c", "exec "+cfg.childCmd)
 	cmd.Env = env
 	// 子进程的输出直接进容器日志：executor 的日志是排查账本与投递的主要凭据。
 	cmd.Stdout = os.Stdout

@@ -241,7 +241,9 @@ supervisor 已经能做的事，都有真实子进程的测试守护：
 2. 部署常驻 `publisher`，确认私聊投稿可用、webhook 或 polling 已建立。
 3. 配置常驻 supervisor（`SUPERVISOR_CHILD_CMD` / `SCHEDULER_TRIGGER_TOKEN` /
    `SUPERVISOR_LISTEN` / `SUPERVISOR_CHILD_TRIGGER`）：触发到来时 spawn `executor`，
-   `executor` 退出后不重启它。
+   `executor` 退出后不重启它。`SUPERVISOR_CHILD_CMD` 必须是**单条命令**（supervisor 以
+   `sh -c "exec <cmd>"` 启动，不留包装 shell，否则信号与退出状态会失真）；需要管道或
+   多步逻辑就写一个包装脚本。
 4. 在 `executor` 的配置里设 `schedulerRuntime.mode`、`exitWhenIdle=true`、`idleGraceMs`、
    `maxLifetimeMs`，并确认**没有**任何指向 `executor` 触发端口的健康检查。
 5. 验证：无任务时 `executor` 进程不存在；一次触发后进程出现；账本空了之后进程退出；

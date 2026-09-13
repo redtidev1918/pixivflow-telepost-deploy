@@ -273,7 +273,9 @@ Once implemented, the steps should look like this:
    polling is established.
 3. Configure the resident supervisor (`SUPERVISOR_CHILD_CMD` / `SCHEDULER_TRIGGER_TOKEN` /
    `SUPERVISOR_LISTEN` / `SUPERVISOR_CHILD_TRIGGER`): spawn the `executor` when a trigger arrives, and do not
-   restart it after it exits.
+   restart it after it exits. `SUPERVISOR_CHILD_CMD` must be a **single command** (the supervisor
+   runs `sh -c "exec <cmd>"`; leaving a wrapper shell around would distort signals and exit
+   status); use a wrapper script if you need pipes or multiple steps.
 4. In the `executor` configuration set `schedulerRuntime.mode`, `exitWhenIdle=true`, `idleGraceMs`
    and `maxLifetimeMs`, and confirm that **no** health check points at the `executor` trigger port.
 5. Verify: with no work the `executor` process does not exist; after one trigger the process
