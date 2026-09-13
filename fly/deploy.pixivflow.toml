@@ -42,6 +42,20 @@ kill_timeout = 60
   # rescued by resolving the tag in the verifier: the value has to be in the image.
   # scripts/verify-images.sh therefore rejects a non-commit PIXIVFLOW_REF outright.
   #
+  # 9457726 = v2.19.5 (released 2026-09-13). Carries the candidate-scan fix: a slot
+  # used to fetch exactly ONE candidate, so when that work was a duplicate the whole
+  # job ended as success having submitted nothing. The fetch stage asked the ranking
+  # API for `limit` works, the planner truncated the queue to the same number, and a
+  # candidate that produced no submission was still counted as downloaded (a
+  # duplicate resolves normally), which stopped the scan. `duplicate` was also a
+  # terminal target outcome, so cell, slot and job all reported success. The scan is
+  # now bounded by `download.candidateScanLimit` (default 5, per-target override,
+  # PIXIV_CANDIDATE_SCAN_LIMIT, clamped 1..100) and drives the fetch stage too; a
+  # candidate-level skip advances to the next candidate while a job-level outage
+  # (Telegram/DB/Pixiv auth/network) still fails the job instead of masquerading as
+  # "no eligible candidate". Concurrency reuses the existing slot lease, the
+  # (slotId,targetId)->workId CAS and the delivery idempotency key.
+  #
   # f331cd4 = v2.19.4 (released 2026-09-13). Carries the remote-failure semantics
   # fix: a delivery endpoint can answer HTTP 2xx while the record it persisted is
   # already terminally failed, and because that record is keyed by OUR idempotency
@@ -73,8 +87,8 @@ kill_timeout = 60
   # 065ad62 = v2.19.1 (released 2026-09-12), the first release that also carries
   # the Telegram credential-detection rules added after 2.19.0.
   [build.args]
-    PIXIVFLOW_REF = 'f331cd4bb164f327f07254d5541edff111ccd426'
-    PIXIVFLOW_VERSION = '2.19.4'
+    PIXIVFLOW_REF = '945772649d9fbcdddcedddc5dc2cb5d3e320519e'
+    PIXIVFLOW_VERSION = '2.19.5'
 
 [[mounts]]
   source = 'pixivflow_data'
