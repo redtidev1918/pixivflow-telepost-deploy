@@ -67,13 +67,49 @@ describe('cloudflare clock', () => {
 });
 
 describe('topology has a single source', () => {
-  it('ships exactly two Fly configs', () => {
+  // The contract is preset-scoped, not a global "the repository contains exactly two Fly
+  // configs". Counting files was a proxy for the real invariant: no preset may have two Fly
+  // configs that both look authoritative, and a preset whose flyio support is planned must
+  // have none at all. The architecture matrix declares which Fly configs belong to which
+  // preset, so this test compares the directory against that declaration instead of
+  // hardcoding a number that would have to be relaxed by hand later.
+  const matrix = JSON.parse(read('docs/reference/architecture-matrix.json')) as {
+    presets: Record<string, { platformStatus?: Record<string, { status: string; artifacts?: string[] }> }>;
+  };
+
+  const declaredFlyConfigs = (): { planned: string[]; expected: string[] } => {
+    const expected: string[] = [];
+    const planned: string[] = [];
+    for (const [preset, entry] of Object.entries(matrix.presets)) {
+      const flyio = entry.platformStatus?.flyio;
+      if (!flyio) continue;
+      const artifacts = (flyio.artifacts ?? []).filter((a) => a.startsWith('fly/'));
+      if (flyio.status === 'planned' || flyio.status === 'not-implemented') {
+        expect(artifacts, `${preset} declares flyio=${flyio.status} and must not ship Fly configs`).toEqual([]);
+        planned.push(preset);
+      } else {
+        expected.push(...artifacts.map((a) => a.replace(/^fly\//, '')));
+      }
+    }
+    return { planned, expected };
+  };
+
+  it('ships exactly the Fly configs the matrix declares for implemented presets', () => {
     const configs = readdirSync(join(REPO_ROOT, 'fly'))
       .filter((name) => name.endsWith('.toml'))
       .sort();
-    // A third Fly config is how the mixed topology came back last time: two files
-    // that both looked authoritative and disagreed about who runs PixivFlow.
-    expect(configs).toEqual(['deploy.pixivflow.toml', 'deploy.telepost.toml']);
+    // A stray Fly config is how the mixed topology came back last time: two files that both
+    // looked authoritative and disagreed about who runs PixivFlow. What matters is that every
+    // config is declared by exactly one preset, not that the total is a fixed number.
+    const { expected } = declaredFlyConfigs();
+    expect(configs).toEqual([...new Set(expected)].sort());
+  });
+
+  it('keeps split-worker as the only preset with Fly configs today', () => {
+    const { expected } = declaredFlyConfigs();
+    expect([...expected].sort()).toEqual(['deploy.pixivflow.toml', 'deploy.telepost.toml']);
+    const flyio = matrix.presets['single-machine-worker-sleep']?.platformStatus?.flyio;
+    expect(flyio?.status, 'worker-sleep flyio is not implemented; do not claim otherwise').toBe('planned');
   });
 
   it('keeps no second clock and no one-shot executor', () => {

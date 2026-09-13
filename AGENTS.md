@@ -73,12 +73,28 @@ TelePost。
 | Preset | 支持等级 | 实现状态 | 机器数 | `executor` 生命周期 | Telegram 凭据边界 | 关键契约 |
 | --- | --- | --- | --- | --- | --- | --- |
 | `single-host` | Stable | 已实现，CI 覆盖 | 1 | `always-on` | host=false | 一个 `./data` 物理卷、互不相交的角色子目录；pixivflow 容器只收 `BOT*_SUBMIT_TOKEN`；容器网络投递 |
-| `single-machine-worker-sleep` | Experimental | **仅设计，未实现** | 1 | `spawn-on-demand` | host=false | 机器永不停机；只有 `executor` 进程退出；supervisor 用环境白名单 spawn，Telegram secret 不继承；停机决策权归 `executor` 账本 |
+| `single-machine-worker-sleep` | Experimental | **未实现**（supervisor 已实现） | 1 | `spawn-on-demand` | host=false | 机器永不停机；只有 `executor` 进程退出；supervisor 用环境白名单 spawn，Telegram secret 不继承；停机决策权归 `executor` 账本 |
 | `split-worker` | Stable | 已实现、已测试、**当前生产** | 2 + 时钟 | `wake-run-exit` | host=true | 两份 Fly 配置 + 两个卷；执行端无健康检查、无平台 auto-stop、`restart.policy=never` |
 | `remote-worker` | Beta | 已实现，未经端到端测试 | 2（可跨平台） | `wake-run-exit` 或 `always-on` | host=true | 私网叠加网或公网 HTTPS；bearer 认证在私网上也必须开启 |
 
 「host」列是 `hostCredentialIsolation`（主机级凭据隔离）。**另一列不存在但恒成立**：
 `executorHoldsTelegramCredentials` 在四个 preset 下全部为 `false`——见第 1 节与 SI-1。
+
+### 两个独立的状态维度
+
+**preset 的实现状态与平台的实现状态是两件事**，矩阵里分别记录：
+
+```text
+presets.<name>.status            preset 整体：support + documented/implemented/tested/productionProven
+presets.<name>.platformStatus    每个平台各自：stable | beta | planned | not-implemented（+ artifacts）
+```
+
+当**至少一条官方部署路径**满足 `documented → implemented → CI 验证 → 端到端验收` 时，preset 可以
+`implemented=true`、`support=beta`，即使同表里 `flyio=planned`、`systemd=planned` 仍然成立。
+反过来：`production-proven` 只在真实生产负载跑过之后才写。
+
+平台状态里的 `artifacts` 是该平台的部署产物；Fly 配置的归属由它声明，`control-plane` 的契约测试
+按 preset 校验目录（不再是「仓库里恰好两份」这种全局计数）。
 
 ### Preset 专属契约速查
 
@@ -158,7 +174,7 @@ if SINGLE_HOST:   ...
 | 调度 / occurrence / 槽位 | `docs/concepts/scheduling.md` | `SCHEDULING.md`（已删除）或任何新文件 |
 | 凭据归属与处理 | `docs/concepts/credentials.md` | 任何脚本、任何新文档 |
 | Fly 拓扑 | `fly/deploy.pixivflow.toml` + `fly/deploy.telepost.toml`（仅两份） | 第三份 `fly/*.toml` |
-| Compose 拓扑 | `docker-compose.yml` | 另一份 compose 变体 |
+| Compose 拓扑 | `docker-compose.yml`（preset 覆盖层只换执行侧运行方式，见上表） | 另起一份拓扑定义、让默认 `up` 少起服务 |
 | 时钟平面 | `control-plane/` | 第二个 Worker、第二份 cron 映射 |
 | 部署清单（部署编译器的输入） | `docs/reference/deployment-manifest.md` + 矩阵 `manifest` | 业务代码读取清单、由清单推导平台分支 |
 | 部署契约本身 | `docs/reference/deployment-contract.md` | README 里的「另一种说法」 |
@@ -178,6 +194,7 @@ if SINGLE_HOST:   ...
 | `fly/deploy.telepost.toml` | 业务端唯一拓扑来源 | 不包含 Pixiv/调度配置 |
 | `pixivflow/config/production.json` | 执行端随镜像发布的运行配置 | 不是可热改的运行中状态 |
 | `docker/` | 按提交号固定或按发布版本透传的镜像定义 | 不是业务代码 |
+| `supervisor/` | `single-machine-worker-sleep` 的常驻进程编排：鉴权后按需 spawn executor，退出后不重启 | 不是业务逻辑：它不知道 schedule 是什么，也不做空闲判定 |
 | `scripts/` | 只读运维与验收脚本 | 不写业务状态、不注册 webhook |
 | `docs/reference/architecture-matrix.json` | preset / 角色 / 组合 / 档位 / 不变量 / manifest 契约的机器可读权威 | 不是可执行配置 |
 | `manifest.go` + `deployment.manifest.json` | 部署清单：读取/推断并对照矩阵校验「这是一套什么部署」 | **不是运行时依赖**：业务代码永不读它 |
@@ -199,13 +216,22 @@ if SINGLE_HOST:   ...
    这条对 `single-machine-worker-sleep` 同样成立，只是对象从机器变成进程。
 5. **不要用分支名或浮动 tag 构建生产镜像**：用 40 位提交号或发布 tag
    （`PIXIVFLOW_REF` / `TELEPOST_IMAGE`），否则镜像层缓存会让镜像一直跑旧代码。
-6. **不要新增第三份 Fly 配置**：`control-plane/test/deployment-contract.test.ts` 会失败。
+6. **不要让某个 preset 拥有两份互相矛盾的 Fly 配置**：契约是 **preset 级**的
+   （`presets.*.platformStatus.flyio.artifacts`）。`split-worker` 恰好两份；某个 preset 的
+   `flyio` 只要还是 `planned`，就**不得**新增 `fly/*.toml`，否则
+   `control-plane/test/deployment-contract.test.ts` 会失败。
 7. **不要删掉 `force_https = false`**：Flycast 私网投递会被 301 打断。
    同理 Flycast 投递 URL 不能带 `:8080`。
 8. **不要在日志、脚本输出或报告里打印任何密钥**。只输出「已配置 / 缺失 / 就绪」。
 9. **不要让业务代码感知部署平台**（见第 3 节）。
 10. **不要把尚未实现的 preset 写成可用**。`single-machine-worker-sleep` 当前
-    `implemented=false`；改它的文档必须同步改矩阵的 `status` 字段。
+    `implemented=false`（supervisor 组件已实现，但缺镜像与平台配置）；改它的文档必须同步改矩阵
+    的 `status` 字段。
+11. **不要在 `supervisor/` 里实现空闲判定**：停机决策权只属于 executor 自己的账本。禁止写
+    「空闲 N 秒就杀掉子进程」这类定时器——它会把下载中的批次截断，而这是本 preset 唯一的致命误配。
+12. **不要放宽环境白名单**：传给 executor 子进程的环境是 deny-by-default 白名单
+    （`PIXIV_*` / `SCHEDULER_*` / `*_SUBMIT_TOKEN` + 通用运行变量）。`supervisor/child.go` 对
+    Telegram 凭据名有第二道拒付检查，改白名单必须同时改测试。
 
 ---
 
@@ -231,9 +257,17 @@ deploy manifest --check                        # 有 deployment.manifest.json �
 - 部署清单（Phase 2）已完成：`deploy manifest` 是部署编译器的输入。下一步是 Phase 3 的
   `single-machine-worker-sleep` 运行时实现——**必须先有清单，再写编排**，否则会重新出现
   「文档一套 preset、脚本一套 if/else、CLI 第三套判断」。
-- `single-machine-worker-sleep` 只有设计。实现计划见
+- `single-machine-worker-sleep` 已有 supervisor（`supervisor/`）、执行侧镜像
+  （`docker/worker-sleep.Dockerfile`）与 compose 覆盖层
+  （`docker-compose.worker-sleep.yml`，由 `validate.sh` 校验），但 preset
+  **仍不可部署**：Fly / systemd 形态缺配置，端到端验收未做。剩下的事见
   [`docs/ROADMAP-MULTI-ARCH.md`](docs/ROADMAP-MULTI-ARCH.md) 的 Phase 3；
-  实现后必须把矩阵的 `status.implemented` 与 `support` 一并更新。
+  全部验收通过前，矩阵的 `status.implemented` 与 `support` 不许改。
+- 平台维度已经分开记录（`presets.*.platformStatus`）：worker-sleep 现在是
+  `docker-compose=beta`、`systemd=planned`、`flyio=planned`。Fly 形态**不是**把 compose 的
+  两个容器搬成一份新配置——它要求**一台 Fly Machine、一个镜像**里同时跑 TelePost、常驻
+  supervisor 与按需子进程，所以先要有 combined worker-sleep runtime，再谈该 preset 自己的
+  Fly 配置与 512 MiB 验收。契约测试已按 preset 校验，不会因为将来新增而需要手工放宽。
 - compose 的默认内存限额（320m + 256m = 576 MiB）与矩阵 `512m` 档（320 + 192）不一致；
   `deploy manifest` 会显式报告该偏差而不抹平。修哪一边需要单独决定，见
   [`docs/reference/deployment-manifest.md`](docs/reference/deployment-manifest.md)。

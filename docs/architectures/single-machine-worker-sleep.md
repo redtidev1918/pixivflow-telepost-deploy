@@ -32,24 +32,34 @@
 ```text
 Machine (always on)
 │
-├─ TelePost supervisor           always-on
-│    ├─ publisher                always-on
-│    ├─ telegram-ingress         always-on
-│    └─ clock(internal)          always-on / 极小
+├─ 宿主本地时钟（systemd timer / cron）                  外部，无需云服务
 │
-├─ PixivFlow child process       无任务 → 进程不存在
-│                                有任务 → spawn
-│                                任务完成 + grace → exit
+├─ 容器 telepost（上游 TelePost 镜像，本 preset 不改它）   always-on
+│    ├─ publisher                                       always-on
+│    └─ telegram-ingress                                always-on
 │
-└─ 一个卷
+├─ 容器 pixivflow-sleep（本仓库镜像 docker/worker-sleep.Dockerfile）  always-on
+│    └─ supervisor（本仓库 supervisor/）                 always-on
+│         └─ executor 子进程                             无任务 → 进程不存在
+│                                                        有任务 → spawn
+│                                                        任务完成 + grace → exit
+│
+└─ 一个物理卷，两个互不相交的角色命名空间（SI-7）
      ├─ data/bot{N}/             每 Bot SQLite、runtime-policy.json
      └─ data/pixivflow/          pixivflow.db、下载缓存、outbox
 ```
 
-`executor` 不是容器，而是常驻 supervisor 拉起的子进程。两个 Bot 共享同一个常驻
-`publisher`，因此 Bot 数量增加时只增加 `publisher` 侧的 Python 子进程数，不增加机器数。
+**两个常驻容器，一个按需子进程。** 机器上没有任何东西会停止；`executor` 不是容器，而是常驻
+supervisor 拉起的子进程。业务侧仍是未经修改的上游 TelePost 镜像。
 
-`executor` 与 `publisher` 经 `loopback-http` 通信，不经过任何代理、overlay 或公网。
+**进程编排属于部署层，不属于 TelePost。** 负责 spawn executor 的是本仓库的 `supervisor/`
+组件（Go，仅标准库），不是 TelePost 的功能——业务仓库不实现部署编排，部署仓库不实现业务。
+
+两个 Bot 共享同一个常驻 `publisher`，因此 Bot 数量增加时只增加 `publisher` 侧的 Python
+子进程数，不增加机器数。
+
+`executor` 与 `publisher` 走**平台内传输**（compose 是容器网络的服务名，systemd 是回环），
+不经过任何代理、overlay 或公网。具体地址见下面的「网络」一节。
 
 ---
 
@@ -76,8 +86,26 @@ Machine (always on)
 | --- | --- | --- | --- |
 | `publisher` | `always-on` | 不适用 | 永不停止 |
 | `telegram-ingress` | `always-on` | 不适用 | 永不停止 |
-| `clock` | `always-on` | 不适用 | 不适用 |
+| `clock` | **外部**（宿主 `systemd timer` / `cron`） | 不适用 | 不适用 |
 | `executor` | `spawn-on-demand` | supervisor 在触发到来时 spawn | **`executor` 自己的账本**（`exitWhenIdle`） |
+
+**时钟目前是宿主机本地的外部时钟，不是进程内 cron。** supervisor 没有实现 cron，所以
+`clock=internal` 在这个 preset 下仍属**设计**，不得写成已实现；等 supervisor 自己具备 cron
+能力时再单独标注。这也意味着这个 preset 不依赖 Cloudflare 或任何云服务——`systemd timer`
+或 `cron` 就够了：
+
+```text
+systemd timer / cron
+        │  POST http://127.0.0.1:8090/internal/schedules/{id}/run
+        ▼
+supervisor（常驻，占住 8090）
+        │  鉴权通过才 spawn，并转发到 127.0.0.1:8091
+        ▼
+executor 子进程（按需存在）
+        │  投递：容器网络 http://telepost:8080/api/bot{N}/v1/submissions
+        ▼
+publisher（常驻）
+```
 
 ```text
 无任务                    有触发
@@ -139,14 +167,29 @@ Machine (always on)
 
 ## 网络
 
-| 项目 | 取值 |
-| --- | --- |
-| `executor` → `publisher` | `loopback-http`，`http://127.0.0.1:8080/api/bot{N}/v1/submissions` |
-| 触发入站 | 同一进程的 `executor` 触发端口（设计值为 8090），仅回环可见 |
-| `telegram-ingress` | `webhook`（公网 HTTPS）或 `polling`（无入站） |
-| 出口 | `direct` 或 `proxy`；512 MiB 机器优先外部代理 |
+**投递走哪个传输取决于平台形态**，不要把它写成无条件的回环：
 
-回环投递不经过 proxy，因此**不重置任何平台的空闲计时**。这不是本 preset 的依赖项
+| 项目 | Compose 形态（已实现） | systemd 形态（计划） | Fly 形态 |
+| --- | --- | --- | --- |
+| `executor` → `publisher` | **容器网络** `http://telepost:8080/api/bot{N}/v1/submissions` | 回环 `http://127.0.0.1:8080` | 未实现 |
+| 触发入站 | 宿主 `127.0.0.1:8090` → supervisor | 同左 | 未实现 |
+| supervisor → `executor` 子进程 | 容器内回环 `127.0.0.1:8091`（**永不发布**） | 同左 | 未实现 |
+| `telegram-ingress` | `webhook`（公网 HTTPS）或 `polling`（无入站） | 同左 | 未实现 |
+| 出口 | `direct` 或 `proxy`；512 MiB 机器优先**外部**代理 | 同左 | 未实现 |
+
+**三个地址不要混淆**：
+
+```text
+宿主 127.0.0.1:8090        compose 只把 supervisor 的 8090 发布到宿主 loopback；
+                           8091 永远不发布，只存在于 worker-sleep 容器内部
+容器 telepost:8080         executor 投递的目标：容器网络里的服务名，不是 127.0.0.1
+容器内 127.0.0.1:8091      supervisor 转发给子进程的地址
+```
+
+Compose 形态下投递不走宿主机回环：两个角色在两个容器里，服务名解析是唯一正确的地址。
+回环投递只适用于「两个角色都是同一台机器上的普通进程」的 systemd 形态。
+
+投递不经过 proxy，因此**不重置任何平台的空闲计时**。这不是本 preset 的依赖项
 （本 preset 不依赖任何平台停机机制），但在排查「投递后机器行为异常」时是有用的事实。
 
 ---
@@ -174,7 +217,9 @@ Machine (always on)
   白名单；在该测试存在之前，本 preset 不得标记为已实现。
 - **`review` 与 `publish` 不受保护。** `split-worker` 里「执行端崩溃/OOM 不影响 Telegram」
   这条性质在这里不成立。
-- **目前没有实现。** 本仓库没有任何配置或代码实现这个进程编排。
+- **只实现了一部分。** supervisor 组件（`supervisor/`）已实现并有测试，包括设计要求的
+  **环境白名单守护测试**；但本 preset 仍**不可部署**：没有镜像、没有平台配置，部署步骤依然是
+  设计。因此矩阵里它保持 `implemented=false` / `support=experimental`，直到整条路径可执行。
 
 ---
 
@@ -205,16 +250,103 @@ Machine (always on)
 
 ---
 
+## 实现状态
+
+| 组件 | 状态 | 位置 |
+| --- | --- | --- |
+| supervisor 二进制 | **已实现**（Go，仅标准库） | `supervisor/`（main.go / server.go / child.go） |
+| 环境白名单 | **已实现并有测试** | `supervisor/child.go` + `supervisor/supervisor_test.go` |
+| 执行侧容器镜像 | **已实现**（CI 构建） | `docker/worker-sleep.Dockerfile` |
+| compose 形态（覆盖层） | **已实现并有校验** | `docker-compose.worker-sleep.yml` |
+| Fly / systemd 形态 | 缺失 | —— |
+| 部署步骤 | compose 形态可用；其余仍是设计 | 本页 |
+
+### 平台状态与晋级规则（两个独立维度）
+
+| 平台 | 状态 | 产物 |
+| --- | --- | --- |
+| `docker-compose` | **beta**（已实现 + CI 校验；端到端验收未跑） | `docker-compose.worker-sleep.yml` + `docker/worker-sleep.Dockerfile` |
+| `systemd` | planned | —— |
+| `flyio` | planned | —— |
+
+**preset 的实现状态不等于「所有平台都做完」。** 规则是：至少一条官方部署路径走完
+`documented → implemented → CI 验证 → 端到端验收` 之后，preset 才可以
+`implemented=true`、`support=beta`。目前它停在**端到端验收**这一格：compose 形态已实现并有 CI
+校验，但还没有在真实 512 MiB 主机上跑过两轮完整验收，所以矩阵仍写 `implemented=false`。
+
+端到端验收的可执行清单（含要记录的内存量与判定标准）见
+[worker-sleep 端到端验收](../operations/worker-sleep-acceptance.md)。**没跑完它就不要改状态字段。**
+
+Fly 形态**不是**把 compose 的两个容器搬成一份新配置：它要求**一台 Fly Machine、一个镜像**里
+同时跑 TelePost、常驻 supervisor 与按需的 PixivFlow 子进程。那需要先有 combined worker-sleep
+runtime，否则新增的配置会变成第二台 Machine，preset 名字就不成立了。
+
+supervisor 已经能做的事，都有真实子进程的测试守护：
+
+- 常驻占住触发端口，路径与鉴权契约与 `split-worker` 的执行端**完全一致**
+  （`POST /internal/schedules/{scheduleId}/run` + Bearer），所以迁移时时钟侧不用改；
+- 只有**通过鉴权**的 POST 才拉起 executor：探测（GET）得到 404，令牌错误得到 401，
+  两者都不会 spawn —— 「一次探测把刚退出的子进程拉回来」的循环就此断掉；
+- 同一时刻只有一个 executor（SI-4）；子进程退出后**不重启**；
+- supervisor **不会**因空闲杀掉子进程：停机决策权只属于 executor 自己的账本；
+- 能区分「正常 exit(0)」「被信号杀死（OOM/崩溃）」「supervisor 自己发起的停止」三种结局；
+- 收到停止信号时把信号转给子进程，不留孤儿；
+- 传给子进程的环境是 **deny-by-default 白名单**：只有 `PIXIV_*`、`SCHEDULER_*`、
+  `*_SUBMIT_TOKEN` 与通用运行变量放行；任何 Telegram 凭据名一律拒绝启动子进程。
+
+### 端口分工由 supervisor 拥有
+
+```text
+8090  supervisor 常驻占住的对外触发端口     <- 时钟照旧 POST 到这里，路径与鉴权不变
+8091  executor 子进程自己的触发端口         <- supervisor 转发到它
+```
+
+supervisor 启动时会拒绝「两个端口相同」的配置，并且**替子进程指定**它的触发端口
+（通过 `SCHEDULER_TRIGGER_PORT`）——让运维手工对齐两个端口，就是一个静默的失配来源：
+子进程占住 8090、supervisor 在 8091 等它，表现为「触发一直 503」，而两边配置各自看起来都没问题。
+
+镜像里**没有** `HEALTHCHECK`，也显式清掉了从基础镜像继承来的健康检查：指向执行端触发端口的
+探测会把刚退出的子进程重新拉起来。唯一允许被检查的是 supervisor 自己的 `/healthz`，
+而它由运维在平台侧配置，不写进镜像。
+
 ## 部署步骤
 
-**当前不可执行。** 这是设计契约；实现属于下一阶段，见
+**compose 形态可执行；Fly / systemd 形态还没有配置。**
+
+### compose 形态（已实现）
+
+```bash
+WORKER_SLEEP_IMAGE=<执行侧镜像> \
+docker compose -f docker-compose.yml -f docker-compose.worker-sleep.yml up -d
+```
+
+覆盖层**不是第二份拓扑来源**：拓扑仍只由 `docker-compose.yml` 定义，这一层只把 `pixivflow`
+服务从「常驻 executor」换成「常驻 supervisor + 按需 executor」——同一个服务名、同一个卷、
+同一个网络，所以角色归属与 SI-7 都没变。业务侧服务（`telepost`）连同它自己的健康检查原样保留。
+
+不用 profile 表达的原因：Compose 里没有 profile 的服务永远启动，而 `pixivflow` 正是无 profile
+的；用 profile 表达「要么常驻执行端、要么按需执行端」会让默认的 `docker compose up -d` 静默
+少起一个执行端——那是破坏默认路径，不是新增部署方式。
+
+`scripts/validate.sh` 会把合并后的模型渲染成 JSON 并断言：镜像换成了执行侧镜像、**健康检查已
+禁用**、端口分工存在、`telepost` 服务未被改动。少了健康检查那一条，探测就会把刚按账本收工的
+子进程重新拉起来。
+
+### Fly / systemd 形态
+
+**缺失。** Fly 形态需要这个 preset 自己的机器拓扑，也就是第三份 `fly/*.toml`，而它与
+「只有两份 Fly 配置」的契约冲突——这需要先决定怎么表达，见
 [ROADMAP-MULTI-ARCH.md](../ROADMAP-MULTI-ARCH.md) 的 Phase 3。
 
-实现完成后，步骤形态应当是：
+### compose 的完整步骤形态
 
-1. 准备一个卷，`data/bot{N}/` 与 `data/pixivflow/` 都落在卷上。
-2. 部署常驻 `publisher`，确认私聊投稿可用、webhook 或 polling 已建立。
-3. 配置常驻 supervisor：触发到来时 spawn `executor`，`executor` 退出后不重启它。
+1. 准备一个卷，`data/bot{N}/` 与 `data/pixivflow/` 都落在卷上，挂给两个容器。
+2. 部署常驻 `publisher`（上游 TelePost 镜像，不改），确认私聊投稿可用、webhook 或 polling 已建立。
+3. 配置常驻 supervisor（`SUPERVISOR_CHILD_CMD` / `SCHEDULER_TRIGGER_TOKEN` /
+   `SUPERVISOR_LISTEN` / `SUPERVISOR_CHILD_TRIGGER`）：触发到来时 spawn `executor`，
+   `executor` 退出后不重启它。`SUPERVISOR_CHILD_CMD` 必须是**单条命令**（supervisor 以
+   `sh -c "exec <cmd>"` 启动，不留包装 shell，否则信号与退出状态会失真）；需要管道或
+   多步逻辑就写一个包装脚本。
 4. 在 `executor` 的配置里设 `schedulerRuntime.mode`、`exitWhenIdle=true`、`idleGraceMs`、
    `maxLifetimeMs`，并确认**没有**任何指向 `executor` 触发端口的健康检查。
 5. 验证：无任务时 `executor` 进程不存在；一次触发后进程出现；账本空了之后进程退出；
