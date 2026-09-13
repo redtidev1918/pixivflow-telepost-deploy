@@ -32,7 +32,7 @@ var scaffold embed.FS
 // 没有「同一容器里再拉起 PixivFlow」的合并拓扑，也没有平台侧按空闲推断停机的
 // autosleep 拓扑——后者会在下载进行中就停掉机器。
 const (
-	telepostBaseline = "2.17.3"
+	telepostBaseline = "2.17.6"
 	pixivBaseline    = "2.18.1"
 	// PixivFlow 的发布 tag 带 v 前缀。构建引用（PIXIVFLOW_REF）必须是发布 tag 或
 	// 40 位提交号：分支名会让镜像层缓存一直命中旧提交。
