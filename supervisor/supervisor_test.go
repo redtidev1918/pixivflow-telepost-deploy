@@ -13,6 +13,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"syscall"
 	"testing"
@@ -282,6 +283,41 @@ func TestSecondTriggerForwardsWithoutSpawnAgain(t *testing.T) {
 // ---------------------------------------------------------------------------
 // 生命周期：不重启、不因空闲被杀、能区分正常退出与被信号杀死
 // ---------------------------------------------------------------------------
+
+func TestDirectChildIsTheRealProcessNotAWrapperShell(t *testing.T) {
+	// 回归：过去用 `sh -c <cmd>` 启动，包装 shell 成了直接子进程。后果在 Linux 上才暴露——
+	// SIGTERM 传不到 executor，被 SIGKILL 的 executor 会被汇报成「exit 137」这种普通退出码，
+	// 于是「区分 OOM/崩溃与账本判定收工」这条生命周期诊断全部失效。
+	// 用 `sh -c "exec <cmd>"` 后，cmd.Process.Pid 必须就是 executor 自己的 pid。
+	dir := t.TempDir()
+	pidFile := filepath.Join(dir, "child.pid")
+	listen := freeAddr(t)
+
+	s := newTestSupervisor(t, config{
+		childTrigger: listen,
+		childCmd:     fakeCommand(t, "FAKE_PID_FILE="+pidFile+" FAKE_LISTEN="+listen),
+		token:        fakeToken,
+		readyTimeout: 20 * time.Second,
+		readyPoll:    50 * time.Millisecond,
+	})
+	t.Cleanup(s.shutdown)
+
+	cp, err := s.children.spawn(s.cfg)
+	if err != nil {
+		t.Fatalf("spawn 失败：%v", err)
+	}
+	waitForFile(t, pidFile, 15*time.Second)
+
+	raw, err := os.ReadFile(pidFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	childPid := strings.TrimSpace(string(raw))
+	if childPid != strconv.Itoa(cp.cmd.Process.Pid) {
+		t.Fatalf("直接子进程 pid=%d，但真正的 executor pid=%s：中间还有包装 shell，信号与退出状态会失真",
+			cp.cmd.Process.Pid, childPid)
+	}
+}
 
 func TestChildExitIsNotRestartedAndMachineKeepsServing(t *testing.T) {
 	listen := freeAddr(t)
