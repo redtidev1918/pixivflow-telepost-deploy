@@ -759,7 +759,7 @@
         "no platform auto-stop on the executor: the proxy sees an idle HTTP connection while a 10-40 minute download is still running",
         "restart policy is never on the executor: a process exit is the intended end of a run",
         "force_https = false on the publisher: a 301 breaks plaintext delivery over the private network",
-        "exactly one execution authority; two independent external clocks (PRIMARY cron-job.org at the occurrence, SECONDARY Cloudflare Cron at the occurrence + 2 minutes) may replay the same schedule set because every duplicate trigger converges through PixivFlow's durable slot identity, while a second PRIMARY clock, a second scheduler or a second execution authority stays invalid"
+        "exactly one execution authority; two independent external clocks (a PRIMARY firing at the occurrence and a SECONDARY firing at the occurrence plus a documented offset) may replay the same schedule set because every duplicate trigger converges through PixivFlow's durable slot identity, while a second PRIMARY clock, a second scheduler or a second execution authority stays invalid"
       ],
       "migration": {
         "from": [

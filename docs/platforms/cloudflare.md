@@ -1,8 +1,11 @@
 # Cloudflare（时钟平面）
 
-> **本页是「用 Cloudflare Worker 作为外部时钟」的权威说明。** 它是 `split-worker` 的默认
-> `clock.provider`（`control-plane/`）。时钟的语义与不变量见
-> [scheduling.md](../concepts/scheduling.md)：**Worker 只决定何时唤醒，不拥有任何状态。**
+> **本页是「用 Cloudflare Worker 作为外部时钟」的权威说明。** 在 `split-worker` 下它是
+> **SECONDARY** 外部时钟（`control-plane/`）：PRIMARY 是 cron-job.org，在 occurrence 准点触发，
+> 本 Worker 在 occurrence +2 分钟触发。两者只 POST 同一个幂等端点，执行权威只有 PixivFlow 的
+> durable slot ledger。**它不是执行权威，也不是唯一时钟。** 时钟的语义与不变量见
+> [scheduling.md](../concepts/scheduling.md)，生产运维见
+> [scheduling 运维手册](../operations/scheduling.md)：**Worker 只决定何时唤醒，不拥有任何状态。**
 
 ## 它做什么、绝不做什么
 
