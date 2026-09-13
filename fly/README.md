@@ -35,11 +35,15 @@ fly secrets set -a <your-telepost-app> \
   BOT2_TOKEN=... BOT2_CHANNEL_ID=... BOT2_OWNER_ID=... \
   TELEPOST_BOT1_SUBMIT_TOKEN=... TELEPOST_BOT2_SUBMIT_TOKEN=...
 
+# 审核群重抓：为两端设置同一随机值，与 SCHEDULER_TRIGGER_TOKEN 分开。
+fly secrets set -a <your-telepost-app> PIXIVFLOW_REFETCH_TOKEN=...
+
 # 执行端：只有 Pixiv 凭据 + 投稿令牌 + 触发令牌。这里不该出现任何 Telegram 令牌。
 fly secrets set -a <your-pixivflow-app> \
   PIXIV_CLIENT_ID=... PIXIV_CLIENT_SECRET=... PIXIV_DEVICE_TOKEN=... PIXIV_REFRESH_TOKEN=... \
   TELEPOST_BOT1_SUBMIT_TOKEN=... TELEPOST_BOT2_SUBMIT_TOKEN=... \
   SCHEDULER_TRIGGER_TOKEN=...
+fly secrets set -a <your-pixivflow-app> PIXIVFLOW_REFETCH_TOKEN=...
 ```
 
 Cloudflare 时钟需要相同的触发令牌：
