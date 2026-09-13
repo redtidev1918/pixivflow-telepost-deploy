@@ -120,7 +120,7 @@
       "credentials": [
         "SCHEDULER_TRIGGER_TOKEN"
       ],
-      "cardinality": "exactly one active clock per production schedule set",
+      "cardinality": "at most one active PRIMARY clock per production schedule set; one or more external clocks may replay the same schedule set, because every duplicate trigger converges through PixivFlow's durable slot identity (there is exactly one execution authority)",
       "failureDomain": "a missed wake is a missed run; it is never back-filled"
     },
     {
@@ -759,7 +759,7 @@
         "no platform auto-stop on the executor: the proxy sees an idle HTTP connection while a 10-40 minute download is still running",
         "restart policy is never on the executor: a process exit is the intended end of a run",
         "force_https = false on the publisher: a 301 breaks plaintext delivery over the private network",
-        "exactly one clock; a second clock or watchdog would contend for the same Pixiv credential"
+        "exactly one execution authority; two independent external clocks (a PRIMARY firing at the occurrence and a SECONDARY firing at the occurrence plus a documented offset) may replay the same schedule set because every duplicate trigger converges through PixivFlow's durable slot identity, while a second PRIMARY clock, a second scheduler or a second execution authority stays invalid"
       ],
       "migration": {
         "from": [
@@ -1182,6 +1182,12 @@
             }
           ]
         }
+      },
+      {
+        "id": "redundant-external-clock",
+        "when": "a wake-run-exit executor has two independent external clocks over the same schedule set: a PRIMARY firing at the occurrence and a SECONDARY firing at the occurrence plus a documented offset",
+        "limitation": "safe only while both clocks name the SAME occurrence and neither owns state: the offset must be positive and inside the occurrence resolver's LEAD window (PixivFlow proves that bound against the real resolver), and no clock may derive an occurrence or generate a slot id. Duplicate triggers are expected and converge through PixivFlow's durable slot identity.",
+        "checkableBy": "control-plane/src/cron-map.ts + control-plane/test/redundant-clock.test.ts"
       }
     ],
     "experimental": [
@@ -1274,9 +1280,9 @@
       },
       {
         "id": "second-clock",
-        "when": "more than one clock provider fires the same schedule set",
-        "why": "two clocks contend for the same Pixiv credential; duplicates are idempotent, contention is not",
-        "checkableBy": "fly/**/*.toml + control-plane/src/cron-map.ts"
+        "when": "a second clock is a second PRIMARY: it carries its own schedule definitions or its own execution state, i.e. a second scheduler or a second execution authority over the same schedule set",
+        "why": "two independent schedule definitions, or two copies of execution state, contend for the same Pixiv credential; duplicates are idempotent, contention is not. A delayed idempotent replay that converges through the same durable slot identity is not this rule - it is redundant-external-clock",
+        "checkableBy": "control-plane/src/cron-map.ts + control-plane/test/redundant-clock.test.ts"
       },
       {
         "id": "executor-with-telegram-credentials",

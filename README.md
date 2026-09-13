@@ -113,6 +113,27 @@ deploy doctor && deploy deploy           # 自检 → 一键部署
 [`docs/reference/architecture-matrix.json`](docs/reference/architecture-matrix.json)，
 由 `architecture_docs_test.go` 在 CI 中强制与文档一致。
 
+### 生产调度
+
+```text
+cron-job.org ─┐
+              ├─► PixivFlow 触发端点 ─► 槽位账本（唯一的执行权威）
+Cloudflare  ──┘
+```
+
+简单部署**用一个时钟就够了**。生产 `split-worker` 部署**建议用两个互相独立的外部时钟**：
+PRIMARY（cron-job.org）在预定时刻触发，SECONDARY（Cloudflare Cron）在 2 分钟后再触发一次。
+两者 POST 的是同一个带令牌的幂等触发，谁后到都在同一个槽位上收敛——**重复触发永远不会跑两次**。
+
+好处都是运维上的：**不需要维护一台专用调度 VM**，**不依赖一台会到期、需要人工续费的机器**
+（VPS / systemd timer 只用于开发、人工排障与紧急触发），两个 **low-maintenance**、
+**provider-independent** 的时钟让「某一个 provider 静默失火」不等于「这次定时投稿消失」。
+时钟只持有触发令牌，所以泄漏时只需要轮换它。
+
+这是**生产 `split-worker` 的建议**，不是单机部署的要求：`single-host` 与本地/个人部署用一个时钟
+即可，不需要为它申请两个 SaaS 账号。运维细节见
+[调度运维手册](docs/operations/scheduling.md)。
+
 ---
 
 ## 三个概念，不要混淆

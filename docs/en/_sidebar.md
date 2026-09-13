@@ -31,11 +31,13 @@
   - [Troubleshooting](/operations/troubleshooting.md)
   - [Performance and memory](/operations/performance.md)
   - [Multi-bot: adding the Nth channel](/operations/multi-bot.md)
+  - [Scheduling runbook](/operations/scheduling.md)
 - Reference
   - [Deployment contract](/en/reference/deployment-contract.md)
   - [Environment variables and resource profiles (中文)](/reference/environment.md)
   - [Architecture matrix (architecture-matrix.json)](https://github.com/redtidev1918/pixivflow-telepost-deploy/blob/main/docs/reference/architecture-matrix.json)
   - [Roadmap: multi-architecture plan (中文)](/ROADMAP-MULTI-ARCH.md)
   - [Incident: Pixiv egress rate limit 2026-09-11 (中文)](/incidents/2026-09-11-pixiv-egress-rate-limit.md)
+  - [Incident: missed schedule trigger 2026-09-13 (中文)](/incidents/2026-09-13-schedule-trigger-miss.md)
 - 中文
   - [中文索引](/)

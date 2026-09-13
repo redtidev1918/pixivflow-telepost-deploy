@@ -36,6 +36,64 @@
 矩阵用 `dimensions[]` 显式记录：`logical-architecture` 的 `variesByDeployment` 为 `false`，
 其余三个为 `true`。**任何「因为换了部署方式所以业务语义变了」的说法都与本契约冲突。**
 
+## 外部时钟与触发凭据边界
+
+生产 `split-worker` 用**冗余外部时钟**：两个 provider 作用于**同一套** schedule set，而执行权威只有一个。
+
+```text
+PRIMARY    cron-job.org       在 occurrence 准点触发
+SECONDARY  Cloudflare Cron    occurrence + 2 分钟触发（control-plane/，SECONDARY_OFFSET_MINUTES = 2）
+           │
+           └─► 两者都 POST 同一个受认证的幂等端点：POST /internal/schedules/{scheduleId}/run
+                     │
+                     ▼
+               PixivFlow durable slot ledger = 唯一的执行权威
+```
+
+**不变量（改时钟、改 cron、换 provider 时必须守住）：**
+
+```text
+External clocks are stateless trigger sources.
+They MUST NOT derive occurrence IDs.
+They MUST NOT own execution state.
+Multiple external clocks MAY trigger the same schedule occurrence.
+All duplicate triggers MUST converge through PixivFlow's durable slot identity.
+```
+
+```text
+A wake-run-exit executor MUST NOT depend on itself for cron scheduling.
+```
+
+### Provider 映射
+
+| | provider | 触发时刻 | 触发表达式（UTC） | 是执行权威吗 |
+| --- | --- | --- | --- | --- |
+| PRIMARY | cron-job.org | occurrence 准点 | `0 2,14 * * *`（`bot1-daily`）、`10 2,14 * * *`（`bot2-daily`） | 否 |
+| SECONDARY | Cloudflare Cron（`control-plane/`） | occurrence + 2 分钟 | `2 2,14 * * *`（`bot1-daily`）、`12 2,14 * * *`（`bot2-daily`） | 否 |
+| SSOT | PixivFlow durable slot ledger | — | — | **是，且是唯一一个** |
+
+两个时钟 POST 的是**同一个**端点，谁后到就在前一个创建的 slot 上收敛。**冗余时钟 ≠ 第二个调度器**：
+第二个调度器会带来第二套 schedule 定义或第二份执行状态，那仍然非法（矩阵 `second-clock`）。
+
+`SECONDARY_OFFSET_MINUTES = 2`、两边的表达式，以及「secondary = primary + 文档化偏移」这条关系
+由 `control-plane/src/cron-map.ts` 声明、由 `control-plane/test/redundant-clock.test.ts` 守护；
+偏移必须为**正**（提前触发会解析到下一次 fire，即另一个 occurrence）。
+
+### 第三方 provider 的凭据边界
+
+时钟 provider 是**第三方**服务，它的凭据面必须被限制到最小：
+
+- 它**只**持有 scheduler trigger credential：`SCHEDULER_TRIGGER_TOKEN`——用于对执行端触发端点发一次
+  带 Bearer 的 POST。
+- 它**绝不**持有：Fly API token、Telegram bot token 或 channel id、TelePost submit token、
+  Pixiv 凭据、GitHub token、Cloudflare API token。
+
+> **泄漏的后果被限制在一条上：只需要轮换 schedule trigger credential。**
+> 不涉及 Telegram 凭据，不涉及 Pixiv 凭据，不涉及平台机器管理凭据。
+
+provider 控制台里的 URL 与 cron 表达式是**配置**，不是凭据。任何文档、脚本与日志只写凭据的
+**名称**，永不写值（见 [凭据契约](../concepts/credentials.md)）。
+
 ## Manifest 形状
 
 一份 preset 的部署清单长这样（示例为当前生产 `split-worker`）。这是**文档模型**，不是运行时
@@ -64,6 +122,10 @@ roles:
 clock:
   provider: cloudflare           # cloudflare | external | internal
   placement: edge-serverless
+  # 生产 split-worker 同时运行两个 provider，作用于同一套 schedule set：
+  #   PRIMARY   cron-job.org      （external，occurrence 准点）
+  #   SECONDARY cloudflare        （occurrence + 2 分钟）
+  # 两者 POST 同一个幂等端点，任一都不是执行权威。
 
 transport:
   executor_to_publisher: flycast # loopback-http | container-network | flycast | private-overlay | public-https
@@ -103,6 +165,11 @@ resource_profile: 512m           # 见 enums / resourceProfiles
 组合是否成立由矩阵 `combinationRules` 回答，分四档：`supported`、
 `supported-with-limitations`、`experimental`、`invalid`。**用户不需要自己猜。**
 
+`clock` 这一维度选的是 **provider 类别**，不是「时钟个数」：生产 `split-worker` 的取值仍然是
+`cloudflare` 与 `external` 两个合法 provider，只是其中**两个**同时作用于同一套 schedule set
+（PRIMARY cron-job.org / SECONDARY Cloudflare）。clock provider 的数量是 **operational 分配**，
+不是 preset 属性——这也是「冗余时钟」不等于「新 preset」的原因。
+
 ## Single source of truth
 
 | 概念 | 唯一权威 | 不允许再声明的地方 |
@@ -136,6 +203,11 @@ Fly.io production topology`），但它是「当前生产」，不是「唯一�
 本契约不引入破坏性变更。`split-worker` 的线上配置、两份 Fly 配置、`control-plane/`、四个
 只读脚本与现有守护测试全部保持可用；本页只是给它们一个统一的名字与来源。
 
+冗余外部时钟是**同一份拓扑的 operational 变更**，不是第五个 preset：preset 集合、角色所有权、
+状态归属与生命周期语义都没有变。它的来源是
+[2026-09-13 漏跑事故](../incidents/2026-09-13-schedule-trigger-miss.md)，运维姿势见
+[调度运维手册](../operations/scheduling.md)。
+
 ## 相关页面
 
 - Preset 索引：[architectures/overview.md](../architectures/overview.md)
@@ -143,3 +215,5 @@ Fly.io production topology`），但它是「当前生产」，不是「唯一�
 - 环境变量与资源档位：[reference/environment.md](./environment.md)
 - 平台：[platforms/docker.md](../platforms/docker.md)、[platforms/flyio.md](../platforms/flyio.md)、[platforms/vps.md](../platforms/vps.md)、[platforms/cloudflare.md](../platforms/cloudflare.md)
 - 迁移契约：[architectures/migration.md](../architectures/migration.md)
+- 调度运维手册：[operations/scheduling.md](../operations/scheduling.md)
+- 漏跑事故与冗余时钟决策：[incidents/2026-09-13-schedule-trigger-miss.md](../incidents/2026-09-13-schedule-trigger-miss.md)
