@@ -134,7 +134,13 @@ scheduler 可不可以多实例、这个配置应该改在哪里」，不需要�
 - 内存峰值实测（512 MiB 下两个角色的真实占用）。
 
 **转正条件**：上述验收全部通过后，才把矩阵的 `status.implemented` 置为 `true`、
-`support` 升为 `beta`，并移除 preset 页的「仅设计」提示。**在那之前不要改这两个字段。**
+`support` 升为 `beta`。可执行清单与要记录的内存量见
+[worker-sleep 端到端验收](operations/worker-sleep-acceptance.md)。**在那之前不要改这两个字段。**
+
+**本轮未能执行端到端验收**：本机没有可用的容器运行时（docker daemon 未运行，
+colima/podman/lima 均未安装），本地 `.env` 也只是占位值，因此既跑不了 compose 冒烟，
+也拿不到真实 512 MiB 主机与 test bot。`scripts/smoke-worker-sleep-compose.sh` 与验收手册
+已经写好，但**尚未运行过**——不把未执行的验证写成已通过。
 
 ---
 

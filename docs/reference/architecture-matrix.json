@@ -62,6 +62,12 @@
       "supported-with-limitations",
       "experimental",
       "invalid"
+    ],
+    "platformStatus": [
+      "stable",
+      "beta",
+      "planned",
+      "not-implemented"
     ]
   },
   "dimensions": [
@@ -366,10 +372,6 @@
         "resourceProfile": "512m",
         "executorLifecycle": "always-on"
       },
-      "platforms": [
-        "docker-compose",
-        "systemd"
-      ],
       "failureDomain": "single",
       "costModel": {
         "zh": "按宿主计费；常驻运行，无停机省钱机制。",
@@ -390,6 +392,21 @@
           "single-machine-worker-sleep",
           "split-worker"
         ]
+      },
+      "platformStatus": {
+        "docker-compose": {
+          "status": "stable",
+          "artifacts": [
+            "docker-compose.yml",
+            "docker/combined.Dockerfile"
+          ]
+        },
+        "systemd": {
+          "status": "beta",
+          "artifacts": [
+            "deploy.go"
+          ]
+        }
       }
     },
     "single-machine-worker-sleep": {
@@ -466,16 +483,23 @@
       ],
       "rolePlacement": {
         "clock": {
-          "unit": "machine",
-          "provider": "internal",
+          "unit": "host",
+          "provider": "external",
           "lifecycle": "always-on",
           "state": "none",
-          "note": "a very small resident clock inside the supervising process"
+          "note": "host-local timer (systemd timer / cron) POSTs http://127.0.0.1:8090; no cloud dependency. clock=internal is design-only here: the supervisor implements no cron, so internal must not be described as implemented until it does.",
+          "implementedProviders": [
+            "external"
+          ],
+          "designedProviders": [
+            "internal"
+          ]
         },
         "executor": {
           "unit": "machine",
           "lifecycle": "spawn-on-demand",
-          "state": "own-volume-subdirectory"
+          "state": "own-volume-subdirectory",
+          "note": "spawned by the resident supervisor; it talks to the publisher over the platform's transport (container network on compose, loopback on systemd) and never over loopback-in-container"
         },
         "publisher": {
           "unit": "machine",
@@ -493,9 +517,20 @@
           "note": "one shared volume with disjoint role-owned subdirectories; the executor child mounts only its own namespace (SI-7)"
         },
         "network": {
-          "transport": "loopback-http",
+          "transport": "container-network",
+          "transportByPlatform": {
+            "docker-compose": "container-network (http://telepost:8080) — two containers, so the executor delivers over the compose network, not loopback",
+            "systemd": "loopback-http (http://127.0.0.1:8080) — both roles are plain processes on one host",
+            "flyio": "not-implemented"
+          },
           "egress": "machine",
           "proxy": "prefer an external proxy on a 512 MiB machine"
+        },
+        "supervisor": {
+          "unit": "host",
+          "lifecycle": "always-on",
+          "state": "none",
+          "note": "deployment-layer process from this repository (supervisor/). It owns the trigger port 8090 and forwards authenticated triggers to the executor child on 127.0.0.1:8091. It has no cron, makes no idle decision, and holds no Telegram credential."
         }
       },
       "allowed": {
@@ -518,7 +553,7 @@
         ]
       },
       "defaults": {
-        "clock": "internal",
+        "clock": "external",
         "telegramIngress": "webhook",
         "network": "direct",
         "bots": 2,
@@ -526,11 +561,6 @@
         "resourceProfile": "512m",
         "executorLifecycle": "spawn-on-demand"
       },
-      "platforms": [
-        "flyio",
-        "docker-compose",
-        "systemd"
-      ],
       "failureDomain": "single",
       "costModel": {
         "zh": "机器常驻计费；休眠只省内存，不省计算账单。",
@@ -559,6 +589,23 @@
           "single-host",
           "split-worker"
         ]
+      },
+      "platformStatus": {
+        "docker-compose": {
+          "status": "beta",
+          "artifacts": [
+            "docker/worker-sleep.Dockerfile",
+            "docker-compose.worker-sleep.yml"
+          ],
+          "note": "implemented and CI-validated; end-to-end acceptance on a 512 MiB host not yet run"
+        },
+        "systemd": {
+          "status": "planned"
+        },
+        "flyio": {
+          "status": "planned",
+          "note": "needs one Fly Machine running TelePost + resident supervisor + on-demand child in ONE image, so it is not a copy of the compose two-container form; blocked on a combined worker-sleep runtime"
+        }
       }
     },
     "split-worker": {
@@ -697,9 +744,6 @@
         "resourceProfile": "512m",
         "executorLifecycle": "wake-run-exit"
       },
-      "platforms": [
-        "flyio"
-      ],
       "failureDomain": "separated",
       "costModel": {
         "zh": "成本主要由「执行端平时不运行」贡献；业务端常驻是秒回投稿的代价。",
@@ -728,6 +772,15 @@
           "single-machine-worker-sleep",
           "remote-worker"
         ]
+      },
+      "platformStatus": {
+        "flyio": {
+          "status": "stable",
+          "artifacts": [
+            "fly/deploy.telepost.toml",
+            "fly/deploy.pixivflow.toml"
+          ]
+        }
       }
     },
     "remote-worker": {
@@ -865,11 +918,6 @@
         "resourceProfile": "512m",
         "executorLifecycle": "always-on"
       },
-      "platforms": [
-        "docker-compose",
-        "systemd",
-        "flyio"
-      ],
       "failureDomain": "separated, across a network boundary",
       "costModel": {
         "zh": "两个宿主各自计费；省钱来自把执行端放在便宜或已有的机器上。",
@@ -894,6 +942,17 @@
           "single-host",
           "split-worker"
         ]
+      },
+      "platformStatus": {
+        "docker-compose": {
+          "status": "beta"
+        },
+        "systemd": {
+          "status": "beta"
+        },
+        "flyio": {
+          "status": "beta"
+        }
       }
     }
   },
@@ -1047,6 +1106,27 @@
               "field": "network",
               "op": "eq",
               "value": "proxy"
+            }
+          ]
+        }
+      },
+      {
+        "id": "external-clock-spawn-on-demand",
+        "when": "clock=external and executor lifecycle is spawn-on-demand",
+        "why": "the host-local timer is the only thing that can start work, because the supervisor implements no cron and the executor process does not exist while idle",
+        "predicate": {
+          "all": [
+            {
+              "field": "clock",
+              "op": "in",
+              "value": [
+                "external"
+              ]
+            },
+            {
+              "field": "executorLifecycle",
+              "op": "eq",
+              "value": "spawn-on-demand"
             }
           ]
         }
@@ -1472,5 +1552,6 @@
     },
     "runtimeDependency": false,
     "notes": "The manifest is a deployment-compiler input. No business code reads it, and no platform branch may be derived from it at runtime. Its authority is this matrix; the CLI embeds the matrix at build time so the released artifact carries its own contract."
-  }
+  },
+  "platformSupportNote": "A preset may implement one official deployment path while another platform is still planned. Preset-level implementation status is not 'all platforms done': see presets.*.platformStatus."
 }

@@ -150,6 +150,36 @@ func TestChildEnvIsWhatTheRealChildActuallyInherits(t *testing.T) {
 	s.shutdown()
 }
 
+// nonLoopbackIPv4 找一个宿主机的非回环 IPv4。找不到就跳过依赖它的测试——
+// 这类测试的意义是证明「容器/进程绑错了地址就真的到不了」，没有一个非回环地址就无从证明。
+func nonLoopbackIPv4(t *testing.T) string {
+	t.Helper()
+	addrs, err := net.InterfaceAddrs()
+	if err != nil {
+		t.Skipf("cannot enumerate interfaces: %v", err)
+	}
+	for _, addr := range addrs {
+		ipnet, ok := addr.(*net.IPNet)
+		if !ok || ipnet.IP.IsLoopback() {
+			continue
+		}
+		if v4 := ipnet.IP.To4(); v4 != nil && v4.IsGlobalUnicast() {
+			return v4.String()
+		}
+	}
+	t.Skip("no non-loopback IPv4 address on this machine")
+	return ""
+}
+
+func portOf(t *testing.T, addr string) string {
+	t.Helper()
+	_, port, err := net.SplitHostPort(addr)
+	if err != nil {
+		t.Fatalf("cannot parse %q: %v", addr, err)
+	}
+	return port
+}
+
 // ---------------------------------------------------------------------------
 // 触发路径：只有「通过鉴权的 POST」才能拉起进程
 // ---------------------------------------------------------------------------
@@ -463,6 +493,91 @@ func TestShutdownForwardsSignalAndLeavesNoOrphan(t *testing.T) {
 	}
 	if strings.Contains(state.describe(), "OOM") {
 		t.Errorf("supervisor 发起的停止不得被描述为故障：%s", state.describe())
+	}
+}
+
+// 触发入口的可达性：容器内的 127.0.0.1 只有容器自己可见，宿主机与宿主的 cron/systemd
+// timer 都到不了。这一条在真实 compose 里靠「监听 0.0.0.0 + 只发布到宿主 loopback」实现，
+// 但那需要容器运行时；这里用同一台机器的非回环地址把同一条性质固定下来，CI 就能守住它。
+func TestTriggerEndpointIsReachableFromOutsideLoopback(t *testing.T) {
+	lan := nonLoopbackIPv4(t)
+	listen := freeAddr(t)
+	child := freeAddr(t) // 同一个地址：supervisor 转发到它，子进程也监听它
+
+	s := newTestSupervisor(t, config{
+		listen:       "0.0.0.0:" + portOf(t, listen),
+		childTrigger: child,
+		childCmd:     fakeCommand(t, "FAKE_LISTEN="+child),
+		token:        fakeToken,
+		readyTimeout: 20 * time.Second,
+		readyPoll:    50 * time.Millisecond,
+	})
+	if err := s.listenAndServe(); err != nil {
+		t.Fatalf("监听失败：%v", err)
+	}
+	t.Cleanup(s.shutdown)
+
+	port := portOf(t, s.Addr())
+	base := "http://" + net.JoinHostPort(lan, port)
+
+	// 通过宿主机的非回环地址访问存活端点：必须成功，且不得拉起任何进程。
+	resp, err := http.Get(base + "/healthz")
+	if err != nil {
+		t.Fatalf("绑定 0.0.0.0 之后必须能从 %s 访问到：%v", lan, err)
+	}
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Errorf("/healthz 通过 %s 返回 %d，期望 200", lan, resp.StatusCode)
+	}
+	if s.children.spawns() != 0 {
+		t.Errorf("/healthz 绝不允许拉起 executor（spawn=%d）", s.children.spawns())
+	}
+
+	// 完整触发链路：宿主地址 -> supervisor -> executor 子进程。
+	req, _ := http.NewRequest(http.MethodPost, base+"/internal/schedules/abc/run", strings.NewReader(`{"label":"reach"}`))
+	req.Header.Set("Authorization", "Bearer "+fakeToken)
+	req.Header.Set("Content-Type", "application/json")
+	resp, err = http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("从 %s 触发失败：%v", lan, err)
+	}
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusAccepted {
+		t.Errorf("经宿主地址触发的状态码 %d，期望 202", resp.StatusCode)
+	}
+	if s.children.spawns() != 1 {
+		t.Errorf("一次通过鉴权的触发必须只拉起一个 executor（spawn=%d）", s.children.spawns())
+	}
+}
+
+// 反例固定：绑回环时，同样的宿主地址访问不到。这正是修复前的 bug——
+// compose 覆盖层里写 SUPERVISOR_LISTEN=127.0.0.1:8090 会让整条触发链路静默失效。
+func TestLoopbackBindIsUnreachableFromTheHostAddress(t *testing.T) {
+	lan := nonLoopbackIPv4(t)
+	listen := freeAddr(t)
+	child := freeAddr(t)
+
+	s := newTestSupervisor(t, config{
+		listen:       "127.0.0.1:" + portOf(t, listen),
+		childTrigger: child,
+		childCmd:     fakeCommand(t, "FAKE_LISTEN="+child),
+		token:        fakeToken,
+		readyTimeout: 2 * time.Second,
+		readyPoll:    50 * time.Millisecond,
+	})
+	if err := s.listenAndServe(); err != nil {
+		t.Fatalf("监听失败：%v", err)
+	}
+	t.Cleanup(s.shutdown)
+
+	client := &http.Client{Timeout: 2 * time.Second}
+	resp, err := client.Get("http://" + net.JoinHostPort(lan, portOf(t, s.Addr())) + "/healthz")
+	if err == nil {
+		resp.Body.Close()
+		t.Fatalf("绑定 127.0.0.1 时不应能从 %s 访问到；如果能，说明这个测试没有证明力", lan)
+	}
+	if s.children.spawns() != 0 {
+		t.Errorf("不可达的请求不该拉起任何进程（spawn=%d）", s.children.spawns())
 	}
 }
 
