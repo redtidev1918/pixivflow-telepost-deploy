@@ -125,13 +125,14 @@ Cloudflare Worker 保留为 secondary，并且**不再**是执行权威。
 
 | 项 | 状态 |
 | --- | --- |
-| 代码与配置变更 | 已在 `feat/redundant-external-clock` 分支提交（`3085035`，2026-09-13）。**是分支上的提交，不是已发布**。 |
-| 执行端镜像的生产部署 | **尚未完成**。这是 operator 的独立步骤。 |
-| cron-job.org 控制台配置（PRIMARY 表达式） | **尚未完成**。这是 operator 的独立步骤，且只能在 provider 控制台里做。 |
-| Cloudflare Worker 的 secondary 部署 | **尚未完成**。 |
+| 代码与配置变更 | 已合入 `main`：#81（dispatch 可观察性）、#82（双时钟 + 晚间 22:00/22:10 排班），执行端 pin 提交 `212d8e7`。 |
+| 执行端镜像的生产部署 | **已部署**（2026-09-13 08:29Z，Fly release **v14**）。镜像 pin 到 PixivFlow `8938ca9`（= PR #74 merge）；生产日志在 08:28:57Z 已出现 `bot1-daily 0 10,22 * * *` / `bot2-daily 10 10,22 * * *` 的配置快照，且 readiness 探针确认 admission 日志（`schedule.trigger_received` / `attempt_id`）在线。**尚未经过真实 occurrence 验证**——下一个窗口是 2026-09-13 14:00Z（22:00 CST）。 |
+| cron-job.org 控制台配置（PRIMARY 表达式） | **尚未完成，且是唯一的外部阻塞**：该 SaaS 配置只能在其控制台 / API 完成，当前会话没有其账号凭据。权威配置（两个 job、表达式、URL、headers、凭据边界、必须开启触发历史）见 [调度运维手册](../operations/scheduling.md#primary-时钟cron-joborg的权威配置)。在它配置完成前，今晚 14:00Z 的准点触发不存在，只有 14:02Z 的 SECONDARY 与人工兜底。 |
+| Cloudflare Worker 的 secondary 部署 | **已部署**（2026-09-13，wrangler Version ID `e6478d49-f034-410b-a41e-fbe4f66dc2a6`）。线上 cron 已切换为 `2 2,14 * * *` / `12 2,14 * * *`（= occurrence + 2 分钟，上午与晚间各两次）。 |
 
-> **两个 operator 步骤完成后，必须在本节写入时间戳。** 在此之前，本页**不得**被读作
-> 「已部署」或「已在生产验证」。
+> **PRIMARY 控制台配置完成、且 2026-09-13 14:00Z/14:02Z 窗口的真实结果取到之后，必须回到本节补写时间戳与处置结果。**
+> 在此之前，本页**不得**被读作「已在生产验证」：已上线的是**配置与可观察性**，被验证的是**代码路径**，
+> 双时钟在真实 occurrence 上的收敛仍是**待验证**状态。
 
 ## 未被采纳的方案，以及原因
 
