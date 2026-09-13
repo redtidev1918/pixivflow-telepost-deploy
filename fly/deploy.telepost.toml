@@ -21,16 +21,18 @@ primary_region = 'iad'
     # Pin the released TelePost image. Never `latest`: a floating reference makes
     # "the same config" produce different code on different days.
     #
-    # 2.18.0 adds the Telegram Mini App (submission + moderation UI) as a
+    # 2.19.0 = 2.18.0 + the Telegram Mini App (submission + moderation UI) as a
     # presentation adapter over the canonical HTTP API: server-side initData
     # verification, RBAC, shared refetch application command, /me/submissions,
     # review mutations. Bot/API/refetch behavior is unchanged (additive).
     # Requires MINIAPP_ENABLED + MINIAPP_SESSION_SECRET to expose the session
     # endpoint; without them the Mini App surface stays closed (§152-§153).
+    # (2.18.0 shipped the refetch state machine without the Mini App surface;
+    # the Mini App backend landed in 2.19.0.)
     #
     # 2.17.6 classifies media from the FINAL artifact instead of source
-    # metadata; 2.18.0 keeps that behavior.
-    TELEPOST_IMAGE = 'ghcr.io/redtidev1918/telepost:2.18.0'
+    # metadata; 2.19.0 keeps that behavior.
+    TELEPOST_IMAGE = 'ghcr.io/redtidev1918/telepost:2.19.0'
 
 [[mounts]]
   source = 'data'
