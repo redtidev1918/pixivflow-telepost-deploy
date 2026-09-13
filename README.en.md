@@ -124,6 +124,31 @@ illegal combinations, resource profiles, security invariants) is
 [`docs/reference/architecture-matrix.json`](docs/reference/architecture-matrix.json);
 `architecture_docs_test.go` enforces in CI that the documentation matches it.
 
+### Production scheduling
+
+```text
+cron-job.org ─┐
+              ├─► PixivFlow trigger endpoint ─► slot ledger (the single execution authority)
+Cloudflare  ──┘
+```
+
+**One clock is enough** for a simple deployment. For production `split-worker` deployments,
+**two independent external clocks are recommended**: a PRIMARY (cron-job.org) that fires at the
+scheduled time, and a SECONDARY (Cloudflare Cron) that fires again 2 minutes later. Both send the
+same authenticated, idempotent trigger, and whichever arrives second converges on the same slot —
+**a duplicate trigger never runs twice**.
+
+The benefits are all operational: **no dedicated scheduler VM to maintain**, **no dependency on a
+VM that can expire and needs manual renewal** (a VPS / systemd timer is for development, manual
+troubleshooting and an emergency trigger), and two **low-maintenance**, **provider-independent**
+clocks so that one provider failing silently no longer means that scheduled run disappears. A clock
+holds only the trigger credential, so a leak only requires rotating that one credential.
+
+This is the recommendation for the production `split-worker` deployment, not a requirement for
+single-machine deployments: `single-host` and local/personal deployments need one clock only, and
+do not have to sign up for two SaaS providers. Operating details:
+[scheduling runbook (中文)](docs/operations/scheduling.md).
+
 ---
 
 ## Three concepts that must not be conflated
