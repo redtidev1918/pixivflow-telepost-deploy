@@ -120,13 +120,35 @@ logs_snapshot() {
   fly logs -a "$app" --no-tail >>"$out_dir/executor.log" 2>&1
 }
 
+# `fly ssh console` bootstraps a fresh WireGuard tunnel per call, and the first
+# attempt can time out on the DNS probe even when the machine is healthy
+# (measured 2026-09-13: the immediate next call succeeds). Without a retry, one
+# transient timeout would silently drop the ledger snapshot inside the exact
+# window this script exists to observe. The retry is transport-only: the SQL
+# probe still runs once per successful attempt, never twice on the same slot.
+# The probe opens SQLite mode=ro and only SELECTs.
+ssh_console() {
+  local attempt=0 out=""
+  while (( attempt < 4 )); do
+    attempt=$((attempt + 1))
+    out=$(fly ssh console -a "$app" -C "sh -c 'python3 /app/scripts/schedule-ledger-probe.py'" 2>&1)
+    if [[ -n "$out" ]] && ! grep -qE 'tunnel unavailable|i/o timeout' <<<"$out"; then
+      printf '%s' "$out"
+      return 0
+    fi
+    sleep 5
+  done
+  printf '%s' "$out"
+  return 1
+}
+
 ledger_snapshot() {
   local label="$1"
   {
     echo
     echo "########## LEDGER SNAPSHOT [$label] $(date -u +%Y-%m-%dT%H:%M:%SZ) ##########"
     # Read-only: the probe opens SQLite with mode=ro and only SELECTs.
-    fly ssh console -a "$app" -C "sh -c 'python3 /app/scripts/schedule-ledger-probe.py'" 2>&1
+    ssh_console
   } >>"$out_dir/ledger.txt"
   say "ledger snapshot [$label] captured"
 }
