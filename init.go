@@ -330,7 +330,7 @@ func writeFlyTpl(dir string, answers map[string]string) error {
 	}
 	okf("已生成两份 Fly 配置：telesubmit.fly.toml（TelePost %s，常驻）+ pixivflow.fly.toml（PixivFlow %s，外部时钟唤醒、跑完自行退出）",
 		telepostBaseline, pixivBaselineRef)
-	infof("下一步：把两份配置里的 app 名改成自己的；PixivFlow 的 PIXIVFLOW_REF 已预填发布 tag %s，要跑未发布的提交就换成 40 位提交号；TelePost secrets 见 .env，PixivFlow secrets 见 docs/ARCHITECTURE.md。",
+	infof("下一步：把两份配置里的 app 名改成自己的；PixivFlow 的 PIXIVFLOW_REF 已预填发布 tag %s，要跑未发布的提交就换成 40 位提交号；TelePost secrets 见 .env，PixivFlow secrets 见 docs/concepts/credentials.md。",
 		pixivBaselineRef)
 	return nil
 }
