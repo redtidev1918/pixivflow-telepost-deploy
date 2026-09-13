@@ -404,7 +404,35 @@
         "implemented": false,
         "tested": false,
         "productionProven": false,
-        "evidence": []
+        "evidence": [
+          "supervisor/main.go",
+          "supervisor/server.go",
+          "supervisor/child.go",
+          "supervisor/supervisor_test.go"
+        ],
+        "components": {
+          "supervisor-binary": {
+            "state": "implemented",
+            "evidence": "supervisor/ (Go, stdlib only)",
+            "notes": "常驻占住触发端口；鉴权通过的 POST 才 spawn 子进程；退出后不重启"
+          },
+          "env-allowlist": {
+            "state": "implemented+tested",
+            "evidence": "supervisor/child.go + supervisor/supervisor_test.go",
+            "notes": "deny-by-default；真实子进程继承验证；Telegram 凭据被拒付（SI-1）"
+          },
+          "container-image": {
+            "state": "missing"
+          },
+          "fly-config": {
+            "state": "missing"
+          },
+          "deployment-steps": {
+            "state": "design-only",
+            "evidence": "docs/architectures/single-machine-worker-sleep.md"
+          }
+        },
+        "statusNote": "supervisor 组件已实现并有测试（含设计文档要求的环境白名单守护测试），但本 preset 仍不可部署：没有镜像、没有平台配置、部署步骤仍是设计。因此 implemented 保持 false，support 保持 experimental。"
       },
       "summary": {
         "zh": "一台机器上的两个角色：TelePost 常驻，PixivFlow 只在有活时作为子进程存在，空闲即退出。机器本身永不停机。",

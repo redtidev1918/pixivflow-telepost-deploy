@@ -198,8 +198,11 @@ it is a useful fact when debugging "the machine behaves oddly after a delivery".
   that allowlist must exist before this preset may be marked implemented.
 - **`review` and `publish` are unprotected.** The `split-worker` property "an executor crash/OOM
   does not affect Telegram" does not hold here.
-- **Not implemented today.** No configuration or code in this repository implements this process
-  arrangement.
+- **Only partly implemented.** The supervisor component (`supervisor/`) is implemented and tested,
+  including the environment-allowlist test this page requires; but the preset is **not deployable**:
+  there is no image and no platform configuration, and the deployment steps are still a design. The
+  matrix therefore keeps it at `implemented=false` / `support=experimental` until the whole path is
+  executable.
 
 ---
 
@@ -231,17 +234,45 @@ hardest kind to debug.
 
 ---
 
+## Implementation status
+
+| Component | Status | Location |
+| --- | --- | --- |
+| Supervisor binary | **implemented** (Go, stdlib only) | `supervisor/` (main.go / server.go / child.go) |
+| Environment allowlist | **implemented and tested** | `supervisor/child.go` + `supervisor/supervisor_test.go` |
+| Container image | missing | — |
+| Fly / compose configuration | missing | — |
+| Deployment steps | still a design | this page |
+
+What the supervisor already does is guarded by tests that spawn real child processes:
+
+- it holds the trigger port resident, with a path and auth contract **identical** to the
+  `split-worker` executor (`POST /internal/schedules/{scheduleId}/run` + Bearer), so migrating costs
+  the clock nothing;
+- only an **authenticated** POST spawns the executor: a probe (GET) gets 404 and a wrong token gets
+  401, and neither spawns anything — the "one probe resurrects the child" loop is cut;
+- exactly one executor at a time (SI-4); after the child exits it is **not** restarted;
+- the supervisor **never** kills the child for being idle: the stop decision belongs to the
+  executor's own ledger;
+- it distinguishes three outcomes: normal `exit(0)`, killed by a signal (OOM/crash), and a stop the
+  supervisor itself requested;
+- on shutdown it forwards the signal to the child and leaves no orphan;
+- the environment handed to the child is a **deny-by-default allowlist**: only `PIXIV_*`,
+  `SCHEDULER_*`, `*_SUBMIT_TOKEN` and generic runtime variables pass; any Telegram credential name
+  makes it refuse to start the child.
+
 ## Deployment steps
 
-**Not executable today.** This is a design contract; the implementation is a later stage, see
-Phase 3 of [ROADMAP-MULTI-ARCH.md (中文)](/ROADMAP-MULTI-ARCH.md).
+**Not executable today.** The shape below is the target; landing it is the rest of Phase 3, see
+[ROADMAP-MULTI-ARCH.md (中文)](/ROADMAP-MULTI-ARCH.md).
 
 Once implemented, the steps should look like this:
 
 1. Prepare one volume; both `data/bot{N}/` and `data/pixivflow/` live on it.
 2. Deploy the resident `publisher` and confirm direct-message submission works and webhook or
    polling is established.
-3. Configure the resident supervisor: spawn the `executor` when a trigger arrives, and do not
+3. Configure the resident supervisor (`SUPERVISOR_CHILD_CMD` / `SCHEDULER_TRIGGER_TOKEN` /
+   `SUPERVISOR_LISTEN` / `SUPERVISOR_CHILD_TRIGGER`): spawn the `executor` when a trigger arrives, and do not
    restart it after it exits.
 4. In the `executor` configuration set `schedulerRuntime.mode`, `exitWhenIdle=true`, `idleGraceMs`
    and `maxLifetimeMs`, and confirm that **no** health check points at the `executor` trigger port.
