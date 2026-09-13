@@ -52,9 +52,29 @@
       repo: 'redtidev1918/pixivflow-telepost-deploy',
             loadSidebar: true,
       // 语言是站点维度：docsify 原生按页面所在目录取 _sidebar.md——
-      // 根页面读 /_sidebar.md，/en/ 页面读 /en/_sidebar.md，无需 alias。
+      // 根页面读 /_sidebar.md，/en/ 页面读 /en/_sidebar.md；子目录页面会逐级向上
+      // 回退到所属语言的侧边栏，无需为子目录配置 alias。
       // 注意：不要配置 '/.*/_sidebar.md' 之类的通配 alias，它会把 /en/_sidebar.md
       // 改写回根侧边栏，破坏分语言导航；页内标题也不注入 sidebar（无 subMaxLevel）。
+
+      // 旧路径 → 新路径。文档信息架构在 2026-09 重组后，历史链接（README、CHANGELOG、
+      // issue、外部文章）仍指向旧地址；这里保持它们可用。只做显式条目，不用通配。
+      alias: {
+        '/ARCHITECTURE.md': '/concepts/roles.md',
+        '/SCENARIOS.md': '/platforms/docker.md',
+        '/POLLING.md': '/platforms/docker.md',
+        '/WEBHOOK.md': '/platforms/docker.md',
+        '/MIHOMO.md': '/platforms/proxy.md',
+        '/MULTI-BOT.md': '/operations/multi-bot.md',
+        '/SCHEDULING.md': '/concepts/scheduling.md',
+        '/PERFORMANCE.md': '/operations/performance.md',
+        '/REMOTE_UPDATES.md': '/operations/upgrades.md',
+        '/CREDENTIAL-HANDLING.md': '/concepts/credentials.md',
+        '/en/SCENARIOS.md': '/en/platforms/docker.md',
+        '/en/POLLING.md': '/en/platforms/docker.md',
+        '/en/WEBHOOK.md': '/en/platforms/docker.md',
+        '/en/MIHOMO.md': '/en/platforms/proxy.md'
+      },
 
       auto2top: true,
       search: {

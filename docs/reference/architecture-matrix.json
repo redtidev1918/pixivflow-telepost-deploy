@@ -1,0 +1,1231 @@
+{
+  "matrixVersion": 1,
+  "updated": "2026-09-13",
+  "purpose": "The machine-readable authority for which deployment topologies this repository supports. Humans read docs/architectures/overview.md; agents and tests read this file. Validated by architecture_docs_test.go.",
+  "authority": {
+    "roleContract": "docs/concepts/roles.md",
+    "presetIndex": "docs/architectures/overview.md",
+    "deploymentContract": "docs/reference/deployment-contract.md",
+    "agentContract": "AGENTS.md",
+    "credentialContract": "docs/concepts/credentials.md",
+    "lifecycleContract": "docs/concepts/lifecycle.md",
+    "schedulingContract": "docs/concepts/scheduling.md"
+  },
+  "enums": {
+    "supportLevel": [
+      "stable",
+      "beta",
+      "experimental",
+      "deprecated"
+    ],
+    "roleKind": [
+      "service",
+      "capability"
+    ],
+    "lifecycle": [
+      "always-on",
+      "wake-run-exit",
+      "spawn-on-demand"
+    ],
+    "clockProvider": [
+      "internal",
+      "cloudflare",
+      "external"
+    ],
+    "telegramIngress": [
+      "webhook",
+      "polling"
+    ],
+    "networkMode": [
+      "direct",
+      "proxy"
+    ],
+    "transport": [
+      "loopback-http",
+      "container-network",
+      "flycast",
+      "private-overlay",
+      "public-https"
+    ],
+    "stateLayout": [
+      "own-volume",
+      "own-volume-subdirectory",
+      "shared-volume",
+      "none"
+    ],
+    "searchMode": [
+      "enabled",
+      "disabled"
+    ],
+    "combinationVerdict": [
+      "supported",
+      "supported-with-limitations",
+      "experimental",
+      "invalid"
+    ]
+  },
+  "dimensions": [
+    {
+      "id": "logical-architecture",
+      "question": "Which role owns which decision?",
+      "variesByDeployment": false,
+      "authority": "docs/concepts/roles.md"
+    },
+    {
+      "id": "deployment-topology",
+      "question": "Where does each role run, and what may sleep?",
+      "variesByDeployment": true,
+      "authority": "docs/architectures/overview.md"
+    },
+    {
+      "id": "resource-profile",
+      "question": "How much memory and CPU does each running unit get?",
+      "variesByDeployment": true,
+      "authority": "docs/reference/environment.md"
+    },
+    {
+      "id": "platform",
+      "question": "Which substrate executes the topology?",
+      "variesByDeployment": true,
+      "authority": "docs/platforms/"
+    }
+  ],
+  "roles": [
+    {
+      "id": "clock",
+      "kind": "service",
+      "title": {
+        "zh": "时钟 / 触发",
+        "en": "Clock / Trigger"
+      },
+      "owner": "control-plane (Cloudflare Worker) or PixivFlow internal scheduler",
+      "owns": [
+        "cron expression to schedule id mapping",
+        "one authenticated trigger POST"
+      ],
+      "neverOwns": [
+        "occurrence",
+        "slot state",
+        "timezone arithmetic at runtime",
+        "credentials other than the trigger token"
+      ],
+      "state": "none",
+      "lifecycle": "always-on",
+      "credentials": [
+        "SCHEDULER_TRIGGER_TOKEN"
+      ],
+      "cardinality": "exactly one active clock per production schedule set",
+      "failureDomain": "a missed wake is a missed run; it is never back-filled"
+    },
+    {
+      "id": "executor",
+      "kind": "service",
+      "title": {
+        "zh": "调度 / 执行",
+        "en": "Scheduler / Executor"
+      },
+      "owner": "PixivFlow",
+      "owns": [
+        "pixiv querying and ranking",
+        "candidate selection",
+        "slot ledger and execution lease",
+        "downloading",
+        "delivery outbox and retries"
+      ],
+      "neverOwns": [
+        "Telegram bot token",
+        "channel id",
+        "review decision",
+        "publication"
+      ],
+      "state": "own-volume",
+      "lifecycle": "always-on | wake-run-exit | spawn-on-demand (topology decides)",
+      "credentials": [
+        "PIXIV_CLIENT_ID",
+        "PIXIV_CLIENT_SECRET",
+        "PIXIV_DEVICE_TOKEN",
+        "PIXIV_REFRESH_TOKEN",
+        "TELEPOST_BOT*_SUBMIT_TOKEN",
+        "SCHEDULER_TRIGGER_TOKEN"
+      ],
+      "holdsTelegramCredentials": false,
+      "cardinality": "at most one active production execution per Pixiv credential",
+      "failureDomain": "isolated from Telegram; a crash or OOM cannot drop a user submission"
+    },
+    {
+      "id": "publisher",
+      "kind": "service",
+      "title": {
+        "zh": "投稿审核与发布",
+        "en": "Submission review and publish"
+      },
+      "owner": "TelePost",
+      "owns": [
+        "submission ingestion API",
+        "review queue and review state machine",
+        "channel publication",
+        "per-bot idempotency records"
+      ],
+      "neverOwns": [
+        "Pixiv login",
+        "downloads",
+        "slot scheduling"
+      ],
+      "state": "own-volume",
+      "lifecycle": "always-on",
+      "credentials": [
+        "BOT*_TOKEN",
+        "BOT*_CHANNEL_ID",
+        "BOT*_OWNER_ID",
+        "TELEPOST_BOT*_SUBMIT_TOKEN"
+      ],
+      "holdsTelegramCredentials": true,
+      "cardinality": "one process per bot, supervised inside the publisher unit",
+      "failureDomain": "user-visible; a cold start looks like a broken submit button"
+    },
+    {
+      "id": "telegram-ingress",
+      "kind": "capability",
+      "title": {
+        "zh": "Telegram 入站",
+        "en": "Telegram ingress"
+      },
+      "owner": "TelePost",
+      "owns": [
+        "the single Telegram webhook registration for every bot",
+        "or the polling loop when webhook is unavailable"
+      ],
+      "neverOwns": [
+        "schedule triggering"
+      ],
+      "state": "none",
+      "lifecycle": "always-on",
+      "credentials": [
+        "BOT*_TOKEN",
+        "BOT*_WEBHOOK_SECRET_TOKEN"
+      ],
+      "webhookOwner": true,
+      "cardinality": "exactly one webhook owner per bot",
+      "failureDomain": "if a second component claims the webhook, every user submission is acknowledged and silently discarded"
+    },
+    {
+      "id": "state",
+      "kind": "capability",
+      "title": {
+        "zh": "持久状态",
+        "en": "Persistent state"
+      },
+      "owner": "the role that writes it",
+      "owns": [
+        "PixivFlow slot ledger and outbox",
+        "PixivFlow download cache",
+        "TelePost per-bot SQLite",
+        "TelePost runtime policy overrides"
+      ],
+      "neverOwns": [
+        "anything held only in a container filesystem",
+        "build caches",
+        "temporary media"
+      ],
+      "state": "own-volume | own-volume-subdirectory",
+      "lifecycle": "always-on",
+      "credentials": [],
+      "cardinality": "each stateful role owns a disjoint state namespace; multiple namespaces may live on one shared physical volume as role-owned subdirectories, but two roles never write the same database or namespace",
+      "failureDomain": "state loss is unrecoverable; a volume snapshot is the only backup"
+    },
+    {
+      "id": "network",
+      "kind": "capability",
+      "title": {
+        "zh": "网络与代理由",
+        "en": "Network and proxy"
+      },
+      "owner": "the platform plus the deployer's egress choice",
+      "owns": [
+        "transport between executor and publisher",
+        "optional outbound proxy for Pixiv and Telegram"
+      ],
+      "neverOwns": [
+        "business state"
+      ],
+      "state": "none",
+      "lifecycle": "always-on",
+      "credentials": [
+        "SUB_URL (optional, when the bundled proxy is used)"
+      ],
+      "cardinality": "one transport path per preset",
+      "failureDomain": "an unqualified egress fails as Pixiv rate limiting, not as a transport error"
+    }
+  ],
+  "presets": {
+    "single-host": {
+      "title": {
+        "zh": "单机一体化",
+        "en": "Single host"
+      },
+      "doc": "docs/architectures/single-host.md",
+      "status": {
+        "support": "stable",
+        "documented": true,
+        "implemented": true,
+        "tested": true,
+        "productionProven": false,
+        "evidence": [
+          "docker-compose.yml",
+          "docker/combined.Dockerfile",
+          "scripts/validate.sh",
+          ".github/workflows/validate.yml"
+        ]
+      },
+      "summary": {
+        "zh": "一台机器跑全部角色：TelePost 与 PixivFlow 各一个容器，共享一个 data 目录，经容器网络通信。",
+        "en": "One machine runs every role: TelePost and PixivFlow as separate containers, sharing one data directory over the container network."
+      },
+      "units": [
+        {
+          "id": "host",
+          "machines": 1,
+          "placement": "deployer-controlled (VPS, NAS, home server, workstation)",
+          "roles": [
+            "clock",
+            "executor",
+            "publisher",
+            "telegram-ingress"
+          ],
+          "lifecycle": "always-on",
+          "machineSleep": false,
+          "wakeOwner": "not applicable",
+          "stopOwner": "container restart policy",
+          "state": "own-volume-subdirectory"
+        }
+      ],
+      "rolePlacement": {
+        "clock": {
+          "unit": "host",
+          "provider": "internal",
+          "lifecycle": "always-on",
+          "state": "none"
+        },
+        "executor": {
+          "unit": "host",
+          "lifecycle": "always-on",
+          "state": "own-volume-subdirectory",
+          "statePaths": [
+            "./data/pixivflow/"
+          ]
+        },
+        "publisher": {
+          "unit": "host",
+          "lifecycle": "always-on",
+          "state": "own-volume-subdirectory",
+          "statePaths": [
+            "./data/bot1/",
+            "./data/bot2/"
+          ]
+        },
+        "telegram-ingress": {
+          "unit": "host",
+          "lifecycle": "always-on",
+          "webhookOwner": true
+        },
+        "state": {
+          "unit": "host",
+          "layout": "shared-volume",
+          "note": "one shared ./data volume mounted into both containers; legal because namespaces are disjoint: PixivFlow writes ./data/pixivflow/** only, TelePost writes ./data/botN/** only (SI-7)"
+        },
+        "network": {
+          "transport": "container-network",
+          "egress": "host",
+          "proxy": "optional bundled Mihomo profile"
+        }
+      },
+      "allowed": {
+        "clock": [
+          "internal"
+        ],
+        "telegramIngress": [
+          "webhook",
+          "polling"
+        ],
+        "network": [
+          "direct",
+          "proxy"
+        ],
+        "bots": "1..N (memory-bound)",
+        "search": [
+          "enabled",
+          "disabled"
+        ]
+      },
+      "defaults": {
+        "clock": "internal",
+        "telegramIngress": "polling",
+        "network": "direct",
+        "bots": 2,
+        "search": "disabled"
+      },
+      "platforms": [
+        "docker-compose",
+        "systemd"
+      ],
+      "failureDomain": "single",
+      "costModel": {
+        "zh": "按宿主计费；常驻运行，无停机省钱机制。",
+        "en": "Billed as a host; everything runs resident, so there is no sleep-based saving."
+      },
+      "credentialBoundary": {
+        "executorHoldsTelegramCredentials": false,
+        "hostCredentialIsolation": false,
+        "note": "Roles share one host, one .env and one filesystem; only host-level isolation is absent. The pixivflow unit still receives no BOT*_TOKEN and no CHANNEL_ID (docker-compose.yml passes BOT*_SUBMIT_TOKEN only). Logical ownership never merges; a co-located host can still read the publisher's secret from the shared environment, so hostCredentialIsolation=false is a documented deployment fact, not an ownership grant."
+      },
+      "migration": {
+        "from": [
+          "single-machine-worker-sleep",
+          "split-worker",
+          "remote-worker"
+        ],
+        "to": [
+          "single-machine-worker-sleep",
+          "split-worker"
+        ]
+      }
+    },
+    "single-machine-worker-sleep": {
+      "title": {
+        "zh": "单机 + 执行进程休眠",
+        "en": "Single machine, sleeping worker process"
+      },
+      "doc": "docs/architectures/single-machine-worker-sleep.md",
+      "status": {
+        "support": "experimental",
+        "documented": true,
+        "implemented": false,
+        "tested": false,
+        "productionProven": false,
+        "evidence": []
+      },
+      "summary": {
+        "zh": "一台机器上的两个角色：TelePost 常驻，PixivFlow 只在有活时作为子进程存在，空闲即退出。机器本身永不停机。",
+        "en": "Two roles on one machine: TelePost stays resident, PixivFlow exists as a child process only while there is work and exits when idle. The machine itself never stops."
+      },
+      "units": [
+        {
+          "id": "machine",
+          "machines": 1,
+          "placement": "deployer-controlled (512 MiB Fly Machine, VPS, NAS)",
+          "roles": [
+            "clock",
+            "executor",
+            "publisher",
+            "telegram-ingress"
+          ],
+          "lifecycle": "always-on",
+          "machineSleep": false,
+          "wakeOwner": "the resident publisher supervisor spawns the executor",
+          "stopOwner": "the executor's own ledgers (exitWhenIdle)",
+          "state": "own-volume-subdirectory"
+        }
+      ],
+      "rolePlacement": {
+        "clock": {
+          "unit": "machine",
+          "provider": "internal",
+          "lifecycle": "always-on",
+          "state": "none",
+          "note": "a very small resident clock inside the supervising process"
+        },
+        "executor": {
+          "unit": "machine",
+          "lifecycle": "spawn-on-demand",
+          "state": "own-volume-subdirectory"
+        },
+        "publisher": {
+          "unit": "machine",
+          "lifecycle": "always-on",
+          "state": "own-volume-subdirectory"
+        },
+        "telegram-ingress": {
+          "unit": "machine",
+          "lifecycle": "always-on",
+          "webhookOwner": true
+        },
+        "state": {
+          "unit": "machine",
+          "layout": "shared-volume",
+          "note": "one shared volume with disjoint role-owned subdirectories; the executor child mounts only its own namespace (SI-7)"
+        },
+        "network": {
+          "transport": "loopback-http",
+          "egress": "machine",
+          "proxy": "prefer an external proxy on a 512 MiB machine"
+        }
+      },
+      "allowed": {
+        "clock": [
+          "internal",
+          "cloudflare",
+          "external"
+        ],
+        "telegramIngress": [
+          "webhook",
+          "polling"
+        ],
+        "network": [
+          "direct",
+          "proxy"
+        ],
+        "bots": "1..2 on 512 MiB",
+        "search": [
+          "disabled"
+        ]
+      },
+      "defaults": {
+        "clock": "internal",
+        "telegramIngress": "webhook",
+        "network": "direct",
+        "bots": 2,
+        "search": "disabled"
+      },
+      "platforms": [
+        "flyio",
+        "docker-compose",
+        "systemd"
+      ],
+      "failureDomain": "single",
+      "costModel": {
+        "zh": "机器常驻计费；休眠只省内存，不省计算账单。",
+        "en": "The machine is billed resident; sleeping the worker saves RAM, never compute billing."
+      },
+      "credentialBoundary": {
+        "executorHoldsTelegramCredentials": false,
+        "hostCredentialIsolation": false,
+        "note": "One host and one filesystem; host-level isolation is absent. The resident supervisor MUST spawn the executor child with an allowlist environment: Pixiv and scheduler credentials only, never inherited BOT*_TOKEN / BOT*_CHANNEL_ID / BOT*_WEBHOOK_SECRET_TOKEN. The executor process holds no Telegram credential even though the host does."
+      },
+      "invariants": [
+        "process sleep != machine sleep; the machine is never stopped and no platform auto-stop is used",
+        "the executor always exits through its own ledger; a platform or supervisor timeout may never kill an in-flight batch",
+        "the executor exit decision reads only the executor's own state (no pending slot, no running lease, no in-flight download, no outstanding delivery)"
+      ],
+      "riskNotes": [
+        "A machine-level sleep variant existed and was deleted (commit a98c3a7): the platform inferred idleness from an idle HTTP connection while downloads were still running, and cut batches in half. This preset must not reintroduce machine stop, suspend, or platform auto-stop.",
+        "The executor and the publisher share RAM; downloader and image-processing concurrency must be hard-limited."
+      ],
+      "migration": {
+        "from": [
+          "single-host",
+          "split-worker"
+        ],
+        "to": [
+          "single-host",
+          "split-worker"
+        ]
+      }
+    },
+    "split-worker": {
+      "title": {
+        "zh": "分离执行端（当前生产）",
+        "en": "Split worker (current production)"
+      },
+      "doc": "docs/architectures/split-worker.md",
+      "status": {
+        "support": "stable",
+        "documented": true,
+        "implemented": true,
+        "tested": true,
+        "productionProven": true,
+        "evidence": [
+          "fly/deploy.telepost.toml",
+          "fly/deploy.pixivflow.toml",
+          "control-plane/",
+          "control-plane/test/deployment-contract.test.ts",
+          "control-plane/test/webhook-ownership.test.ts",
+          "scripts/verify-production.sh",
+          "scripts/smoke-pixivflow.sh"
+        ]
+      },
+      "summary": {
+        "zh": "执行端与业务端各一台机器、各一个卷；执行端平时停止，由外部时钟经平台代理唤醒，账本空了自行退出。",
+        "en": "The executor and the service each get their own machine and volume; the executor is stopped by default, woken by an external clock through the platform proxy, and exits once its ledger is empty."
+      },
+      "units": [
+        {
+          "id": "clock-edge",
+          "machines": 0,
+          "placement": "edge serverless (Cloudflare Workers)",
+          "roles": [
+            "clock"
+          ],
+          "lifecycle": "always-on",
+          "machineSleep": false,
+          "state": "none"
+        },
+        {
+          "id": "worker-machine",
+          "machines": 1,
+          "placement": "fly",
+          "roles": [
+            "executor"
+          ],
+          "lifecycle": "wake-run-exit",
+          "machineSleep": true,
+          "wakeOwner": "the trigger request through the platform proxy",
+          "stopOwner": "the executor's own ledger (exitWhenIdle)",
+          "state": "own-volume"
+        },
+        {
+          "id": "service-machine",
+          "machines": 1,
+          "placement": "fly",
+          "roles": [
+            "publisher",
+            "telegram-ingress"
+          ],
+          "lifecycle": "always-on",
+          "machineSleep": false,
+          "wakeOwner": "never sleeps",
+          "stopOwner": "never stops",
+          "state": "own-volume"
+        }
+      ],
+      "rolePlacement": {
+        "clock": {
+          "unit": "clock-edge",
+          "provider": "cloudflare",
+          "lifecycle": "always-on",
+          "state": "none",
+          "credentials": [
+            "SCHEDULER_TRIGGER_TOKEN"
+          ]
+        },
+        "executor": {
+          "unit": "worker-machine",
+          "lifecycle": "wake-run-exit",
+          "state": "own-volume",
+          "statePaths": [
+            "/app/data"
+          ]
+        },
+        "publisher": {
+          "unit": "service-machine",
+          "lifecycle": "always-on",
+          "state": "own-volume",
+          "statePaths": [
+            "/app/data/botN/"
+          ]
+        },
+        "telegram-ingress": {
+          "unit": "service-machine",
+          "lifecycle": "always-on",
+          "webhookOwner": true
+        },
+        "state": {
+          "unit": "split",
+          "layout": "own-volume",
+          "note": "two volumes, one per machine; never shared"
+        },
+        "network": {
+          "transport": "flycast",
+          "egress": "per machine",
+          "proxy": "direct or external"
+        }
+      },
+      "allowed": {
+        "clock": [
+          "cloudflare",
+          "external"
+        ],
+        "telegramIngress": [
+          "webhook",
+          "polling"
+        ],
+        "network": [
+          "direct",
+          "proxy"
+        ],
+        "bots": "1..N (service machine is memory-bound)",
+        "search": [
+          "enabled",
+          "disabled"
+        ]
+      },
+      "defaults": {
+        "clock": "cloudflare",
+        "telegramIngress": "webhook",
+        "network": "direct",
+        "bots": 2,
+        "search": "disabled"
+      },
+      "platforms": [
+        "flyio"
+      ],
+      "failureDomain": "separated",
+      "costModel": {
+        "zh": "成本主要由「执行端平时不运行」贡献；业务端常驻是秒回投稿的代价。",
+        "en": "The saving comes from the executor not running by default; the resident service machine is the price of a submit button that answers immediately."
+      },
+      "credentialBoundary": {
+        "executorHoldsTelegramCredentials": false,
+        "hostCredentialIsolation": true,
+        "note": "The executor machine and image hold no Telegram token and no channel id, so it cannot publish and cannot become a webhook owner."
+      },
+      "invariants": [
+        "no health check on the executor: a probe is a request and would wake a machine that just decided it had finished",
+        "no platform auto-stop on the executor: the proxy sees an idle HTTP connection while a 10-40 minute download is still running",
+        "restart policy is never on the executor: a process exit is the intended end of a run",
+        "force_https = false on the publisher: a 301 breaks plaintext delivery over the private network",
+        "exactly one clock; a second clock or watchdog would contend for the same Pixiv credential"
+      ],
+      "migration": {
+        "from": [
+          "single-host",
+          "single-machine-worker-sleep",
+          "remote-worker"
+        ],
+        "to": [
+          "single-host",
+          "single-machine-worker-sleep",
+          "remote-worker"
+        ]
+      }
+    },
+    "remote-worker": {
+      "title": {
+        "zh": "远端执行端",
+        "en": "Remote worker"
+      },
+      "doc": "docs/architectures/remote-worker.md",
+      "status": {
+        "support": "beta",
+        "documented": true,
+        "implemented": true,
+        "tested": false,
+        "productionProven": false,
+        "evidence": [
+          "docker-compose.yml (two-host split documented in its header)",
+          ".env.example (TELEPOST_API_BASE_URL)",
+          "fly/deploy.pixivflow.toml"
+        ]
+      },
+      "summary": {
+        "zh": "执行端与业务端不在同一台机器、也不在同一平台：两者经私网叠加网或公网 HTTPS 通信。",
+        "en": "The executor and the service live on different machines and possibly different platforms, communicating over a private overlay or public HTTPS."
+      },
+      "units": [
+        {
+          "id": "service-host",
+          "machines": 1,
+          "placement": "cloud or home",
+          "roles": [
+            "publisher",
+            "telegram-ingress"
+          ],
+          "lifecycle": "always-on",
+          "machineSleep": false,
+          "state": "own-volume"
+        },
+        {
+          "id": "executor-host",
+          "machines": 1,
+          "placement": "cloud or home (independent of service-host)",
+          "roles": [
+            "executor"
+          ],
+          "lifecycle": "wake-run-exit | always-on",
+          "machineSleep": "platform-dependent",
+          "wakeOwner": "the clock provider chosen for this deployment",
+          "stopOwner": "the executor's own ledger when wake-run-exit is used",
+          "state": "own-volume"
+        },
+        {
+          "id": "clock",
+          "machines": 0,
+          "placement": "edge serverless, the service host, or the executor host",
+          "roles": [
+            "clock"
+          ],
+          "lifecycle": "always-on",
+          "state": "none"
+        }
+      ],
+      "rolePlacement": {
+        "clock": {
+          "unit": "clock",
+          "provider": "internal | cloudflare | external",
+          "lifecycle": "always-on",
+          "state": "none"
+        },
+        "executor": {
+          "unit": "executor-host",
+          "lifecycle": "wake-run-exit | always-on",
+          "state": "own-volume"
+        },
+        "publisher": {
+          "unit": "service-host",
+          "lifecycle": "always-on",
+          "state": "own-volume"
+        },
+        "telegram-ingress": {
+          "unit": "service-host",
+          "lifecycle": "always-on",
+          "webhookOwner": true
+        },
+        "state": {
+          "unit": "split",
+          "layout": "own-volume",
+          "note": "one volume per host"
+        },
+        "network": {
+          "transport": "private-overlay | public-https",
+          "egress": "per host",
+          "proxy": "per host"
+        }
+      },
+      "placementModes": [
+        {
+          "id": "cloud-to-cloud",
+          "example": "VPS A runs TelePost, VPS B runs PixivFlow"
+        },
+        {
+          "id": "cloud-to-home",
+          "example": "Fly or a VPS runs TelePost, a home server runs PixivFlow"
+        },
+        {
+          "id": "home-to-cloud",
+          "example": "a home server runs TelePost, a cloud VPS runs PixivFlow for a different egress"
+        }
+      ],
+      "allowed": {
+        "clock": [
+          "internal",
+          "cloudflare",
+          "external"
+        ],
+        "telegramIngress": [
+          "webhook",
+          "polling"
+        ],
+        "network": [
+          "direct",
+          "proxy"
+        ],
+        "bots": "1..N (service host is memory-bound)",
+        "search": [
+          "enabled",
+          "disabled"
+        ]
+      },
+      "defaults": {
+        "clock": "internal",
+        "telegramIngress": "polling",
+        "network": "direct",
+        "bots": 2,
+        "search": "disabled"
+      },
+      "platforms": [
+        "docker-compose",
+        "systemd",
+        "flyio"
+      ],
+      "failureDomain": "separated, across a network boundary",
+      "costModel": {
+        "zh": "两个宿主各自计费；省钱来自把执行端放在便宜或已有的机器上。",
+        "en": "Two hosts are billed independently; the saving comes from putting the executor on a cheap or already-owned machine."
+      },
+      "credentialBoundary": {
+        "executorHoldsTelegramCredentials": false,
+        "hostCredentialIsolation": true,
+        "note": "The executor host holds Pixiv and submit tokens only; the relay is HTTPS or an overlay network, and the submit API is the only path into the publisher."
+      },
+      "invariants": [
+        "at most one active executor per production schedule set, whatever the host count",
+        "the transport must be authenticated: the submit API bearer token is mandatory even on a private overlay",
+        "an unqualified executor egress fails as Pixiv rate limiting; qualify the egress before trusting it"
+      ],
+      "migration": {
+        "from": [
+          "single-host",
+          "split-worker"
+        ],
+        "to": [
+          "single-host",
+          "split-worker"
+        ]
+      }
+    }
+  },
+  "featureSwitches": {
+    "clock": {
+      "values": [
+        "internal",
+        "cloudflare",
+        "external"
+      ],
+      "default": "internal",
+      "notes": "internal registers cron inside the executor process; cloudflare is the thin control-plane Worker; external is any authenticated HTTP cron."
+    },
+    "telegramIngress": {
+      "values": [
+        "webhook",
+        "polling"
+      ],
+      "default": "polling",
+      "notes": "polling needs no public ingress; webhook needs a public HTTPS endpoint or tunnel. Both expose the same api/botN/v1 surface."
+    },
+    "network": {
+      "values": [
+        "direct",
+        "proxy"
+      ],
+      "default": "direct",
+      "notes": "proxy means a bundled or external HTTP proxy for Pixiv and Telegram egress."
+    },
+    "bots": {
+      "values": "1..N",
+      "default": 2,
+      "notes": "Each bot is a supervised process with its own token, channel, review chat and database. Memory scales linearly."
+    },
+    "search": {
+      "values": [
+        "enabled",
+        "disabled"
+      ],
+      "default": "disabled",
+      "notes": "Enabling search loads a tokenizer dictionary; on a 512 MiB host this is roughly 100 MB."
+    },
+    "review": {
+      "values": [
+        "enabled"
+      ],
+      "default": "enabled",
+      "notes": "Fixed. Publishing without human approval is not a supported deployment choice, so review.enabled=false is an invalid combination rather than a switch."
+    }
+  },
+  "costDisclaimer": {
+    "zh": "进程休眠 ≠ 机器休眠；省内存 ≠ 省计算账单。",
+    "en": "Process sleep is not machine sleep, and saving RAM is not saving compute billing."
+  },
+  "platformSupport": [
+    {
+      "platform": "docker-compose",
+      "presets": [
+        "single-host",
+        "single-machine-worker-sleep",
+        "remote-worker"
+      ],
+      "doc": "docs/platforms/docker.md"
+    },
+    {
+      "platform": "flyio",
+      "presets": [
+        "single-machine-worker-sleep",
+        "split-worker",
+        "remote-worker"
+      ],
+      "doc": "docs/platforms/flyio.md"
+    },
+    {
+      "platform": "systemd",
+      "presets": [
+        "single-host",
+        "single-machine-worker-sleep",
+        "remote-worker"
+      ],
+      "doc": "docs/platforms/vps.md"
+    },
+    {
+      "platform": "cloudflare",
+      "presets": [
+        "split-worker",
+        "remote-worker"
+      ],
+      "doc": "docs/platforms/cloudflare.md"
+    }
+  ],
+  "combinationRules": {
+    "supported": [
+      {
+        "id": "internal-clock-co-located",
+        "when": "clock=internal and executor lifecycle is always-on or spawn-on-demand",
+        "why": "the process that owns the clock is resident, so a cron tick always finds a live executor"
+      },
+      {
+        "id": "external-clock-wake-run-exit",
+        "when": "clock=cloudflare|external and executor lifecycle is wake-run-exit",
+        "why": "the trigger request is what starts the machine, and the executor's own ledger stops it"
+      },
+      {
+        "id": "executor-free-download-concurrency",
+        "when": "network=proxy with a bundled proxy unit",
+        "why": "the proxy is a separate unit with its own memory budget"
+      }
+    ],
+    "supportedWithLimitations": [
+      {
+        "id": "webhook-without-public-ingress",
+        "when": "telegramIngress=webhook and no public HTTPS endpoint",
+        "limitation": "requires a tunnel or a reverse proxy; otherwise use polling"
+      },
+      {
+        "id": "many-bots-on-512m",
+        "when": "bots>=3 and any unit has a 512 MiB budget",
+        "limitation": "each bot is a process; expect OOM without a larger profile"
+      },
+      {
+        "id": "co-located-hosts",
+        "when": "preset is single-host or single-machine-worker-sleep",
+        "limitation": "hostCredentialIsolation=false: roles share host, .env and filesystem, so a co-located process can read the publisher's secret from the shared environment. The executor unit itself still receives no Telegram credential (SI-1); the supervisor spawns it with an allowlist environment."
+      }
+    ],
+    "experimental": [
+      {
+        "id": "single-machine-worker-sleep",
+        "when": "preset=single-machine-worker-sleep with any switches",
+        "why": "the preset is designed but not implemented in this repository"
+      }
+    ],
+    "invalid": [
+      {
+        "id": "wake-run-exit-without-external-clock",
+        "when": "executor lifecycle=wake-run-exit and clock=internal",
+        "why": "a stopped process cannot fire its own cron; nothing would ever wake it"
+      },
+      {
+        "id": "review-disabled",
+        "when": "review.enabled=false",
+        "why": "publication without human approval is outside the product contract"
+      },
+      {
+        "id": "search-on-512m",
+        "when": "search=enabled and a unit budget is 512 MiB, while that unit also runs PixivFlow",
+        "why": "the tokenizer dictionary plus the downloader exceed the budget"
+      },
+      {
+        "id": "bundled-proxy-on-256m",
+        "when": "network=proxy (bundled) and the profile is 256m",
+        "why": "the proxy alone consumes 50-100 MiB"
+      },
+      {
+        "id": "second-clock",
+        "when": "more than one clock provider fires the same schedule set",
+        "why": "two clocks contend for the same Pixiv credential; duplicates are idempotent, contention is not"
+      },
+      {
+        "id": "executor-with-telegram-credentials",
+        "when": "the executor unit/process holds any Telegram bot token, channel id, owner id or webhook secret, in any preset",
+        "why": "it would make the executor a candidate webhook owner and allow publishing outside review; SI-1 holds for every preset, co-location changes host isolation only"
+      },
+      {
+        "id": "overlapping-state-namespaces",
+        "when": "two roles write the same database or state namespace, even when they share one physical volume",
+        "why": "a shared physical volume with disjoint role-owned subdirectories is legal (single-host does this); overlapping namespaces make both roles recover and corrupt together and destroy failure isolation (SI-7)"
+      }
+    ]
+  },
+  "resourceProfiles": {
+    "note": "A resource profile is a separate axis from the preset. Any preset may be combined with any profile that satisfies the combination rules.",
+    "profiles": {
+      "256m": {
+        "totalBudgetMiB": 256,
+        "allocations": {
+          "publisher": "256m"
+        },
+        "disable": [
+          "executor",
+          "search",
+          "bundled proxy"
+        ],
+        "notes": "Single bot, publisher only. The executor must run elsewhere."
+      },
+      "512m": {
+        "totalBudgetMiB": 512,
+        "allocations": {
+          "publisher": "320m",
+          "executor": "192m"
+        },
+        "limits": [
+          "bots<=2",
+          "search=disabled",
+          "download.concurrency=1",
+          "no WebUI"
+        ],
+        "notes": "The default self-host budget. On the executor alone, a 512 MiB machine is the documented Fly size."
+      },
+      "1g": {
+        "totalBudgetMiB": 1024,
+        "allocations": {
+          "publisher": "512m",
+          "executor": "384m"
+        },
+        "limits": [
+          "bots<=3",
+          "download.concurrency<=2"
+        ],
+        "notes": "Search and the WebUI become possible here."
+      },
+      "2g": {
+        "totalBudgetMiB": 2048,
+        "allocations": {
+          "publisher": "768m",
+          "executor": "512m"
+        },
+        "limits": [
+          "bots<=5"
+        ],
+        "notes": "Headroom for search, the WebUI and wider download concurrency."
+      }
+    }
+  },
+  "securityInvariants": [
+    {
+      "id": "SI-1",
+      "statement": "The executor (PixivFlow) never owns or receives any Telegram bot token, channel id, owner id or webhook secret, in any preset. TelePost always owns Telegram credentials. Co-location merges hosts, never logical ownership; see hostCredentialIsolation for the deployment-fact axis.",
+      "enforcedBy": [
+        "control-plane/test/webhook-ownership.test.ts",
+        "fly/deploy.pixivflow.toml",
+        "docker-compose.yml (pixivflow service receives BOT*_SUBMIT_TOKEN only)",
+        "architecture_docs_test.go"
+      ],
+      "applies": [
+        "single-host",
+        "single-machine-worker-sleep",
+        "split-worker",
+        "remote-worker"
+      ]
+    },
+    {
+      "id": "SI-2",
+      "statement": "TelePost is the only Telegram webhook owner. Nothing in this repository registers or deletes a webhook.",
+      "enforcedBy": [
+        "control-plane/test/webhook-ownership.test.ts",
+        "scripts/verify-webhooks.sh"
+      ],
+      "applies": [
+        "all presets"
+      ]
+    },
+    {
+      "id": "SI-3",
+      "statement": "No component publishes to a channel without a human review decision.",
+      "enforcedBy": [
+        "control-plane/test/no-business-state.test.ts",
+        "docs/concepts/credentials.md"
+      ],
+      "applies": [
+        "all presets"
+      ]
+    },
+    {
+      "id": "SI-4",
+      "statement": "At most one active production execution exists per Pixiv credential.",
+      "enforcedBy": [
+        "docs/concepts/scheduling.md",
+        "docs/concepts/credentials.md"
+      ],
+      "applies": [
+        "all presets"
+      ]
+    },
+    {
+      "id": "SI-5",
+      "statement": "The executor's stop decision is owned by the executor's own ledger, never by a platform probe.",
+      "enforcedBy": [
+        "fly/deploy.pixivflow.toml",
+        "docs/concepts/lifecycle.md"
+      ],
+      "applies": [
+        "split-worker",
+        "single-machine-worker-sleep",
+        "remote-worker with wake-run-exit"
+      ]
+    },
+    {
+      "id": "SI-6",
+      "statement": "Business code must not branch on the deployment platform.",
+      "enforcedBy": [
+        "AGENTS.md"
+      ],
+      "applies": [
+        "all presets"
+      ]
+    },
+    {
+      "id": "SI-7",
+      "statement": "State namespaces owned by different roles must never overlap: a shared physical volume is legal only when each role writes a disjoint subdirectory it alone owns (e.g. ./data/pixivflow/** vs ./data/bot1/**). Two roles writing the same database or state namespace is invalid in every preset.",
+      "enforcedBy": [
+        "docker-compose.yml volume mounts",
+        "docs/concepts/state.md",
+        "architecture_docs_test.go"
+      ],
+      "applies": [
+        "single-host",
+        "single-machine-worker-sleep",
+        "split-worker",
+        "remote-worker"
+      ]
+    }
+  ],
+  "productionTopology": {
+    "canonicalPreset": "split-worker",
+    "canonicalDoc": "docs/architectures/split-worker.md",
+    "canonicalSentence": "**这是 Fly.io 上推荐的部署拓扑，但不是唯一的部署拓扑。**",
+    "note": "Exactly one file may state the recommended production topology, and that statement must also say it is not the only one. No file may claim to be the only production topology.",
+    "exclusiveClaimPattern": "唯一.{0,6}(生产|部署)拓扑|the only .{0,30}(production|deployment) topology|生产拓扑只有一种|只有一种(生产|部署)拓扑",
+    "prohibitionContextAllowlist": [
+      "AGENTS.md",
+      "docs/reference/deployment-contract.md",
+      "docs/en/reference/deployment-contract.md"
+    ],
+    "negationMarkers": [
+      "不是",
+      "并非",
+      "不存在",
+      "禁止",
+      "不得",
+      "勿",
+      "not ",
+      "never ",
+      "non-"
+    ]
+  },
+  "documentation": {
+    "primaryLanguage": "zh",
+    "translationPolicy": "Chinese is authoritative. English pages are a maintained mirror for the mirrored set below; every mirrored page must have both a Chinese and an English file at the same path.",
+    "rootMirror": {
+      "README.md": "README.en.md"
+    },
+    "mirroredRule": "Every file under docs/en/ must have a Chinese counterpart at the same path under docs/, and every path listed in mirroredPages must exist in both trees.",
+    "mirroredPages": [
+      "README.md",
+      "getting-started/choose-architecture.md",
+      "getting-started/quickstart.md",
+      "architectures/overview.md",
+      "architectures/single-host.md",
+      "architectures/single-machine-worker-sleep.md",
+      "architectures/split-worker.md",
+      "architectures/remote-worker.md",
+      "reference/deployment-contract.md",
+      "platforms/docker.md",
+      "platforms/vps.md",
+      "platforms/flyio.md",
+      "platforms/cloudflare.md",
+      "platforms/proxy.md",
+      "download.md"
+    ],
+    "movedPages": {
+      "docs/ARCHITECTURE.md": "docs/concepts/roles.md",
+      "docs/SCENARIOS.md": "docs/platforms/docker.md",
+      "docs/POLLING.md": "docs/platforms/docker.md",
+      "docs/WEBHOOK.md": "docs/platforms/docker.md",
+      "docs/MIHOMO.md": "docs/platforms/proxy.md",
+      "docs/MULTI-BOT.md": "docs/operations/multi-bot.md",
+      "docs/SCHEDULING.md": "docs/concepts/scheduling.md",
+      "docs/PERFORMANCE.md": "docs/operations/performance.md",
+      "docs/REMOTE_UPDATES.md": "docs/operations/upgrades.md",
+      "docs/CREDENTIAL-HANDLING.md": "docs/concepts/credentials.md",
+      "docs/en/SCENARIOS.md": "docs/en/platforms/docker.md",
+      "docs/en/POLLING.md": "docs/en/platforms/docker.md",
+      "docs/en/WEBHOOK.md": "docs/en/platforms/docker.md",
+      "docs/en/MIHOMO.md": "docs/en/platforms/proxy.md"
+    }
+  }
+}

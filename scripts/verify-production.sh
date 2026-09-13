@@ -62,7 +62,7 @@ if app_present "$pixivflow_app"; then
   pixivflow_exists=true
   ok "Fly 应用 ${pixivflow_app} 存在"
 else
-  fail "Fly 应用 ${pixivflow_app} 不存在：执行端尚未创建（见 docs/ARCHITECTURE.md 拓扑）"
+  fail "Fly 应用 ${pixivflow_app} 不存在：执行端尚未创建（见 docs/architectures/split-worker.md 拓扑）"
 fi
 if app_present "$telepost_app"; then
   telepost_exists=true
