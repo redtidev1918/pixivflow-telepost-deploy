@@ -37,9 +37,11 @@ type archMatrix struct {
 		SearchMode      []string `json:"searchMode"`
 	} `json:"enums"`
 	Presets map[string]struct {
-		Title     map[string]string `json:"title"`
-		Platforms []string          `json:"platforms"`
-		Defaults  struct {
+		Title          map[string]string `json:"title"`
+		PlatformStatus map[string]struct {
+			Status string `json:"status"`
+		} `json:"platformStatus"`
+		Defaults struct {
 			Clock             string `json:"clock"`
 			TelegramIngress   string `json:"telegramIngress"`
 			Network           string `json:"network"`
@@ -151,6 +153,25 @@ type finding struct {
 	Text   string
 }
 
+// defaultPlatform 选实现程度最高的平台；同档按字母序，保证结果稳定。
+// 平台是独立维度：某个 preset 完全可能 compose 已实现、Fly 还是 planned。
+func defaultPlatform(status map[string]struct {
+	Status string `json:"status"`
+}) string {
+	rank := map[string]int{"stable": 0, "beta": 1, "planned": 2, "not-implemented": 3}
+	best, bestScore := "", 99
+	for name, entry := range status {
+		score, ok := rank[entry.Status]
+		if !ok {
+			score = 4
+		}
+		if score < bestScore || (score == bestScore && (best == "" || name < best)) {
+			best, bestScore = name, score
+		}
+	}
+	return best
+}
+
 // defaultManifest 用矩阵里该 preset 的默认值构造一份 manifest。
 func defaultManifest(mx *archMatrix, preset string) DeploymentManifest {
 	p := mx.Presets[preset]
@@ -170,8 +191,10 @@ func defaultManifest(mx *archMatrix, preset string) DeploymentManifest {
 	if m.ManifestVersion == 0 {
 		m.ManifestVersion = 1
 	}
-	if len(p.Platforms) > 0 {
-		m.Platform = p.Platforms[0]
+	// 默认平台取实现程度最高的那个（stable > beta > planned），同档按字母序：
+	// 平台是独立维度，某个 preset 完全可能 compose 已实现、Fly 还是 planned。
+	if platform := defaultPlatform(p.PlatformStatus); platform != "" {
+		m.Platform = platform
 	}
 	if m.Switches.Review == "" {
 		m.Switches.Review = "enabled"

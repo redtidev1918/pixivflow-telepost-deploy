@@ -17,13 +17,24 @@ services:
     # 同一个服务名、同一个卷、同一个网络：换的只是运行这个角色的镜像与进程模型。
     # 镜像里 ENTRYPOINT 就是 supervisor，CMD 会被忽略，因此不需要额外的 command。
     image: ${WORKER_SLEEP_IMAGE:-ghcr.io/redtidev1918/pixivflow-sleep:latest}
+    # 触发入口必须真的能被容器外调用到：容器内的 127.0.0.1 只有容器自己可见，宿主机、
+    # 宿主 cron/systemd timer 都到不了。所以 supervisor 监听容器网络地址，再由 compose 把
+    # 它只发布到宿主机 loopback —— 暴露面精确等于「宿主机本地」，不是公网。
+    ports:
+      # host 侧只绑 127.0.0.1；8090:8090 里的容器端口是 supervisor 的对外端口。
+      - "127.0.0.1:${WORKER_SLEEP_TRIGGER_PORT:-8090}:8090"
     environment:
       # supervisor 常驻占住对外触发端口，executor 子进程用另一个端口，由它转发。
-      SUPERVISOR_LISTEN: 127.0.0.1:8090
+      # 不用 network_mode: host：那会把容器直接塞进宿主网络栈，同时丢掉服务名解析
+      # （executor 投递走的是 http://telepost:8080 容器网络地址）。
+      SUPERVISOR_LISTEN: 0.0.0.0:8090
+      # 子进程端口只在同一个容器内可见，**永远不发布**。
       SUPERVISOR_CHILD_TRIGGER: 127.0.0.1:8091
       # 子进程命令必须与基础镜像的 scheduler 入口一致，且必须是单条命令：
       # supervisor 用 `sh -c "exec <cmd>"` 启动，不留包装 shell。
-      SUPERVISOR_CHILD_CMD: node dist/index.js scheduler
+      # 可覆盖：默认就是基础镜像的 scheduler 入口。冒烟脚本用一个假实现顶替它，
+      # 运维在排查时也能临时替换；写死会让人没法在不改仓库的情况下验证链路。
+      SUPERVISOR_CHILD_CMD: ${SUPERVISOR_CHILD_CMD:-node dist/index.js scheduler}
       # 触发令牌：supervisor 用它鉴权（没有它 supervisor 拒绝启动），子进程也会用自己的
       # 副本再校验一次。未配置时 fail-closed，不会因为一次探测就拉起进程。
       SCHEDULER_TRIGGER_TOKEN: ${SCHEDULER_TRIGGER_TOKEN:-}

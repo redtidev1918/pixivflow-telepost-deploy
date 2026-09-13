@@ -32,10 +32,11 @@
 ```text
 Machine (always on)
 │
+├─ 宿主本地时钟（systemd timer / cron）                  外部，无需云服务
+│
 ├─ 容器 telepost（上游 TelePost 镜像，本 preset 不改它）   always-on
 │    ├─ publisher                                       always-on
-│    ├─ telegram-ingress                                always-on
-│    └─ clock(internal)                                 always-on / 极小
+│    └─ telegram-ingress                                always-on
 │
 ├─ 容器 pixivflow-sleep（本仓库镜像 docker/worker-sleep.Dockerfile）  always-on
 │    └─ supervisor（本仓库 supervisor/）                 always-on
@@ -57,7 +58,8 @@ supervisor 拉起的子进程。业务侧仍是未经修改的上游 TelePost �
 两个 Bot 共享同一个常驻 `publisher`，因此 Bot 数量增加时只增加 `publisher` 侧的 Python
 子进程数，不增加机器数。
 
-`executor` 与 `publisher` 经 `loopback-http` 通信，不经过任何代理、overlay 或公网。
+`executor` 与 `publisher` 走**平台内传输**（compose 是容器网络的服务名，systemd 是回环），
+不经过任何代理、overlay 或公网。具体地址见下面的「网络」一节。
 
 ---
 
@@ -84,8 +86,26 @@ supervisor 拉起的子进程。业务侧仍是未经修改的上游 TelePost �
 | --- | --- | --- | --- |
 | `publisher` | `always-on` | 不适用 | 永不停止 |
 | `telegram-ingress` | `always-on` | 不适用 | 永不停止 |
-| `clock` | `always-on` | 不适用 | 不适用 |
+| `clock` | **外部**（宿主 `systemd timer` / `cron`） | 不适用 | 不适用 |
 | `executor` | `spawn-on-demand` | supervisor 在触发到来时 spawn | **`executor` 自己的账本**（`exitWhenIdle`） |
+
+**时钟目前是宿主机本地的外部时钟，不是进程内 cron。** supervisor 没有实现 cron，所以
+`clock=internal` 在这个 preset 下仍属**设计**，不得写成已实现；等 supervisor 自己具备 cron
+能力时再单独标注。这也意味着这个 preset 不依赖 Cloudflare 或任何云服务——`systemd timer`
+或 `cron` 就够了：
+
+```text
+systemd timer / cron
+        │  POST http://127.0.0.1:8090/internal/schedules/{id}/run
+        ▼
+supervisor（常驻，占住 8090）
+        │  鉴权通过才 spawn，并转发到 127.0.0.1:8091
+        ▼
+executor 子进程（按需存在）
+        │  投递：容器网络 http://telepost:8080/api/bot{N}/v1/submissions
+        ▼
+publisher（常驻）
+```
 
 ```text
 无任务                    有触发
@@ -147,14 +167,29 @@ supervisor 拉起的子进程。业务侧仍是未经修改的上游 TelePost �
 
 ## 网络
 
-| 项目 | 取值 |
-| --- | --- |
-| `executor` → `publisher` | `loopback-http`，`http://127.0.0.1:8080/api/bot{N}/v1/submissions` |
-| 触发入站 | `supervisor` 常驻占住的端口 8090（仅回环可见），由它转发给子进程 |
-| `telegram-ingress` | `webhook`（公网 HTTPS）或 `polling`（无入站） |
-| 出口 | `direct` 或 `proxy`；512 MiB 机器优先外部代理 |
+**投递走哪个传输取决于平台形态**，不要把它写成无条件的回环：
 
-回环投递不经过 proxy，因此**不重置任何平台的空闲计时**。这不是本 preset 的依赖项
+| 项目 | Compose 形态（已实现） | systemd 形态（计划） | Fly 形态 |
+| --- | --- | --- | --- |
+| `executor` → `publisher` | **容器网络** `http://telepost:8080/api/bot{N}/v1/submissions` | 回环 `http://127.0.0.1:8080` | 未实现 |
+| 触发入站 | 宿主 `127.0.0.1:8090` → supervisor | 同左 | 未实现 |
+| supervisor → `executor` 子进程 | 容器内回环 `127.0.0.1:8091`（**永不发布**） | 同左 | 未实现 |
+| `telegram-ingress` | `webhook`（公网 HTTPS）或 `polling`（无入站） | 同左 | 未实现 |
+| 出口 | `direct` 或 `proxy`；512 MiB 机器优先**外部**代理 | 同左 | 未实现 |
+
+**三个地址不要混淆**：
+
+```text
+宿主 127.0.0.1:8090        compose 只把 supervisor 的 8090 发布到宿主 loopback；
+                           8091 永远不发布，只存在于 worker-sleep 容器内部
+容器 telepost:8080         executor 投递的目标：容器网络里的服务名，不是 127.0.0.1
+容器内 127.0.0.1:8091      supervisor 转发给子进程的地址
+```
+
+Compose 形态下投递不走宿主机回环：两个角色在两个容器里，服务名解析是唯一正确的地址。
+回环投递只适用于「两个角色都是同一台机器上的普通进程」的 systemd 形态。
+
+投递不经过 proxy，因此**不重置任何平台的空闲计时**。这不是本 preset 的依赖项
 （本 preset 不依赖任何平台停机机制），但在排查「投递后机器行为异常」时是有用的事实。
 
 ---
@@ -224,7 +259,27 @@ supervisor 拉起的子进程。业务侧仍是未经修改的上游 TelePost �
 | 执行侧容器镜像 | **已实现**（CI 构建） | `docker/worker-sleep.Dockerfile` |
 | compose 形态（覆盖层） | **已实现并有校验** | `docker-compose.worker-sleep.yml` |
 | Fly / systemd 形态 | 缺失 | —— |
-| 部署步骤 | 仍是设计 | 本页 |
+| 部署步骤 | compose 形态可用；其余仍是设计 | 本页 |
+
+### 平台状态与晋级规则（两个独立维度）
+
+| 平台 | 状态 | 产物 |
+| --- | --- | --- |
+| `docker-compose` | **beta**（已实现 + CI 校验；端到端验收未跑） | `docker-compose.worker-sleep.yml` + `docker/worker-sleep.Dockerfile` |
+| `systemd` | planned | —— |
+| `flyio` | planned | —— |
+
+**preset 的实现状态不等于「所有平台都做完」。** 规则是：至少一条官方部署路径走完
+`documented → implemented → CI 验证 → 端到端验收` 之后，preset 才可以
+`implemented=true`、`support=beta`。目前它停在**端到端验收**这一格：compose 形态已实现并有 CI
+校验，但还没有在真实 512 MiB 主机上跑过两轮完整验收，所以矩阵仍写 `implemented=false`。
+
+端到端验收的可执行清单（含要记录的内存量与判定标准）见
+[worker-sleep 端到端验收](../operations/worker-sleep-acceptance.md)。**没跑完它就不要改状态字段。**
+
+Fly 形态**不是**把 compose 的两个容器搬成一份新配置：它要求**一台 Fly Machine、一个镜像**里
+同时跑 TelePost、常驻 supervisor 与按需的 PixivFlow 子进程。那需要先有 combined worker-sleep
+runtime，否则新增的配置会变成第二台 Machine，preset 名字就不成立了。
 
 supervisor 已经能做的事，都有真实子进程的测试守护：
 

@@ -33,10 +33,11 @@ If the goal is **lowering the compute bill**, this preset cannot help; go to
 ```text
 Machine (always on)
 │
+├─ host-local clock (systemd timer / cron)                  external, no cloud service needed
+│
 ├─ container telepost (upstream TelePost image; this preset does not change it)  always-on
 │    ├─ publisher                                                               always-on
-│    ├─ telegram-ingress                                                        always-on
-│    └─ clock(internal)                                                         always-on / tiny
+│    └─ telegram-ingress                                                        always-on
 │
 ├─ container pixivflow-sleep (this image: docker/worker-sleep.Dockerfile)        always-on
 │    └─ supervisor (this repository's supervisor/)                              always-on
@@ -61,8 +62,9 @@ does not implement business logic.
 Both bots share the same resident `publisher`, so adding bots only adds Python child processes on the
 `publisher` side, not machines.
 
-`executor` and `publisher` communicate over `loopback-http`, never through a proxy, an overlay or
-the public internet.
+`executor` and `publisher` communicate over the **platform's own transport** (the container-network
+service name on compose, loopback on systemd), never through a proxy, an overlay or the public
+internet. The exact addresses are in the Network section below.
 
 ---
 
@@ -89,8 +91,26 @@ processing concurrency must be hard-limited rather than left to the operating sy
 | --- | --- | --- | --- |
 | `publisher` | `always-on` | not applicable | never stops |
 | `telegram-ingress` | `always-on` | not applicable | never stops |
-| `clock` | `always-on` | not applicable | not applicable |
+| `clock` | **external** (host `systemd timer` / `cron`) | not applicable | not applicable |
 | `executor` | `spawn-on-demand` | the supervisor spawns it when a trigger arrives | **the `executor`'s own ledger** (`exitWhenIdle`) |
+
+**The clock is a host-local external timer today, not an in-process cron.** The supervisor implements no
+cron, so `clock=internal` is still a **design** here and must not be described as implemented until it
+is. It also means this preset needs no Cloudflare or any cloud service — a `systemd timer` or `cron`
+is enough:
+
+```text
+systemd timer / cron
+        │  POST http://127.0.0.1:8090/internal/schedules/{id}/run
+        ▼
+supervisor (resident, owns 8090)
+        │  spawns only after authentication, then forwards to 127.0.0.1:8091
+        ▼
+executor child process (exists on demand)
+        │  delivers over the container network: http://telepost:8080/api/bot{N}/v1/submissions
+        ▼
+publisher (resident)
+```
 
 ```text
 no work                    trigger
@@ -166,10 +186,29 @@ corrupting the whole volume still hits both roles.
 
 ## Network
 
-| Item | Value |
-| --- | --- |
-| `executor` → `publisher` | `loopback-http`, `http://127.0.0.1:8080/api/bot{N}/v1/submissions` |
-| Trigger ingress | port 8090, held resident by the `supervisor` (loopback only), which forwards to the child |
+**Which transport delivery uses depends on the platform form**; do not state it as unconditionally loopback:
+
+| Item | Compose form (implemented) | systemd form (planned) | Fly form |
+| --- | --- | --- | --- |
+| `executor` → `publisher` | **container network** `http://telepost:8080/api/bot{N}/v1/submissions` | loopback `http://127.0.0.1:8080` | not implemented |
+| Trigger ingress | host `127.0.0.1:8090` → supervisor | same | not implemented |
+| supervisor → `executor` child | container loopback `127.0.0.1:8091` (**never published**) | same | not implemented |
+| `telegram-ingress` | `webhook` (public HTTPS) or `polling` | same | not implemented |
+| Egress | `direct` or `proxy`; prefer an **external** proxy on a 512 MiB machine | same | not implemented |
+
+**Three addresses that must not be conflated:**
+
+```text
+host 127.0.0.1:8090        compose publishes only the supervisor's 8090, to host loopback;
+                           8091 is never published and exists only inside the worker-sleep container
+container telepost:8080    what the executor delivers to: the service name on the container network,
+                           not 127.0.0.1
+in-container 127.0.0.1:8091  where the supervisor forwards to the child
+```
+
+In the compose form delivery is not host loopback: the two roles live in two containers, so the service
+name is the only correct address. Loopback delivery applies only to the systemd form, where both roles
+are plain processes on one host.
 | `telegram-ingress` | `webhook` (public HTTPS) or `polling` (no ingress) |
 | Egress | `direct` or `proxy`; on a 512 MiB machine prefer an external proxy |
 
@@ -253,6 +292,25 @@ hardest kind to debug.
 | Execution-side container image | **implemented** (built in CI) | `docker/worker-sleep.Dockerfile` |
 | Compose form (overlay) | **implemented and validated** | `docker-compose.worker-sleep.yml` |
 | Fly / systemd form | missing | — |
+
+### Platform status and the promotion rule (two independent dimensions)
+
+| Platform | Status | Artifacts |
+| --- | --- | --- |
+| `docker-compose` | **beta** (implemented and CI-validated; end-to-end acceptance not run) | `docker-compose.worker-sleep.yml` + `docker/worker-sleep.Dockerfile` |
+| `systemd` | planned | — |
+| `flyio` | planned | — |
+
+**A preset's implementation status is not "every platform is done".** The rule is that after at least
+one official deployment path completes `documented → implemented → CI-validated → end-to-end
+accepted`, the preset may become `implemented=true` with `support=beta`. Today it stops at the
+end-to-end step: the compose form is implemented and CI-validated, but two full rounds have not been
+run on a real 512 MiB host, so the matrix still says `implemented=false`.
+
+The Fly form is **not** the compose two-container arrangement moved into a new config file: it
+requires **one Fly Machine and one image** running TelePost, the resident supervisor and the
+on-demand child together. That needs a combined worker-sleep runtime first; otherwise the added
+config would be a second Machine and the preset's name would stop being true.
 | Deployment steps | still a design | this page |
 
 What the supervisor already does is guarded by tests that spawn real child processes:
