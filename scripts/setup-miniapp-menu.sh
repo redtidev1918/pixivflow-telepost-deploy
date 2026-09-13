@@ -12,16 +12,14 @@ require() { : "${!1:?需要环境变量 $1}"; }
 require BOT1_TOKEN
 : "${MINIAPP_URL:?需要 MINIAPP_URL 环境变量}"
 
-for i in 1; do
-  token_var="BOT${i}_TOKEN"
-  token="${!token_var:-}"
-  [ -n "$token" ] || continue
-  echo "==> 配置 bot${i} 的 Mini App menu button: $MINIAPP_URL"
+token="${BOT1_TOKEN:-}"
+if [ -n "$token" ]; then
+  echo "==> 配置 bot1 的 Mini App menu button: $MINIAPP_URL"
   curl -sS -f -m 20 \
     "https://api.telegram.org/bot${token}/setChatMenuButton" \
     -H 'Content-Type: application/json' \
     -d "{\"menu_button\":{\"type\":\"web_app\",\"text\":\"🖥 打开 TelePost\",\"web_app\":{\"url\":\"${MINIAPP_URL}\"}}}"
   echo
-done
+fi
 
 echo "完成。菜单按钮已设置（private chat 永久入口）。"
