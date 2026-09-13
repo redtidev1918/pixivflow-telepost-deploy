@@ -129,7 +129,8 @@ stopped（省钱，健康 idle）
 | TelePost 每 Bot SQLite | `data` 卷 `/app/data/bot{N}/` | 投稿幂等与审核队列丢失 |
 | TelePost 运行策略覆盖 | `data/bot{N}/runtime-policy.json` | 回落到 `[env]` 部署默认值 |
 
-**两个卷，一机一个，永不共享。** 卷就是状态边界，也是故障边界。
+**两个卷，一机一个。** 物理卷在这里天然分离；这是主机级隔离最强的形态。注意跨 preset 的不变量
+是**状态命名空间不重叠（SI-7）**，不是「物理卷绝不共享」——共置 preset 共享物理卷但子目录互不相交。
 
 > **路径规则（commit `71b4c7c`）：** 配置里 `PIXIV_DOWNLOADER_CONFIG` 必须是绝对路径
 > （`/app/config/pixivflow.production.json`，随镜像发布），而配置里的**存储路径**必须保持
@@ -280,5 +281,6 @@ cd control-plane && npx wrangler secret put SCHEDULER_TRIGGER_TOKEN && npx wrang
 | `executor` 是否可停 | 否（常驻容器） | 是（进程） | 是（机器） | 视平台 |
 | 省内存 | 否 | **是** | 部分 | 部分 |
 | 省计算账单 | 否 | **否** | **是** | 是 |
-| 凭据边界成立 | 否 | 否 | **是** | **是** |
+| 主机级凭据隔离（`hostCredentialIsolation`） | 否 | 否 | **是** | **是** |
+| executor 持有 Telegram 凭据（SI-1） | **否** | **否** | **否** | **否** |
 | 需要外部时钟 | 否 | 可选 | 需要（`cloudflare`/`external`） | 可选 |

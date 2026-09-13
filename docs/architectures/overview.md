@@ -49,12 +49,12 @@
 
 角色 id 与 `docs/concepts/roles.md` 一致：`clock`、`executor`、`publisher`、`telegram-ingress`、`state`、`network`。
 
-| Preset | `clock` | `executor` | `publisher` | `telegram-ingress` | 状态布局 | 执行端是否持有 Telegram 凭据 |
-| --- | --- | --- | --- | --- | --- | --- |
-| `single-host` | 机器内 `internal` | 同机容器，常驻 | 同机容器，常驻 | 同机，webhook 或 polling | 一个卷，按角色分子目录 | **是**（边界不成立） |
-| `single-machine-worker-sleep` | 机器内 `internal` | 同机子进程，按需 | 同机，常驻 | 同机，webhook 或 polling | 一个卷，按角色分子目录 | **是**（边界不成立） |
-| `split-worker` | Cloudflare（`cloudflare`） | 独立机器，`wake-run-exit` | 独立机器，常驻 | 业务机上，webhook 或 polling | 两个卷，一机一个 | 否 |
-| `remote-worker` | `internal` / `cloudflare` / `external` | 独立主机，`wake-run-exit` 或常驻 | 独立主机，常驻 | 业务机上，webhook 或 polling | 每个主机一个卷 | 否 |
+| Preset | `clock` | `executor` | `publisher` | `telegram-ingress` | 状态布局 | executor 持有 Telegram 凭据（SI-1） | 主机级凭据隔离 |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| `single-host` | 机器内 `internal` | 同机容器，常驻 | 同机容器，常驻 | 同机，webhook 或 polling | 共享卷，角色子目录互不相交 | **否** | **否** |
+| `single-machine-worker-sleep` | 机器内 `internal` | 同机子进程，按需 | 同机，常驻 | 同机，webhook 或 polling | 共享卷，角色子目录互不相交 | **否** | **否** |
+| `split-worker` | Cloudflare（`cloudflare`） | 独立机器，`wake-run-exit` | 独立机器，常驻 | 业务机上，webhook 或 polling | 两个卷，一机一个 | **否** | **是** |
+| `remote-worker` | `internal` / `cloudflare` / `external` | 独立主机，`wake-run-exit` 或常驻 | 独立主机，常驻 | 业务机上，webhook 或 polling | 每个主机一个卷 | **否** | **是** |
 
 **共置是物理事实，不是语义合并。** 即使 `single-host` 把两个角色放进同一台机器，
 `executor` 也不因此获得审核或发布权，`publisher` 也不因此获得 Pixiv 登录或槽位调度权。
@@ -97,9 +97,7 @@
 | --- | --- |
 | `telegramIngress=webhook` 但没有公网 HTTPS 入口 | 需要隧道或反向代理；否则改用 polling |
 | `bots>=3` 且某个单元预算 512 MiB | 每个 Bot 一个进程，内存线性增长，不升级档位会 OOM |
-| `single-host` / `single-machine-worker-sleep` | 执行端持有 Telegram 凭据；split-worker 的凭据边界不适用 |
-| 执行端 `wake-run-exit` 却用 `clock=internal` | 运行时不成立。列在这里是因为它是最常见的误配，排查时应优先检查 |
-
+| `single-host` / `single-machine-worker-sleep` | 主机级凭据隔离不成立（同机共享环境）；executor 单元仍不接收 Telegram 凭据（SI-1 全局成立） |
 ### EXPERIMENTAL
 
 | 条件 | 说明 |
@@ -112,11 +110,11 @@
 | --- | --- |
 | 执行端 `wake-run-exit` + `clock=internal` | 停止的进程无法触发自己的 cron，没有任何东西会唤醒它 |
 | `review.enabled=false` | 未经人工批准就发布，超出产品契约 |
-| `executor` 与 `publisher` 共用一个状态卷 | 卷就是状态边界；共用会让两个角色一起可恢复，故障隔离消失 |
+| 两个角色写同一个状态命名空间（即使共用物理卷） | 共享物理卷 + 互不相交的角色子目录合法；命名空间重叠才非法（SI-7） |
 | `search=enabled` 且同一单元同时跑执行端、预算 512 MiB | 分词词典加下载器超出预算 |
 | 内置代理 + `256m` 档 | 代理本身就要 50–100 MiB |
 | 同一套 schedule 有两个时钟在触发 | 重复触发是幂等的，凭据争用不是 |
-| `split-worker` 下执行端持有任何 Telegram 令牌或频道 ID | 它就会成为 webhook owner 候选，并能绕过审核发布 |
+| 任何 preset 下 executor 持有 Telegram 令牌/频道 ID/webhook secret | 它就会成为 webhook owner 候选，并能绕过审核发布（SI-1 全局成立） |
 
 ---
 

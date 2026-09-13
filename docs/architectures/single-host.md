@@ -129,8 +129,9 @@ pixivflow 在设置了 `SCHEDULER_TRIGGER_TOKEN` 时探测触发端口。
 
 - **单故障域。** 任一角色 OOM 或崩溃都与另一个角色共享机器、内存与启动脚本。
 - **`executor` 与 `publisher` 争内存。** 512 MiB 档必须严格限制下载并发，否则一方被 OOM kill。
-- **`executor` 持有 Telegram 凭据。** 两个角色共用一台机器和一个卷，split-worker 的凭据边界
-  在这里**不成立**。想获得该边界只能换成 [`split-worker`](split-worker.md) 或 [`remote-worker`](remote-worker.md)。
+- **主机级凭据隔离不成立。** 两个角色共用一台机器、一份 `.env` 和一个卷；同机进程理论上能读到
+  业务端的 secret。但 executor 单元在结构上仍不持有 Telegram 凭据：compose 只给 pixivflow 传
+  `BOT*_SUBMIT_TOKEN`（SI-1 全局成立）。需要主机级隔离只能换 [`split-worker`](split-worker.md) 或 [`remote-worker`](remote-worker.md)。
 - **没有省钱机制。** 机器常驻计费，空闲不省钱。
 
 ---

@@ -139,9 +139,11 @@ defect.**
 | Download cache and metadata | relative paths under `data/pixivflow/` | Must be relative paths, see below |
 | Delivery outbox | same, files referenced by a manifest | Survives `executor` process restarts |
 
-**One volume, one subdirectory per role.** The statement "the volume is the state boundary" has a
-price here: both roles use the same volume, so the `executor` corrupting a directory affects the
-`publisher`. Accepting that price is a premise of this preset.
+**One physical volume, two disjoint role namespaces (SI-7).** TelePost writes `data/bot{N}/`
+only; the executor writes `data/pixivflow/` only, and when the supervisor spawns it, only its own
+namespace is exposed to the child. Overlapping namespaces are the invalid combination; sharing the
+physical volume itself is legal. What remains a single failure domain is the physical volume:
+corrupting the whole volume still hits both roles.
 
 > **Path rule (the lesson of commit `71b4c7c`):** the PixivFlow configuration loader rewrites any
 > absolute path that falls outside the directory containing the configuration file back to its own
@@ -188,9 +190,12 @@ it is a useful fact when debugging "the machine behaves oddly after a delivery".
 - **Memory contention while downloading.** Download concurrency and image processing concurrency
   must be hard-limited, otherwise OOM lands on the `publisher` and what the user sees is a broken
   submission bot.
-- **The `executor` holds Telegram credentials** (same machine, same filesystem). Isolation rests
-  only on the convention that the supervisor passes Pixiv credentials to the child — it is **not**
-  a structural guarantee.
+- **Host credential isolation does not hold** (matrix field `hostCredentialIsolation=false`; same machine, same filesystem), but the executor
+  process **holds no** Telegram credential (SI-1 holds for every preset). Isolation rests on the
+  supervisor's **environment allowlist**: when it spawns the executor it passes only Pixiv and
+  scheduler credentials (`PIXIV_*`, `SCHEDULER_TRIGGER_TOKEN`, `TELEPOST_BOT*_SUBMIT_TOKEN`) and
+  never inherits `BOT*_TOKEN` / `BOT*_CHANNEL_ID` / `BOT*_WEBHOOK_SECRET_TOKEN`. A test guarding
+  that allowlist must exist before this preset may be marked implemented.
 - **`review` and `publish` are unprotected.** The `split-worker` property "an executor crash/OOM
   does not affect Telegram" does not hold here.
 - **Not implemented today.** No configuration or code in this repository implements this process

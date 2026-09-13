@@ -8,16 +8,17 @@
 ## 一句话契约
 
 **执行端只有一条出口：把完成的作品投递到业务端的投稿接口。** 它不能发布到频道、不能注册
-webhook、不能携带 Telegram 令牌或频道 ID。矩阵 `SI-1` 把它写成不变量：
+webhook、不能携带 Telegram 令牌或频道 ID。矩阵 `SI-1` 把它写成对**所有 preset** 成立的不变量：
 
 ```
-split-worker executor holds no Telegram bot token and no channel id.
+The executor never owns or receives any Telegram bot token or channel id, in any preset.
 ```
 
-在 `split-worker` 与 `remote-worker` 下这条边界强制成立；在 `single-host` 与
-`single-machine-worker-sleep` 下，执行端与业务端共用一台机器，凭据边界**不成立**——这是一条
-**已记录的部署限制**（矩阵 `combinationRules.supportedWithLimitations.co-located-roles`），
-不是「所以可以把审核逻辑拿进来顺手做掉」的许可（见 [roles.md](./roles.md)）。
+`single-host` 的 compose 配置用结构保证它：pixivflow 服务只收到 `BOT*_SUBMIT_TOKEN`（投稿接口
+令牌），收不到 `BOT*_TOKEN` / `BOT*_CHANNEL_ID`。`single-machine-worker-sleep` 的设计要求
+supervisor 用环境白名单 spawn executor 子进程，同样不继承 Telegram secret。变化的只是主机级隔离
+（共置 preset 的 `hostCredentialIsolation=false`），不是 executor 的所有权
+（见 [roles.md](./roles.md)）。
 
 ## 协议：标准 multipart，不依赖私有协议
 

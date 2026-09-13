@@ -141,9 +141,11 @@ Full inventory and backup rules: [state.md (中文)](/concepts/state.md) and
   startup scripts with the other role.
 - **`executor` and `publisher` compete for memory.** The 512 MiB profile must hard-limit download
   concurrency, or one side gets OOM-killed.
-- **The `executor` holds Telegram credentials.** Both roles share one machine and one volume, so
-  the split-worker credential boundary **does not hold** here. The only way to get that boundary is
-  to move to [`split-worker`](split-worker.md) or [`remote-worker`](remote-worker.md).
+- **Host credential isolation does not hold.** Both roles share one machine, one `.env` and one
+  volume, so a co-located process could in principle read the publisher's secret. The executor unit
+  still structurally holds no Telegram credential: compose passes `BOT*_SUBMIT_TOKEN` to the
+  pixivflow service only (SI-1 holds for every preset). For host-level isolation, move to
+  [`split-worker`](split-worker.md) or [`remote-worker`](remote-worker.md).
 - **No saving mechanism.** The machine is billed resident; being idle saves nothing.
 
 ---

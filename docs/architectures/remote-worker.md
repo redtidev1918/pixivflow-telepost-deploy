@@ -241,7 +241,7 @@ PIXIV_REFRESH_TOKEN=...
 ## 为什么没有第五个「混合云」preset
 
 「Cloudflare = 时钟 + Fly = TelePost + 家用服务器 = PixivFlow」这种组合看起来像新架构，
-但它改变的只有 `units[].placement`：角色没变、状态归属没变、生命周期没变、凭据边界没变。
+但它改变的只有 `units[].placement`：角色没变、状态归属没变、生命周期没变、凭据所有权（SI-1）没变。
 把它做成第五个 preset 会得到：
 
 ```text

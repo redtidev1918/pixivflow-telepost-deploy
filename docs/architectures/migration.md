@@ -28,7 +28,7 @@ split-worker            ←→            remote-worker
 | --- | --- | --- |
 | `single-host` ↔ `single-machine-worker-sleep` | 进程编排（常驻容器 → 按需子进程） | 数据位置、卷数、平台 |
 | `single-host` ↔ `remote-worker` | 主机数、传输方式 | 角色归属、状态格式 |
-| `single-host` ↔ `split-worker` | 主机数、卷数、时钟提供方、凭据边界 | 角色归属、状态格式 |
+| `single-host` ↔ `split-worker` | 主机数、物理卷数、时钟提供方、主机级凭据隔离 | 角色归属、状态格式 |
 | `single-machine-worker-sleep` ↔ `split-worker` | 机器数、卷数、谁负责唤醒与停机 | 角色归属、状态格式 |
 | `split-worker` ↔ `remote-worker` | 平台与传输方式 | 主机数、卷数、生命周期 |
 

@@ -139,8 +139,9 @@ runs).
 | TelePost per-bot SQLite | `data` volume `/app/data/bot{N}/` | Submission idempotency and the review queue are lost |
 | TelePost runtime policy overrides | `data/bot{N}/runtime-policy.json` | Falls back to the `[env]` deployment defaults |
 
-**Two volumes, one per machine, never shared.** The volume is the state boundary and the failure
-boundary.
+**Two volumes, one per machine.** Physical separation is strongest here. The cross-preset
+invariant is **non-overlapping state namespaces (SI-7)**, not "physical volumes are never shared":
+co-located presets share one physical volume with disjoint subdirectories.
 
 > **Path rule (commit `71b4c7c`):** in the configuration, `PIXIV_DOWNLOADER_CONFIG` must be an
 > absolute path (`/app/config/pixivflow.production.json`, shipped with the image), while the
@@ -300,5 +301,6 @@ Reverse migration holds as well. The data that must move, and the files that mus
 | Can the `executor` stop | No (resident container) | Yes (process) | Yes (machine) | Platform-dependent |
 | Saves memory | No | **Yes** | Partly | Partly |
 | Saves the compute bill | No | **No** | **Yes** | Yes |
-| Credential boundary holds | No | No | **Yes** | **Yes** |
+| Host credential isolation (`hostCredentialIsolation`) | No | No | **Yes** | **Yes** |
+| Executor holds Telegram credentials (SI-1) | **No** | **No** | **No** | **No** |
 | Needs an external clock | No | Optional | Required (`cloudflare`/`external`) | Optional |

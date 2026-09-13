@@ -122,7 +122,7 @@ Compose 按整机 512 MiB 预算默认分配：**telepost 320m + pixivflow 192m*
 ## 与生产拓扑的区别
 
 Compose 是**单机一体化**：单故障域、共享卷、执行端与业务端同机。当前 Fly 生产是
-[`split-worker`](../architectures/split-worker.md)（两机两卷，凭据边界成立）。两者业务语义
+[`split-worker`](../architectures/split-worker.md)（两机两卷，主机级凭据隔离成立）。两者业务语义
 完全相同，只是部署事实不同——这是本套件从「固定生产拓扑」升级为「部署矩阵」的核心。迁移
 路径见 [migration.md](../architectures/migration.md)。
 
