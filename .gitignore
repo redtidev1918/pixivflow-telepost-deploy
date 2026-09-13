@@ -53,3 +53,6 @@ yarn-error.log*
 telesubmit.fly.toml
 .wrangler/
 telesubmit.fly.toml.bak.*
+
+# worker-sleep 真机验收的运行产物（每次运行生成，且可能含环境信息）
+acceptance-report.json
