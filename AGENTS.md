@@ -158,7 +158,7 @@ if SINGLE_HOST:   ...
 | 调度 / occurrence / 槽位 | `docs/concepts/scheduling.md` | `SCHEDULING.md`（已删除）或任何新文件 |
 | 凭据归属与处理 | `docs/concepts/credentials.md` | 任何脚本、任何新文档 |
 | Fly 拓扑 | `fly/deploy.pixivflow.toml` + `fly/deploy.telepost.toml`（仅两份） | 第三份 `fly/*.toml` |
-| Compose 拓扑 | `docker-compose.yml` | 另一份 compose 变体 |
+| Compose 拓扑 | `docker-compose.yml`（preset 覆盖层只换执行侧运行方式，见上表） | 另起一份拓扑定义、让默认 `up` 少起服务 |
 | 时钟平面 | `control-plane/` | 第二个 Worker、第二份 cron 映射 |
 | 部署清单（部署编译器的输入） | `docs/reference/deployment-manifest.md` + 矩阵 `manifest` | 业务代码读取清单、由清单推导平台分支 |
 | 部署契约本身 | `docs/reference/deployment-contract.md` | README 里的「另一种说法」 |
@@ -238,10 +238,15 @@ deploy manifest --check                        # 有 deployment.manifest.json �
 - 部署清单（Phase 2）已完成：`deploy manifest` 是部署编译器的输入。下一步是 Phase 3 的
   `single-machine-worker-sleep` 运行时实现——**必须先有清单，再写编排**，否则会重新出现
   「文档一套 preset、脚本一套 if/else、CLI 第三套判断」。
-- `single-machine-worker-sleep` 的 supervisor 组件已实现并有测试（`supervisor/`），但 preset
-  **仍不可部署**：缺容器镜像、平台配置与端到端验证。剩下的事见
+- `single-machine-worker-sleep` 已有 supervisor（`supervisor/`）、执行侧镜像
+  （`docker/worker-sleep.Dockerfile`）与 compose 覆盖层
+  （`docker-compose.worker-sleep.yml`，由 `validate.sh` 校验），但 preset
+  **仍不可部署**：Fly / systemd 形态缺配置，端到端验收未做。剩下的事见
   [`docs/ROADMAP-MULTI-ARCH.md`](docs/ROADMAP-MULTI-ARCH.md) 的 Phase 3；
   全部验收通过前，矩阵的 `status.implemented` 与 `support` 不许改。
+- Fly 形态需要第三份 `fly/*.toml`，与「只有两份 Fly 配置」冲突（第 6 节第 6 条）；
+  要推进必须先决定是给契约加「仅限矩阵已声明的 preset」的例外，还是让该 preset 只走
+  compose/systemd。
 - compose 的默认内存限额（320m + 256m = 576 MiB）与矩阵 `512m` 档（320 + 192）不一致；
   `deploy manifest` 会显式报告该偏差而不抹平。修哪一边需要单独决定，见
   [`docs/reference/deployment-manifest.md`](docs/reference/deployment-manifest.md)。

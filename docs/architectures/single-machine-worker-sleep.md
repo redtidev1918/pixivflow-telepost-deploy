@@ -222,7 +222,8 @@ supervisor 拉起的子进程。业务侧仍是未经修改的上游 TelePost �
 | supervisor 二进制 | **已实现**（Go，仅标准库） | `supervisor/`（main.go / server.go / child.go） |
 | 环境白名单 | **已实现并有测试** | `supervisor/child.go` + `supervisor/supervisor_test.go` |
 | 执行侧容器镜像 | **已实现**（CI 构建） | `docker/worker-sleep.Dockerfile` |
-| 平台配置（Fly / compose / systemd） | 缺失 | —— |
+| compose 形态（覆盖层） | **已实现并有校验** | `docker-compose.worker-sleep.yml` |
+| Fly / systemd 形态 | 缺失 | —— |
 | 部署步骤 | 仍是设计 | 本页 |
 
 supervisor 已经能做的事，都有真实子进程的测试守护：
@@ -255,11 +256,34 @@ supervisor 启动时会拒绝「两个端口相同」的配置，并且**替子�
 
 ## 部署步骤
 
-**部分可执行**：镜像已经能构建（`docker/worker-sleep.Dockerfile`），但平台配置（Fly /
-compose / systemd 三选一）还没写，所以完整步骤仍不可执行。落地属于 Phase 3 剩余部分，见
-[ROADMAP-MULTI-ARCH.md](../ROADMAP-MULTI-ARCH.md)。
+**compose 形态可执行；Fly / systemd 形态还没有配置。**
 
-目标形态是：
+### compose 形态（已实现）
+
+```bash
+WORKER_SLEEP_IMAGE=<执行侧镜像> \
+docker compose -f docker-compose.yml -f docker-compose.worker-sleep.yml up -d
+```
+
+覆盖层**不是第二份拓扑来源**：拓扑仍只由 `docker-compose.yml` 定义，这一层只把 `pixivflow`
+服务从「常驻 executor」换成「常驻 supervisor + 按需 executor」——同一个服务名、同一个卷、
+同一个网络，所以角色归属与 SI-7 都没变。业务侧服务（`telepost`）连同它自己的健康检查原样保留。
+
+不用 profile 表达的原因：Compose 里没有 profile 的服务永远启动，而 `pixivflow` 正是无 profile
+的；用 profile 表达「要么常驻执行端、要么按需执行端」会让默认的 `docker compose up -d` 静默
+少起一个执行端——那是破坏默认路径，不是新增部署方式。
+
+`scripts/validate.sh` 会把合并后的模型渲染成 JSON 并断言：镜像换成了执行侧镜像、**健康检查已
+禁用**、端口分工存在、`telepost` 服务未被改动。少了健康检查那一条，探测就会把刚按账本收工的
+子进程重新拉起来。
+
+### Fly / systemd 形态
+
+**缺失。** Fly 形态需要这个 preset 自己的机器拓扑，也就是第三份 `fly/*.toml`，而它与
+「只有两份 Fly 配置」的契约冲突——这需要先决定怎么表达，见
+[ROADMAP-MULTI-ARCH.md](../ROADMAP-MULTI-ARCH.md) 的 Phase 3。
+
+### compose 的完整步骤形态
 
 1. 准备一个卷，`data/bot{N}/` 与 `data/pixivflow/` 都落在卷上，挂给两个容器。
 2. 部署常驻 `publisher`（上游 TelePost 镜像，不改），确认私聊投稿可用、webhook 或 polling 已建立。

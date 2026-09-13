@@ -428,11 +428,16 @@
           },
           "fly-config": {
             "state": "missing",
-            "notes": "本 preset 需要自己的机器拓扑，但与「只有两份 Fly 配置」的契约冲突，待决定"
+            "notes": "Fly 形态需要第三份 fly/*.toml，与「只有两份 Fly 配置」的契约冲突，待决定；compose 形态已可用"
           },
           "deployment-steps": {
             "state": "design-only",
             "evidence": "docs/architectures/single-machine-worker-sleep.md"
+          },
+          "compose-overlay": {
+            "state": "implemented+validated",
+            "evidence": "docker-compose.worker-sleep.yml + scripts/check_compose_overlay.py（由 validate.sh 执行）",
+            "notes": "覆盖层把常驻 executor 换成常驻 supervisor + 按需 executor；不是第二份拓扑来源。断言：健康检查被禁用、端口分工存在、业务侧未被改动"
           }
         },
         "statusNote": "supervisor 组件已实现并有测试（含设计文档要求的环境白名单守护测试），但本 preset 仍不可部署：没有镜像、没有平台配置、部署步骤仍是设计。因此 implemented 保持 false，support 保持 experimental。"
