@@ -26,6 +26,7 @@
   - [代理与出口](/platforms/proxy.md)
 - 运维
   - [监控与只读核对](/operations/monitoring.md)
+  - [调度运维手册：一次触发断在哪一步](/operations/scheduling.md)
   - [备份与恢复](/operations/backup.md)
   - [升级与回滚](/operations/upgrades.md)
   - [故障排查](/operations/troubleshooting.md)
@@ -39,5 +40,6 @@
   - [架构矩阵 architecture-matrix.json](https://github.com/redtidev1918/pixivflow-telepost-deploy/blob/main/docs/reference/architecture-matrix.json)
   - [Roadmap：多架构实现计划](/ROADMAP-MULTI-ARCH.md)
   - [事故：Pixiv 出口限流 2026-09-11](/incidents/2026-09-11-pixiv-egress-rate-limit.md)
+  - [事故：定时触发漏跑 2026-09-13](/incidents/2026-09-13-schedule-trigger-miss.md)
 - English
   - [English index](/en/)

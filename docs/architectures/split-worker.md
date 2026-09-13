@@ -31,14 +31,17 @@
 ## 拓扑
 
 ```text
-Cloudflare Cron（薄时钟：cron → scheduleId → 一次带令牌的 POST）
+PRIMARY    cron-job.org        在 occurrence 准点触发
+        ─┐
+         ├─► 同一个受认证的幂等 POST /internal/schedules/{scheduleId}/run
+SECONDARY  ─┘   Cloudflare Cron（occurrence + 2 分钟）
         │
         ▼
 Fly Proxy（自动唤醒已停止的机器）
         │
         ▼
 Fly App: pixivflow-scheduler        独立机器 + 独立卷，平时 stopped
-  executor
+  executor  ── durable slot ledger = 唯一的执行权威
         │  既有 httpMultipart 投递 + 稳定幂等键
         ▼
 Fly App: telesubmit-multi-bot        常驻
@@ -48,9 +51,37 @@ Fly App: telesubmit-multi-bot        常驻
 Telegram 频道
 ```
 
+### 时钟拓扑：PRIMARY / SECONDARY
+
+`split-worker` 的生产运行**两个独立的外部时钟**，作用于**同一套** schedule set：
+
+| | provider | 触发时刻（Asia/Shanghai） | 触发表达式（UTC） |
+| --- | --- | --- | --- |
+| **PRIMARY** | cron-job.org | occurrence 准点：`bot1-daily` 10:00 / 22:00，`bot2-daily` 10:10 / 22:10 | `bot1` `0 2,14 * * *`；`bot2` `10 2,14 * * *` |
+| **SECONDARY** | Cloudflare Cron（`control-plane/`） | occurrence + 2 分钟 | `bot1` `2 2,14 * * *`；`bot2` `12 2,14 * * *` |
+
+两处声明的机器可读来源是 `control-plane/src/cron-map.ts`（`SECONDARY_OFFSET_MINUTES = 2`）
+与 `control-plane/wrangler.toml`；`control-plane/test/redundant-clock.test.ts` 会因为
+「secondary ≠ primary + 文档化偏移」而失败。
+
+- **执行权威只有一个：PixivFlow 的 durable slot ledger。** 两个时钟都不计算 occurrence、
+  不持有状态、不生成 slot id、不调用 TelePost、不控制 Fly Machine。它们只发出一次幂等触发。
+- **谁后到就在前一个创建的 slot 上收敛。** 重复触发是预期的、安全的：它得到的是同一个
+  disposition，不会跑第二次。
+- **`executor` 生命周期仍是 `wake-run-exit`**：唤醒 = 触发请求经平台代理；停机 = executor 自己的账本。
+  这一点与时钟有几个**无关**。
+
+> **PRIMARY / SECONDARY 是 operational provider assignment，不是新的 deployment preset。**
+> preset 集合仍然只有四个。**provider ≠ architecture**：换时钟 provider 不改变角色所有权、
+> 不改变拓扑形状、不需要改业务核心。选 provider 是运维决策，落在
+> [部署契约](../reference/deployment-contract.md) 与 `control-plane/` 里，不落在 preset 定义里。
+
+为什么偏移是 2 分钟、为什么必须为**正**、为什么 primary 不是 Cloudflare：见
+[2026-09-13 漏跑事故](../incidents/2026-09-13-schedule-trigger-miss.md)。
+
 | 平面 | 部署单元 | 自己拥有的状态 | 绝不拥有 |
 | --- | --- | --- | --- |
-| `clock` | `control-plane/`（Worker `pixivflow-control-plane`） | cron → schedule id 映射、一个触发令牌 | occurrence、槽位、凭据、审核、发布、Telegram |
+| `clock` | PRIMARY `cron-job.org` + SECONDARY `control-plane/`（Worker `pixivflow-control-plane`） | cron → schedule id 映射、一个触发令牌 | occurrence、槽位、凭据、审核、发布、Telegram |
 | `executor` | `fly/deploy.pixivflow.toml`（app `pixivflow-scheduler`） | 槽位账本、执行租约、下载缓存、投递 outbox、Pixiv 凭据 | **Telegram 令牌、频道、审核决定** |
 | `publisher` + `telegram-ingress` | `fly/deploy.telepost.toml`（app `telesubmit-multi-bot`） | 用户会话、投稿幂等键、审核队列、发布记录、Telegram 令牌 | Pixiv 登录、下载、槽位调度 |
 
@@ -64,7 +95,8 @@ Telegram 频道
 
 | 单元 | Fly 机器 | 说明 |
 | --- | --- | --- |
-| `clock-edge` | 0（Cloudflare Workers） | 免费额度内 |
+| `clock-edge` | 0（Cloudflare Workers，SECONDARY） | 免费额度内；无数据库绑定、无状态 |
+| `clock-primary` | 0（cron-job.org，PRIMARY） | 第二个独立 provider、独立故障域；只在控制台里配置，本仓库不注册它 |
 | `worker-machine` | 1 × 512 MiB | 运行时内存由 `NODE_OPTIONS=--max-old-space-size=384` 与 `download.concurrency=1` 约束 |
 | `service-machine` | 1 × 512 MiB | 双 Bot；`SEARCH_ENABLED=false`、`DB_CACHE_KB=1024` |
 
@@ -114,7 +146,7 @@ stopped（省钱，健康 idle）
 | --- | --- |
 | 给 `executor` 配健康检查 | 探测本身就是请求。Fly 的代理会唤醒一台刚决定收工的机器，`stopped` 永远到不了。 |
 | 用平台 auto-stop 停 `executor` | 触发端落库即应答，代理眼里连接早已空闲，而下载还在跑（实测 10–40 分钟）。按空闲推断停机会把批次拦腰砍断。 |
-| 部署第二个时钟或看门狗 | 触发端本身幂等，重复触发无害；但多个唤醒源会在同一个 occurrence 上争抢同一个 Pixiv 凭据。 |
+| 部署第二个 **PRIMARY** 时钟（或第二个调度器、第二个执行权威） | 触发端本身幂等，所以**延迟的重复触发无害**；危险的是第二套 schedule 定义或第二份执行状态——那才会在同一个 occurrence 上争抢同一个 Pixiv 凭据。PRIMARY + 延迟 SECONDARY 的冗余外部时钟经同一个 durable slot 收敛，**不在此列**。 |
 
 ---
 
@@ -177,9 +209,10 @@ stopped（省钱，健康 idle）
 
 ## 缺点
 
-- **组件更多。** 两个 Fly 应用 + 一个 Cloudflare Worker + 两个卷。
+- **组件更多。** 两个 Fly 应用 + 一个 Cloudflare Worker + 一个 cron-job.org 账号 + 两个卷。
 - **多一个卷**，备份与恢复要覆盖两个位置。
-- **需要外部唤醒触发器。** 时钟只有一个负责人；时钟挂掉就是漏跑，且本部署不补跑历史。
+- **需要外部唤醒触发器。** 生产有两个独立故障域的时钟（PRIMARY cron-job.org / SECONDARY Cloudflare），
+  单个 provider 静默失火不再等于漏跑；两个都失效时仍不补跑历史。
 - **部署与调试更复杂。** 「机器是 stopped 的」需要被理解为健康状态，而不是故障。
 - **平台耦合较深。** 当前的两份配置是 Fly 专属的（Flycast、Fly Proxy 唤醒语义、
   `restart.policy` 命名）。
@@ -194,7 +227,8 @@ stopped（省钱，健康 idle）
 | `executor` 被误配健康检查或 auto-stop | 只有执行平面 | 批次被拦腰砍断，或 `stopped` 状态不可达 | 删掉检查与 auto-stop |
 | `publisher` 崩溃 | 用户可见 | 私聊投稿像坏了 | `restart.policy = 'always'` 自动重启 |
 | 时钟漏触发 | 该 occurrence 丢失 | 该次计划不执行 | **不补跑**（`catchUpMissedRuns=false`）；下一班正常 |
-| 第二个时钟上线 | 两个平面抢同一个 Pixiv 凭据 | 限流与 penalty 升级 | 立刻下线第二个时钟 |
+| 一个时钟静默失火 | 该 occurrence 仍会被跑 | provider 侧没有任何 fire 记录 | **另一个时钟在同一 occurrence 上补上**（+2 分钟）；两个都没 fire 才是漏跑，且**不补跑**（`catchUpMissedRuns=false`） |
+| 第二个 **PRIMARY** 时钟（或第二个调度器）上线 | 两个平面抢同一个 Pixiv 凭据 | 限流与 penalty 升级 | 立刻下线第二个 primary，只保留一个执行权威 |
 | 卷丢失 | 对应平面 | 账本/outbox 或审核队列消失 | 从卷快照恢复 |
 | 出口被 Pixiv 限流 | 只有执行平面 | `rate limit cooldown`、penalty 升级 | 换出口并重新取证；见 [事故记录](../incidents/2026-09-11-pixiv-egress-rate-limit.md) |
 
@@ -207,7 +241,8 @@ stopped（省钱，健康 idle）
 
 | 项目 | 说明 |
 | --- | --- |
-| `clock-edge` | Cloudflare Worker，免费额度内 |
+| `clock-edge` | Cloudflare Worker（SECONDARY），免费额度内 |
+| `clock-primary` | cron-job.org（PRIMARY），在它自己的档位内；本仓库不注册它 |
 | `worker-machine` | 只在被唤醒期间计费；平时 `stopped` |
 | `service-machine` | 常驻计费——这是「投稿秒回」的价格 |
 | 两个卷 | 按容量计费，与运行状态无关 |
@@ -243,8 +278,20 @@ fly secrets set -a <your-pixivflow-app> \
   SCHEDULER_TRIGGER_TOKEN=...
 # 执行端这里不该出现任何 Telegram 令牌。
 
-# 4) 时钟
+# 4) 时钟：两个独立 provider，作用于同一套 schedule
+#    4a) SECONDARY：Cloudflare Worker
 cd control-plane && npx wrangler secret put SCHEDULER_TRIGGER_TOKEN && npx wrangler deploy
+
+#    4b) PRIMARY：cron-job.org 控制台
+#        本仓库不注册它，也不持有它的凭据 —— 独立故障域正是要两个时钟的原因。
+#        建两个 cron job，URL 与 4a 是同一个端点，Authorization: Bearer <SCHEDULER_TRIGGER_TOKEN>
+#
+#          bot1-daily   0 2,14 * * *
+#          bot2-daily  10 2,14 * * *
+#
+#        表达式以 `PRIMARY_CRONS`（control-plane/src/cron-map.ts 导出）为准：
+#        operator runbook 与契约测试读同一份列表，而不是各自抄一遍。
+#        两个时钟的部署是**两个独立的 operator 步骤**，完成情况分别记录。
 ```
 
 部署后核对（全部只读、缺变量时输出 `SKIP`、不打印密钥）：
@@ -283,4 +330,4 @@ cd control-plane && npx wrangler secret put SCHEDULER_TRIGGER_TOKEN && npx wrang
 | 省计算账单 | 否 | **否** | **是** | 是 |
 | 主机级凭据隔离（`hostCredentialIsolation`） | 否 | 否 | **是** | **是** |
 | executor 持有 Telegram 凭据（SI-1） | **否** | **否** | **否** | **否** |
-| 需要外部时钟 | 否 | 可选 | 需要（`cloudflare`/`external`） | 可选 |
+| 需要外部时钟 | 否 | 可选 | 需要，生产用两个（PRIMARY `cron-job.org` + SECONDARY `cloudflare`；`external` 是 provider 取值） | 可选 |
