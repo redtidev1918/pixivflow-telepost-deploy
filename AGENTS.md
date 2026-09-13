@@ -246,6 +246,12 @@ deploy manifest --check                        # 有 deployment.manifest.json �
 ./scripts/verify-production.sh                 # 只读生产校验（需要 fly 与网络）
 ```
 
+worker-sleep 的真机验收是单独一条命令，只在一次性 512 MiB 测试主机上跑：
+
+```bash
+./scripts/accept-worker-sleep.sh   # 0=PASS 1=FAIL 3=BLOCKED；BLOCKED 不算通过
+```
+
 改了预设契约（矩阵的 preset / 组合规则 / 档位 / 开关）时必须同步 `manifest.go` 能消费的形状，
 并保证 `go test ./...` 里的清单测试通过：它强制内嵌矩阵与仓库里的矩阵逐字节一致、
 每条组合规则要么机器可判定要么声明由谁守护。

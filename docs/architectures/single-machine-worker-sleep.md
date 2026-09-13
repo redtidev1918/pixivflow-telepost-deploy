@@ -274,8 +274,8 @@ Compose 形态下投递不走宿主机回环：两个角色在两个容器里，
 `implemented=true`、`support=beta`。目前它停在**端到端验收**这一格：compose 形态已实现并有 CI
 校验，但还没有在真实 512 MiB 主机上跑过两轮完整验收，所以矩阵仍写 `implemented=false`。
 
-端到端验收的可执行清单（含要记录的内存量与判定标准）见
-[worker-sleep 端到端验收](../operations/worker-sleep-acceptance.md)。**没跑完它就不要改状态字段。**
+端到端验收现在是一条命令：`./scripts/accept-worker-sleep.sh`（规则与人类可读清单见
+[worker-sleep 端到端验收](../operations/worker-sleep-acceptance.md)）。**没跑出 PASS 就不要改状态字段。**
 
 Fly 形态**不是**把 compose 的两个容器搬成一份新配置：它要求**一台 Fly Machine、一个镜像**里
 同时跑 TelePost、常驻 supervisor 与按需的 PixivFlow 子进程。那需要先有 combined worker-sleep
