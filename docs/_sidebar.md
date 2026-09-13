@@ -1,16 +1,41 @@
-- 开始部署
+- 开始
   - [概览](/)
   - [下载](/download.md)
-  - [部署场景速查](/SCENARIOS.md)
-  - [Polling：无公网部署](/POLLING.md)
-  - [Webhook：公网 HTTPS 部署](/WEBHOOK.md)
-- 场景与网络
-  - [国内网络与 Mihomo](/MIHOMO.md)
-  - [多 Bot：加第 N 个频道](/MULTI-BOT.md)
-  - [从 Mac 远程更新策略](/REMOTE_UPDATES.md)
+  - [我该选哪种部署方式](/getting-started/choose-architecture.md)
+  - [快速开始](/getting-started/quickstart.md)
+- 部署架构
+  - [总览：Preset 矩阵](/architectures/overview.md)
+  - [single-host 单机一体化](/architectures/single-host.md)
+  - [single-machine-worker-sleep 单机 + 执行进程休眠](/architectures/single-machine-worker-sleep.md)
+  - [split-worker 分离执行端](/architectures/split-worker.md)
+  - [remote-worker 远端执行端](/architectures/remote-worker.md)
+  - [架构迁移契约](/architectures/migration.md)
+- 概念
+  - [角色与所有权](/concepts/roles.md)
+  - [生命周期：谁可以睡、谁唤醒谁](/concepts/lifecycle.md)
+  - [持久状态与卷](/concepts/state.md)
+  - [调度与 occurrence](/concepts/scheduling.md)
+  - [投递与 outbox](/concepts/delivery.md)
+  - [凭据契约](/concepts/credentials.md)
+  - [网络与出口](/concepts/network.md)
+- 平台
+  - [Docker Compose](/platforms/docker.md)
+  - [Fly.io](/platforms/flyio.md)
+  - [VPS 与裸机](/platforms/vps.md)
+  - [Cloudflare 时钟平面](/platforms/cloudflare.md)
+  - [代理与出口](/platforms/proxy.md)
 - 运维
-  - [定时投稿与停机（单一事实源）](/SCHEDULING.md)
-  - [性能与内存调优](/PERFORMANCE.md)
-- 生产
-  - [架构与信任边界（职责契约）](/ARCHITECTURE.md)
+  - [监控与只读核对](/operations/monitoring.md)
+  - [备份与恢复](/operations/backup.md)
+  - [升级与回滚](/operations/upgrades.md)
+  - [故障排查](/operations/troubleshooting.md)
+  - [性能与内存调优](/operations/performance.md)
+  - [多 Bot：加第 N 个频道](/operations/multi-bot.md)
+- 参考
+  - [部署契约（统一部署模型）](/reference/deployment-contract.md)
+  - [环境变量与资源档位](/reference/environment.md)
+  - [架构矩阵 architecture-matrix.json](https://github.com/redtidev1918/pixivflow-telepost-deploy/blob/main/docs/reference/architecture-matrix.json)
+  - [Roadmap：多架构实现计划](/ROADMAP-MULTI-ARCH.md)
   - [事故：Pixiv 出口限流 2026-09-11](/incidents/2026-09-11-pixiv-egress-rate-limit.md)
+- English
+  - [English index](/en/)
