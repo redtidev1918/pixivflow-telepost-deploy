@@ -140,7 +140,11 @@ scheduler 可不可以多实例、这个配置应该改在哪里」，不需要�
 **本轮未能执行端到端验收**：本机没有可用的容器运行时（docker daemon 未运行，
 colima/podman/lima 均未安装），本地 `.env` 也只是占位值，因此既跑不了 compose 冒烟，
 也拿不到真实 512 MiB 主机与 test bot。`scripts/smoke-worker-sleep-compose.sh` 与验收手册
-已经写好，但**尚未运行过**——不把未执行的验证写成已通过。
+端到端验收已收敛成一条命令
+`./scripts/accept-worker-sleep.sh`（preflight → 两轮真实负载 → 内存 / oom_kill / RestartCount /
+orphan 采集 → `acceptance-report.json`，退出码 0/1/3 对应 PASS/FAIL/BLOCKED；BLOCKED 不算通过）。
+另有 `scripts/smoke-worker-sleep-compose.sh` 做纯网络链路冒烟。两者**都还没有运行过**——
+不把未执行的验证写成已通过。
 
 ---
 

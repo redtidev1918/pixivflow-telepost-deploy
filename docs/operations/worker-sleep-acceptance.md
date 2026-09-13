@@ -4,6 +4,28 @@
 > [`single-machine-worker-sleep`](../architectures/single-machine-worker-sleep.md) 晋级到
 > `implemented=true` / `support=beta` 之前的最后一步。没有跑完它就不要改矩阵里的状态字段。
 
+## 一键入口
+
+在一次性 512 MiB 测试主机上，准备好 `data/acceptance.env` 与已启用且到期的 schedule 之后：
+
+```bash
+./scripts/accept-worker-sleep.sh
+```
+
+它自己完成：preflight（Docker、整机内存 ≈512 MiB、swap 关闭、真实测试凭据形态、enabled schedule）
+→ 启动拓扑 → idle 基线采样 → 第一轮真实 trigger → 等 executor 按账本退出 → 退出后探测 → 第二轮
+→ 收集 RSS / `memory.events` / RestartCount / orphan → 判定 → 写 `acceptance-report.json`。
+
+```text
+退出码 0 = PASS   1 = FAIL   3 = BLOCKED
+```
+
+**BLOCKED 不等于通过。** 缺 Docker、机器不是 ≈512 MiB、swap 没关、凭据仍是占位值、没有 enabled
+的 schedule，任一发生就 BLOCKED：不做任何测量、断言列表为空、报告里逐条写明原因。
+`PASS` 需要所有断言在真实两轮里成立。
+
+下面是人读的清单，方便在 FAIL 时定位；一键脚本就是它的可执行版本。
+
 ## 为什么必须真机跑
 
 CI 能证明的东西到此为止：单元测试证明 supervisor 的信令、白名单、单实例与端口分工；
@@ -22,7 +44,7 @@ CI 能证明的东西到此为止：单元测试证明 supervisor 的信令、�
 | 凭据 | 优先 test bot / test review chat；**不得**用生产频道做发布实验 |
 | 清理 | 验收结束删除临时资源；不留下长期计费的实例 |
 
-## 记录方法
+## 记录方法（脚本已自动采集，这里是口径）
 
 在被测主机上按 1s 采样，直到两轮跑完：
 
