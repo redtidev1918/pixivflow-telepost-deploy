@@ -738,6 +738,10 @@ func cmdDoctor(platform, plane, cfg string) {
 
 	stepf("1/3", "平台")
 	okf("使用平台：%s", platform)
+	// 部署清单是「这是什么部署」的声明。读不到就不猜，doctor 不因此失败。
+	if summary := manifestSummary("."); summary != "" {
+		infof("部署清单：%s", summary)
+	}
 	if platform == "fly" && plane == planeAll {
 		infof("两个平面各查一遍；用 --plane telepost|pixivflow 只看一个")
 	}
@@ -1336,6 +1340,8 @@ func usage() {
   status            状态 / 健康
   logs [行数]       最近日志
   doctor            环境自检（默认两个平面各查一遍）
+  manifest [目录]   部署清单：读取/推断 deployment.manifest.json 并对照架构矩阵校验
+                    （--preset <name> 显式声明 preset；--write 落盘；--check 只校验）
   version           显示工具与各平面固定的版本及其配置来源
 
 全局选项：
@@ -1351,6 +1357,9 @@ func usage() {
   --retries N                  部署失败重试次数（默认 2）
   --build                      compose：本地构建
   --force                      init：目标目录已有配置时强制重新生成
+  --preset NAME                manifest：无法从产物推断时显式声明 preset
+  --write                      manifest：把推断结果写入 deployment.manifest.json
+  --check                      manifest：只校验已有清单，非法组合时退出码非 0
 
 说明：
   两个平面各自是独立的 app / machine / 配置文件，权威配置固定是仓库跟踪的
@@ -1371,12 +1380,15 @@ type opts struct {
 	platform string
 	plane    string
 	config   string
+	preset   string
 	dryRun   bool
 	verbose  bool
 	noColor  bool
 	retries  int
 	build    bool
 	force    bool
+	write    bool
+	check    bool
 	cmd      string
 	arg      string
 }
@@ -1407,6 +1419,13 @@ func parseArgs(args []string) opts {
 			o.retries, _ = atoi(args[i])
 		case a == "--build":
 			o.build = true
+		case a == "--preset":
+			i++
+			o.preset = args[i]
+		case a == "--write":
+			o.write = true
+		case a == "--check":
+			o.check = true
 		case a == "--force":
 			o.force = true
 		case a == "-h" || a == "--help" || a == "help":
@@ -1453,6 +1472,15 @@ func main() {
 	// init 不需要任何现成配置/平台：在任何地方就地生成全新部署目录。
 	if o.cmd == "init" {
 		cmdInit(o.arg, o.force)
+		return
+	}
+	// manifest 作用于「当前部署目录」，与平台自动检测无关：它自己就是平台与拓扑的声明。
+	if o.cmd == "manifest" {
+		dir := o.arg
+		if dir == "" {
+			dir = "."
+		}
+		cmdManifest(dir, o.preset, o.check, o.write)
 		return
 	}
 	// 允许在任意目录运行：cwd 不是仓库时回退到可执行文件所在目录。

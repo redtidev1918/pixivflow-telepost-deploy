@@ -160,6 +160,7 @@ if SINGLE_HOST:   ...
 | Fly 拓扑 | `fly/deploy.pixivflow.toml` + `fly/deploy.telepost.toml`（仅两份） | 第三份 `fly/*.toml` |
 | Compose 拓扑 | `docker-compose.yml` | 另一份 compose 变体 |
 | 时钟平面 | `control-plane/` | 第二个 Worker、第二份 cron 映射 |
+| 部署清单（部署编译器的输入） | `docs/reference/deployment-manifest.md` + 矩阵 `manifest` | 业务代码读取清单、由清单推导平台分支 |
 | 部署契约本身 | `docs/reference/deployment-contract.md` | README 里的「另一种说法」 |
 
 `architecture_docs_test.go` 强制：preset 名在矩阵、`docs/architectures/overview.md` 与本文件
@@ -178,7 +179,8 @@ if SINGLE_HOST:   ...
 | `pixivflow/config/production.json` | 执行端随镜像发布的运行配置 | 不是可热改的运行中状态 |
 | `docker/` | 按提交号固定或按发布版本透传的镜像定义 | 不是业务代码 |
 | `scripts/` | 只读运维与验收脚本 | 不写业务状态、不注册 webhook |
-| `docs/reference/architecture-matrix.json` | preset / 角色 / 组合 / 档位 / 不变量的机器可读权威 | 不是可执行配置 |
+| `docs/reference/architecture-matrix.json` | preset / 角色 / 组合 / 档位 / 不变量 / manifest 契约的机器可读权威 | 不是可执行配置 |
+| `manifest.go` + `deployment.manifest.json` | 部署清单：读取/推断并对照矩阵校验「这是一套什么部署」 | **不是运行时依赖**：业务代码永不读它 |
 | `docs/` | 契约、拓扑与运维说明 | 过时章节必须改，不留「另一种说法」 |
 
 ---
@@ -213,16 +215,28 @@ if SINGLE_HOST:   ...
 go test ./...                                  # 部署工具 + 文档一致性测试
 (cd control-plane && npm ci && npm test)       # 时钟的守护测试
 ./scripts/validate.sh --examples               # 配置/脚本/公开仓库卫生
+deploy manifest                                # 当前目录的部署清单：推断 + 对照矩阵校验
+deploy manifest --check                        # 有 deployment.manifest.json 时只校验（CI 可用）
 ./scripts/verify-production.sh                 # 只读生产校验（需要 fly 与网络）
 ```
+
+改了预设契约（矩阵的 preset / 组合规则 / 档位 / 开关）时必须同步 `manifest.go` 能消费的形状，
+并保证 `go test ./...` 里的清单测试通过：它强制内嵌矩阵与仓库里的矩阵逐字节一致、
+每条组合规则要么机器可判定要么声明由谁守护。
 
 ---
 
 ## 8. 已知待办（本仓库范围）
 
+- 部署清单（Phase 2）已完成：`deploy manifest` 是部署编译器的输入。下一步是 Phase 3 的
+  `single-machine-worker-sleep` 运行时实现——**必须先有清单，再写编排**，否则会重新出现
+  「文档一套 preset、脚本一套 if/else、CLI 第三套判断」。
 - `single-machine-worker-sleep` 只有设计。实现计划见
   [`docs/ROADMAP-MULTI-ARCH.md`](docs/ROADMAP-MULTI-ARCH.md) 的 Phase 3；
   实现后必须把矩阵的 `status.implemented` 与 `support` 一并更新。
+- compose 的默认内存限额（320m + 256m = 576 MiB）与矩阵 `512m` 档（320 + 192）不一致；
+  `deploy manifest` 会显式报告该偏差而不抹平。修哪一边需要单独决定，见
+  [`docs/reference/deployment-manifest.md`](docs/reference/deployment-manifest.md)。
 - `remote-worker` 的端到端验证缺失；`support: beta` 反映的就是这件事。
 - 迁移契约已写、迁移工具未实现（`docs/architectures/migration.md` 的「实现状态」一节）。
 - PixivFlow 生命周期提交合入并发布后，把 `PIXIVFLOW_REF` 从提交号改为发布 tag。
