@@ -350,6 +350,9 @@ deliberately not baked into the image.
 ## Deployment steps
 
 **The compose form is executable; the Fly and systemd forms have no configuration yet.**
+The acceptance itself is one command: `./scripts/accept-worker-sleep.sh` (see the
+[end-to-end acceptance runbook (中文)](/operations/worker-sleep-acceptance.md)); it returns 0 for PASS,
+1 for FAIL and 3 for BLOCKED, and BLOCKED never counts as a pass.
 
 ### Compose form (implemented)
 

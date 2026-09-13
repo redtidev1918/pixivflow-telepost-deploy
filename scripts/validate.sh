@@ -47,6 +47,14 @@ fi
 for file in scripts/*.sh proxy/docker-entrypoint.sh fly/scripts/*.sh; do
   if bash -n "$file"; then ok "$file shell syntax"; else fail "$file shell syntax"; fi
 done
+# 变量展开后面紧跟非 ASCII 字节会被 bash 并进变量名（`$VAR` 后接全角括号 → unbound variable）。
+# 这类错误只在运行时炸，交给 scripts/check_shell_expansions.py 静态拦掉。
+if python3 scripts/check_shell_expansions.py; then
+  ok "shell variable expansions next to non-ASCII text"
+else
+  fail "shell variable expansions next to non-ASCII text"
+fi
+
 
 if python3 scripts/check_public_repo.py; then ok "public repository hygiene"; else fail "public repository hygiene"; fi
 
