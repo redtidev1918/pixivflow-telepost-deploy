@@ -91,6 +91,26 @@ A wake-run-exit executor MUST NOT depend on itself for cron scheduling.
 > **泄漏的后果被限制在一条上：只需要轮换 schedule trigger credential。**
 > 不涉及 Telegram 凭据，不涉及 Pixiv 凭据，不涉及平台机器管理凭据。
 
+审核群的人工重抓不属于时钟。TelePost 用独立的 `PIXIVFLOW_REFETCH_TOKEN` 调用 PixivFlow 的
+`POST /internal/targets/{targetId}/refetch`；该令牌只用于手动目标执行，两个端点的令牌不得复用。
+PixivFlow 以请求 UUID 创建独立的 durable manual Slot，返回 `202` 只表示已受理，
+不表示下载或投递成功。定时 occurrence 的身份和终态不受这次人工执行影响。
+
+审核群「重抓」的服务间不变量（split-worker 始终成立）：
+
+```text
+- TelePost 的 refetch 是远程服务间工作流：绝不 shell-out 或同容器拉起 PixivFlow。
+- TelePost 绝不控制 Fly Machines；唤醒只经平台 auto_start_machines。
+- 每次 refetch attempt 都是 durable 的；同一审核链同一时刻最多一个活跃 attempt。
+- refetch 请求幂等按用户动作划分：同一次按钮点击的传输重试收敛到同一
+  attempt / requestId；终态后的新点击创建新一代。
+- no_alternative 是一次 attempt 的终态，不是审核链的永久穷尽。
+- 当前候选与链内历史候选永不重新进入同一链（authoritative exclusion 在
+  PixivFlow 的 durable 投递去重账本；TelePost 的 seen-history 是同一约束的证据面）。
+- commit-after-success：新稿落库成功后才把旧稿标记 superseded；失败不改当前稿件。
+- 迟到的异步结果只标记 attempt obsolete，绝不覆盖终态审核结论。
+```
+
 provider 控制台里的 URL 与 cron 表达式是**配置**，不是凭据。任何文档、脚本与日志只写凭据的
 **名称**，永不写值（见 [凭据契约](../concepts/credentials.md)）。
 
