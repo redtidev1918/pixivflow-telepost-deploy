@@ -91,6 +91,11 @@ A wake-run-exit executor MUST NOT depend on itself for cron scheduling.
 > **泄漏的后果被限制在一条上：只需要轮换 schedule trigger credential。**
 > 不涉及 Telegram 凭据，不涉及 Pixiv 凭据，不涉及平台机器管理凭据。
 
+审核群的人工重抓不属于时钟。TelePost 用独立的 `PIXIVFLOW_REFETCH_TOKEN` 调用 PixivFlow 的
+`POST /internal/targets/{targetId}/refetch`；该令牌只用于手动目标执行，两个端点的令牌不得复用。
+PixivFlow 以请求 UUID 创建独立的 durable manual Slot，返回 `202` 只表示已受理，
+不表示下载或投递成功。定时 occurrence 的身份和终态不受这次人工执行影响。
+
 provider 控制台里的 URL 与 cron 表达式是**配置**，不是凭据。任何文档、脚本与日志只写凭据的
 **名称**，永不写值（见 [凭据契约](../concepts/credentials.md)）。
 
