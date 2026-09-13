@@ -30,9 +30,12 @@ primary_region = 'iad'
     # (2.18.0 shipped the refetch state machine without the Mini App surface;
     # the Mini App backend landed in 2.19.0.)
     #
+    # 2.20.0 added same-domain static hosting for the Mini App (webapp/dist
+    # served at /app/ by the TelePost webhook server; router forwards /app/*);
+    # 2.20.1 fixes the Docker build that the 2.20.0 image publish depended on.
     # 2.17.6 classifies media from the FINAL artifact instead of source
-    # metadata; 2.19.0 keeps that behavior.
-    TELEPOST_IMAGE = 'ghcr.io/redtidev1918/telepost:2.19.0'
+    # metadata; 2.20.1 keeps that behavior.
+    TELEPOST_IMAGE = 'ghcr.io/redtidev1918/telepost:2.20.1'
 
 [[mounts]]
   source = 'data'
@@ -54,10 +57,10 @@ primary_region = 'iad'
   # Review-group refetch reaches the sleeping PixivFlow executor through Fly's
   # HTTPS proxy; PIXIVFLOW_REFETCH_TOKEN is a separate shared Secret.
   PIXIVFLOW_REFETCH_BASE_URL = 'https://pixivflow-scheduler.fly.dev'
-  # Telegram Mini App (optional). When enabled, the webapp dist/ must be hosted
-  # on this domain under /app/ (see docs/MINIAPP.md); MINIAPP_SESSION_SECRET is
-  # a separate shared Secret (≥32 chars, never the bot token).
-  MINIAPP_ENABLED = 'false'
+  # Telegram Mini App surface. dist/ is served same-domain at /app/ by the
+  # TelePost webhook server (2.20.1); MINIAPP_SESSION_SECRET is a separate
+  # shared Secret (≥32 chars, never the bot token). Rollback: set back to false.
+  MINIAPP_ENABLED = 'true'
   MINIAPP_SESSION_TTL = '1800'
 
 [http_service]
