@@ -7,8 +7,16 @@ import { CRON_MAP, bindingFor } from '../src/cron-map';
  * what it refuses to do: send unauthenticated, send to a misconfigured origin,
  * or decide an occurrence's fate on its own.
  */
-const BOT1 = CRON_MAP['0 2,10 * * *']!;
-const BOT2 = CRON_MAP['10 2,10 * * *']!;
+/**
+ * Resolved by schedule id, not by literal cron strings: the production cron
+ * expressions are operational configuration (the secondary clock's offset lives
+ * in them), so hard-coding them here would make every schedule change look like
+ * a dispatch regression.
+ */
+const BOT1 = Object.values(CRON_MAP).find((b) => b.scheduleId === 'bot1-daily')!;
+const BOT2 = Object.values(CRON_MAP).find((b) => b.scheduleId === 'bot2-daily')!;
+const BOT1_CRON = Object.keys(CRON_MAP).find((c) => CRON_MAP[c]!.scheduleId === 'bot1-daily')!;
+const BOT2_CRON = Object.keys(CRON_MAP).find((c) => CRON_MAP[c]!.scheduleId === 'bot2-daily')!;
 const BASE = { baseUrl: 'https://pixivflow-scheduler.fly.dev', token: 'trigger-token' };
 
 function jsonResponse(body: unknown, status = 200): Response {
@@ -21,10 +29,10 @@ function jsonResponse(body: unknown, status = 200): Response {
 describe('cron map', () => {
   it('maps each cron expression to exactly one schedule id', () => {
     expect(Object.keys(CRON_MAP)).toHaveLength(2);
-    expect(bindingFor('0 2,10 * * *')?.scheduleId).toBe('bot1-daily');
-    expect(bindingFor('10 2,10 * * *')?.scheduleId).toBe('bot2-daily');
+    expect(bindingFor(BOT1_CRON)?.scheduleId).toBe('bot1-daily');
+    expect(bindingFor(BOT2_CRON)?.scheduleId).toBe('bot2-daily');
     // Whitespace tolerance: the trigger payload comes from the platform, not from us.
-    expect(bindingFor('  10 2,10 * * *  ')?.scheduleId).toBe('bot2-daily');
+    expect(bindingFor(`  ${BOT2_CRON}  `)?.scheduleId).toBe('bot2-daily');
     expect(bindingFor('*/10 * * * *')).toBeUndefined();
   });
 });

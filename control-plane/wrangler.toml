@@ -16,10 +16,18 @@ workers_dev = true
 enabled = true
 
 # Expressions are UTC. See src/cron-map.ts: the same strings are the keys of the
-# schedule map, and each one is the Asia/Shanghai schedule time minus 8 hours.
-# `deployment-contract.test.ts` fails if the two lists drift apart.
+# schedule map, and each one is the Asia/Shanghai schedule time minus 8 hours,
+# PLUS the secondary-clock offset of 2 minutes.
+#
+# This Worker is the SECONDARY external clock. The PRIMARY is cron-job.org at
+# 10:00/22:00 and 10:10/22:10 Asia/Shanghai (= 02:00/14:00Z and 02:10/14:10Z).
+# Both post the same idempotent trigger, so whichever fires second converges:
+# PixivFlow's durable slot ledger, not either clock, decides what already ran.
+#
+# `deployment-contract.test.ts` fails if these lists drift apart, and
+# `redundant-clock.test.ts` fails if the offset stops matching the documented one.
 [triggers]
-crons = ["0 2,10 * * *", "10 2,10 * * *"]
+crons = ["2 2,14 * * *", "12 2,14 * * *"]
 
 [vars]
 # Deployment glue: where PixivFlow's authenticated trigger listens. Not a secret.
