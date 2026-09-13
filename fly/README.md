@@ -55,6 +55,22 @@ cd control-plane && npx wrangler secret put SCHEDULER_TRIGGER_TOKEN
 `wrangler.toml` 里的 `PIXIVFLOW_TRIGGER_BASE_URL` 指向执行端应用地址；cron 表达式与
 `src/cron-map.ts` 的键必须一致（`npm test` 会核对）。
 
+## Telegram Mini App 部署（可选）
+
+Mini App 是「同域」的静态前端（TelePost repo 的 `webapp/dist`，路径 `/app/`），
+API 保持 `/api/v1/`，因此无 CORS、无 Cookie 语义问题。完整说明见 TelePost repo
+`docs/MINIAPP.md`；这里只给部署顺序：
+
+1. 构建 `webapp/dist`（`cd webapp && npm run build`）。
+2. 把 `dist/` 静态托管在本应用的域 + `/app/` 前缀（对象存储 + CDN、或应用侧
+   sidecar 静态服务均可；不要为此引入第二个业务后端）。
+3. `MINIAPP_ENABLED=true` + `MINIAPP_SESSION_SECRET`（见上 Secrets）。
+4. BotFather → 你的 Bot → Menu Button → Mini App URL = `https://<domain>/app/`。
+5. 验证 `GET /api/v1/me` 返回 `surface=mini_app` 的会话（用真实 Telegram 打开）。
+
+回滚：把 `MINIAPP_ENABLED` 关回 `false` 即关闭小程序 surface，Bot 与 API 不受影响
+（TelePost 2.18.0 的 feature switch 只控制 surface availability）。
+
 ## 为什么执行端没有健康检查
 
 探测本身就是请求，而请求会唤醒已停止的机器。一个刚决定收工的执行端会被自己的健康检查
