@@ -60,6 +60,18 @@ func buildChildEnv(parent []string) ([]string, error) {
 	return out, nil
 }
 
+// setEnv 覆盖或追加一个变量，保证子进程看到的是 supervisor 决定的那个值。
+func setEnv(env []string, name, value string) []string {
+	prefix := name + "="
+	out := env[:0]
+	for _, kv := range env {
+		if !strings.HasPrefix(kv, prefix) {
+			out = append(out, kv)
+		}
+	}
+	return append(out, prefix+value)
+}
+
 func envAllowed(name string) bool {
 	if exactEnvAllowlist[name] {
 		return true
@@ -179,6 +191,12 @@ func (sp *spawner) spawn(cfg config) (*childProcess, error) {
 	if err != nil {
 		sp.refusals++
 		return nil, err
+	}
+	// 端口分工由 supervisor 决定，所以它替子进程指定触发端口：子进程必须正好监听
+	// supervisor 转发过去的那个地址。让运维在配置里手工对齐两个端口，就是一个静默的
+	// 失配来源（子进程占住 8090、supervisor 等 8091，表现为触发一直 503）。
+	if port := listenPort(cfg.childTrigger); port != "" {
+		env = setEnv(env, "SCHEDULER_TRIGGER_PORT", port)
 	}
 
 	// 用 `exec` 让 sh **替换**自己，而不是留一个包装 shell 当直接子进程。

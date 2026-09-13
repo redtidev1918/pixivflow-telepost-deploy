@@ -32,22 +32,30 @@
 ```text
 Machine (always on)
 │
-├─ TelePost supervisor           always-on
-│    ├─ publisher                always-on
-│    ├─ telegram-ingress         always-on
-│    └─ clock(internal)          always-on / 极小
+├─ 容器 telepost（上游 TelePost 镜像，本 preset 不改它）   always-on
+│    ├─ publisher                                       always-on
+│    ├─ telegram-ingress                                always-on
+│    └─ clock(internal)                                 always-on / 极小
 │
-├─ PixivFlow child process       无任务 → 进程不存在
-│                                有任务 → spawn
-│                                任务完成 + grace → exit
+├─ 容器 pixivflow-sleep（本仓库镜像 docker/worker-sleep.Dockerfile）  always-on
+│    └─ supervisor（本仓库 supervisor/）                 always-on
+│         └─ executor 子进程                             无任务 → 进程不存在
+│                                                        有任务 → spawn
+│                                                        任务完成 + grace → exit
 │
-└─ 一个卷
+└─ 一个物理卷，两个互不相交的角色命名空间（SI-7）
      ├─ data/bot{N}/             每 Bot SQLite、runtime-policy.json
      └─ data/pixivflow/          pixivflow.db、下载缓存、outbox
 ```
 
-`executor` 不是容器，而是常驻 supervisor 拉起的子进程。两个 Bot 共享同一个常驻
-`publisher`，因此 Bot 数量增加时只增加 `publisher` 侧的 Python 子进程数，不增加机器数。
+**两个常驻容器，一个按需子进程。** 机器上没有任何东西会停止；`executor` 不是容器，而是常驻
+supervisor 拉起的子进程。业务侧仍是未经修改的上游 TelePost 镜像。
+
+**进程编排属于部署层，不属于 TelePost。** 负责 spawn executor 的是本仓库的 `supervisor/`
+组件（Go，仅标准库），不是 TelePost 的功能——业务仓库不实现部署编排，部署仓库不实现业务。
+
+两个 Bot 共享同一个常驻 `publisher`，因此 Bot 数量增加时只增加 `publisher` 侧的 Python
+子进程数，不增加机器数。
 
 `executor` 与 `publisher` 经 `loopback-http` 通信，不经过任何代理、overlay 或公网。
 
@@ -142,7 +150,7 @@ Machine (always on)
 | 项目 | 取值 |
 | --- | --- |
 | `executor` → `publisher` | `loopback-http`，`http://127.0.0.1:8080/api/bot{N}/v1/submissions` |
-| 触发入站 | 同一进程的 `executor` 触发端口（设计值为 8090），仅回环可见 |
+| 触发入站 | `supervisor` 常驻占住的端口 8090（仅回环可见），由它转发给子进程 |
 | `telegram-ingress` | `webhook`（公网 HTTPS）或 `polling`（无入站） |
 | 出口 | `direct` 或 `proxy`；512 MiB 机器优先外部代理 |
 
@@ -213,8 +221,8 @@ Machine (always on)
 | --- | --- | --- |
 | supervisor 二进制 | **已实现**（Go，仅标准库） | `supervisor/`（main.go / server.go / child.go） |
 | 环境白名单 | **已实现并有测试** | `supervisor/child.go` + `supervisor/supervisor_test.go` |
-| 容器镜像 | 缺失 | —— |
-| Fly / compose 配置 | 缺失 | —— |
+| 执行侧容器镜像 | **已实现**（CI 构建） | `docker/worker-sleep.Dockerfile` |
+| 平台配置（Fly / compose / systemd） | 缺失 | —— |
 | 部署步骤 | 仍是设计 | 本页 |
 
 supervisor 已经能做的事，都有真实子进程的测试守护：
@@ -230,15 +238,31 @@ supervisor 已经能做的事，都有真实子进程的测试守护：
 - 传给子进程的环境是 **deny-by-default 白名单**：只有 `PIXIV_*`、`SCHEDULER_*`、
   `*_SUBMIT_TOKEN` 与通用运行变量放行；任何 Telegram 凭据名一律拒绝启动子进程。
 
+### 端口分工由 supervisor 拥有
+
+```text
+8090  supervisor 常驻占住的对外触发端口     <- 时钟照旧 POST 到这里，路径与鉴权不变
+8091  executor 子进程自己的触发端口         <- supervisor 转发到它
+```
+
+supervisor 启动时会拒绝「两个端口相同」的配置，并且**替子进程指定**它的触发端口
+（通过 `SCHEDULER_TRIGGER_PORT`）——让运维手工对齐两个端口，就是一个静默的失配来源：
+子进程占住 8090、supervisor 在 8091 等它，表现为「触发一直 503」，而两边配置各自看起来都没问题。
+
+镜像里**没有** `HEALTHCHECK`，也显式清掉了从基础镜像继承来的健康检查：指向执行端触发端口的
+探测会把刚退出的子进程重新拉起来。唯一允许被检查的是 supervisor 自己的 `/healthz`，
+而它由运维在平台侧配置，不写进镜像。
+
 ## 部署步骤
 
-**当前不可执行。** 下面是目标形态，落地属于 Phase 3 剩余部分，见
+**部分可执行**：镜像已经能构建（`docker/worker-sleep.Dockerfile`），但平台配置（Fly /
+compose / systemd 三选一）还没写，所以完整步骤仍不可执行。落地属于 Phase 3 剩余部分，见
 [ROADMAP-MULTI-ARCH.md](../ROADMAP-MULTI-ARCH.md)。
 
-实现完成后，步骤形态应当是：
+目标形态是：
 
-1. 准备一个卷，`data/bot{N}/` 与 `data/pixivflow/` 都落在卷上。
-2. 部署常驻 `publisher`，确认私聊投稿可用、webhook 或 polling 已建立。
+1. 准备一个卷，`data/bot{N}/` 与 `data/pixivflow/` 都落在卷上，挂给两个容器。
+2. 部署常驻 `publisher`（上游 TelePost 镜像，不改），确认私聊投稿可用、webhook 或 polling 已建立。
 3. 配置常驻 supervisor（`SUPERVISOR_CHILD_CMD` / `SCHEDULER_TRIGGER_TOKEN` /
    `SUPERVISOR_LISTEN` / `SUPERVISOR_CHILD_TRIGGER`）：触发到来时 spawn `executor`，
    `executor` 退出后不重启它。`SUPERVISOR_CHILD_CMD` 必须是**单条命令**（supervisor 以

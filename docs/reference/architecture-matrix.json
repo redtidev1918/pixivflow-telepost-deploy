@@ -422,10 +422,13 @@
             "notes": "deny-by-default；真实子进程继承验证；Telegram 凭据被拒付（SI-1）"
           },
           "container-image": {
-            "state": "missing"
+            "state": "implemented",
+            "evidence": "docker/worker-sleep.Dockerfile",
+            "notes": "PixivFlow 运行时 + supervisor 二进制；无 HEALTHCHECK（清掉继承来的检查）；CI 构建"
           },
           "fly-config": {
-            "state": "missing"
+            "state": "missing",
+            "notes": "本 preset 需要自己的机器拓扑，但与「只有两份 Fly 配置」的契约冲突，待决定"
           },
           "deployment-steps": {
             "state": "design-only",

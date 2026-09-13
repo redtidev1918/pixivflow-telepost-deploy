@@ -110,6 +110,8 @@ scheduler 可不可以多实例、这个配置应该改在哪里」，不需要�
 
 **已完成（有测试守护）**：
 
+- 执行侧容器镜像 `docker/worker-sleep.Dockerfile`（PixivFlow 运行时 + supervisor 二进制，
+  无 HEALTHCHECK，CI 构建）；
 - supervisor 常驻占住触发端口，鉴权契约与 `split-worker` 执行端一致，迁移时时钟侧不用改；
 - 只有通过鉴权的 POST 才 spawn：GET 探测得到 404、错误令牌得到 401，都不会拉起进程；
 - 同一时刻只有一个 executor（SI-4），退出后不重启，supervisor 不因空闲杀子进程；
@@ -118,7 +120,9 @@ scheduler 可不可以多实例、这个配置应该改在哪里」，不需要�
 
 **未完成（因此 preset 仍不可部署）**：
 
-- 容器镜像与平台配置（Fly 1×512 MiB / compose / systemd 三种形态都没写）；
+- 平台配置：Fly 1×512 MiB / compose / systemd 三种形态都没写。Fly 形态与「只有两份 Fly 配置」
+  的契约冲突（`control-plane/test/deployment-contract.test.ts`），compose 形态与「不要另起
+  一份 compose 变体」的契约冲突——两者都需要先决定怎么表达，不能靠新增文件绕过去；
 - 端到端验证：`publisher` 常驻下的私聊投稿与 webhook 全程可用、账本空了之后进程退出、
   **触发后立刻探测确认探针没有把子进程拉回来**、机器全程未进入 `stopped`；
 - 内存峰值实测（512 MiB 下两个角色的真实占用）。

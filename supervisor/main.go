@@ -21,6 +21,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"net"
 	"os"
 	"os/signal"
 	"strings"
@@ -78,7 +79,21 @@ func loadConfig() (config, error) {
 	if !strings.HasPrefix(cfg.triggerPrefix, "/") {
 		return config{}, fmt.Errorf("SUPERVISOR_TRIGGER_PREFIX 必须以 / 开头，收到 %q", cfg.triggerPrefix)
 	}
+	// 端口分工必须成立：supervisor 占住对外触发端口，executor 子进程用另一个端口，
+	// 由 supervisor 转发。两者相同就是自我冲突——不拦下来就会变成「谁先绑定谁赢」的偶发故障。
+	if listenPort(cfg.listen) == listenPort(cfg.childTrigger) {
+		return config{}, fmt.Errorf("SUPERVISOR_LISTEN(%s) 与 SUPERVISOR_CHILD_TRIGGER(%s) 用了同一个端口：supervisor 占住对外端口，executor 必须监听另一个端口", cfg.listen, cfg.childTrigger)
+	}
 	return cfg, nil
+}
+
+// listenPort 取出 "host:port" 里的端口部分，用于比较两个地址是否冲突。
+// 解析不了就原样返回，让比较退化成字符串比较（宁可多报一次，也不放过真冲突）。
+func listenPort(addr string) string {
+	if _, port, err := net.SplitHostPort(addr); err == nil {
+		return port
+	}
+	return addr
 }
 
 func envOr(key, fallback string) string {
