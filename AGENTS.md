@@ -290,10 +290,10 @@ worker-sleep 的真机验收是单独一条命令，只在一次性 512 MiB 测�
 - **冗余外部时钟尚未经过真实 occurrence 验证。** 代码已合入 `main`（#81/#82，pin `212d8e7`）；
   执行端镜像已部署（Fly release v14，2026-09-13 08:29Z，PixivFlow `8938ca9`）；
   Cloudflare SECONDARY 已部署（cron `2 2,14` / `12 2,14 * * *`，wrangler Version
-  `e6478d49`）。**唯一未完成项是 cron-job.org 控制台里 PRIMARY 表达式的配置**——它只能在该
-  SaaS 侧完成，权威值见 [`docs/operations/scheduling.md`](docs/operations/scheduling.md)
-  的「PRIMARY 时钟」一节。PRIMARY 配置完成且真实窗口（2026-09-13 14:00Z/14:02Z）结果取到后，
-  必须回到 [`docs/incidents/2026-09-13-schedule-trigger-miss.md`](docs/incidents/2026-09-13-schedule-trigger-miss.md)
+  `e6478d49`）；cron-job.org PRIMARY 已由操作者在控制台配置（两个 job，next run 22:00/22:10
+  Asia/Shanghai，2026-09-13）。**剩下的唯一事项是等真实窗口（2026-09-13 14:00Z/14:02Z）取结果**：
+  cron-job.org 触发历史 + 执行端 admission 日志 + TelePost durable 行。结果取到后必须回到
+  [`docs/incidents/2026-09-13-schedule-trigger-miss.md`](docs/incidents/2026-09-13-schedule-trigger-miss.md)
   的「决策状态」一节补写时间戳与处置结果；在此之前不得写成「已在生产验证」。
 
 ---
