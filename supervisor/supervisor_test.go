@@ -492,6 +492,57 @@ func TestConfigFailsClosedWithoutChildCommandOrToken(t *testing.T) {
 	}
 }
 
+func TestChildGetsTheTriggerPortTheSupervisorForwardsTo(t *testing.T) {
+	// 端口分工是 supervisor 的决定：子进程必须正好监听它转发的地址。
+	// 否则表现为「触发一直 503」，而两边配置各自看起来都没问题。
+	dir := t.TempDir()
+	dump := filepath.Join(dir, "env.txt")
+	listen := freeAddr(t)
+	childPort := listenPort(listen)
+
+	s := newTestSupervisor(t, config{
+		listen:       "127.0.0.1:0",
+		childTrigger: listen,
+		childCmd:     fakeCommand(t, "FAKE_ENV_DUMP="+dump+" FAKE_LISTEN="+listen),
+		token:        fakeToken,
+		readyTimeout: 20 * time.Second,
+		readyPoll:    50 * time.Millisecond,
+	})
+	t.Cleanup(s.shutdown)
+	// 故意在父进程里放一个错误值，确认被子进程继承的是 supervisor 决定的值。
+	t.Setenv("SCHEDULER_TRIGGER_PORT", "9999")
+
+	if _, err := s.children.spawn(s.cfg); err != nil {
+		t.Fatalf("spawn 失败：%v", err)
+	}
+	waitForFile(t, dump, 15*time.Second)
+	raw, err := os.ReadFile(dump)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := "SCHEDULER_TRIGGER_PORT=" + childPort
+	if !strings.Contains(string(raw), want) {
+		t.Errorf("子进程必须收到 %s，实际环境里没有这一项", want)
+	}
+	if strings.Contains(string(raw), "SCHEDULER_TRIGGER_PORT=9999") {
+		t.Errorf("子进程收到了父进程的错误端口值 9999")
+	}
+}
+
+func TestConfigRefusesWhenBothPortsAreTheSame(t *testing.T) {
+	t.Setenv("SUPERVISOR_CHILD_CMD", "node dist/index.js scheduler")
+	t.Setenv("SCHEDULER_TRIGGER_TOKEN", fakeToken)
+	t.Setenv("SUPERVISOR_LISTEN", "127.0.0.1:8090")
+	t.Setenv("SUPERVISOR_CHILD_TRIGGER", "127.0.0.1:8090")
+	if _, err := loadConfig(); err == nil {
+		t.Fatalf("supervisor 与 executor 用同一个端口必须拒绝启动（否则就是谁先绑定谁赢的偶发故障）")
+	}
+	t.Setenv("SUPERVISOR_CHILD_TRIGGER", "127.0.0.1:8091")
+	if _, err := loadConfig(); err != nil {
+		t.Fatalf("端口分工正确时应当能启动：%v", err)
+	}
+}
+
 func TestBearerComparisonRejectsMalformedHeaders(t *testing.T) {
 	for _, header := range []string{"", fakeToken, "Bearer", "Bearer ", "Basic " + fakeToken, "bearer"} {
 		if bearerMatches(header, fakeToken) {

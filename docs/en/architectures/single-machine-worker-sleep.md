@@ -33,22 +33,32 @@ If the goal is **lowering the compute bill**, this preset cannot help; go to
 ```text
 Machine (always on)
 │
-├─ TelePost supervisor           always-on
-│    ├─ publisher                always-on
-│    ├─ telegram-ingress         always-on
-│    └─ clock(internal)          always-on / tiny
+├─ container telepost (upstream TelePost image; this preset does not change it)  always-on
+│    ├─ publisher                                                               always-on
+│    ├─ telegram-ingress                                                        always-on
+│    └─ clock(internal)                                                         always-on / tiny
 │
-├─ PixivFlow child process       no work → no process
-│                                work    → spawn
-│                                done + grace → exit
+├─ container pixivflow-sleep (this image: docker/worker-sleep.Dockerfile)        always-on
+│    └─ supervisor (this repository's supervisor/)                              always-on
+│         └─ executor child process                       no work → no process
+│                                                         work    → spawn
+│                                                         done + grace → exit
 │
-└─ one volume
+└─ one physical volume, two disjoint role namespaces (SI-7)
      ├─ data/bot{N}/             per-bot SQLite, runtime-policy.json
      └─ data/pixivflow/          pixivflow.db, download cache, outbox
 ```
 
-The `executor` is not a container but a child process spawned by the resident supervisor. Both bots
-share the same resident `publisher`, so adding bots only adds Python child processes on the
+**Two resident containers and one on-demand child process.** Nothing on the machine ever stops; the
+`executor` is not a container but a child process spawned by the resident supervisor. The service
+side is still an unmodified upstream TelePost image.
+
+**Process orchestration belongs to the deployment layer, not to TelePost.** The thing that spawns
+the executor is this repository's `supervisor/` component (Go, stdlib only), not a TelePost feature —
+the business repository does not implement deployment orchestration, and the deployment repository
+does not implement business logic.
+
+Both bots share the same resident `publisher`, so adding bots only adds Python child processes on the
 `publisher` side, not machines.
 
 `executor` and `publisher` communicate over `loopback-http`, never through a proxy, an overlay or
@@ -159,7 +169,7 @@ corrupting the whole volume still hits both roles.
 | Item | Value |
 | --- | --- |
 | `executor` → `publisher` | `loopback-http`, `http://127.0.0.1:8080/api/bot{N}/v1/submissions` |
-| Trigger ingress | the `executor` trigger port in the same process (designed value 8090), visible on loopback only |
+| Trigger ingress | port 8090, held resident by the `supervisor` (loopback only), which forwards to the child |
 | `telegram-ingress` | `webhook` (public HTTPS) or `polling` (no ingress) |
 | Egress | `direct` or `proxy`; on a 512 MiB machine prefer an external proxy |
 
@@ -240,8 +250,8 @@ hardest kind to debug.
 | --- | --- | --- |
 | Supervisor binary | **implemented** (Go, stdlib only) | `supervisor/` (main.go / server.go / child.go) |
 | Environment allowlist | **implemented and tested** | `supervisor/child.go` + `supervisor/supervisor_test.go` |
-| Container image | missing | — |
-| Fly / compose configuration | missing | — |
+| Execution-side container image | **implemented** (built in CI) | `docker/worker-sleep.Dockerfile` |
+| Platform configuration (Fly / compose / systemd) | missing | — |
 | Deployment steps | still a design | this page |
 
 What the supervisor already does is guarded by tests that spawn real child processes:
@@ -261,16 +271,35 @@ What the supervisor already does is guarded by tests that spawn real child proce
   `SCHEDULER_*`, `*_SUBMIT_TOKEN` and generic runtime variables pass; any Telegram credential name
   makes it refuse to start the child.
 
+### The port split belongs to the supervisor
+
+```text
+8090  the supervisor's resident public trigger port   <- the clock still POSTs here, same path and auth
+8091  the executor child's own trigger port           <- the supervisor forwards to it
+```
+
+The supervisor refuses a configuration where both ports are the same, and it **specifies the child's
+trigger port for it** (via `SCHEDULER_TRIGGER_PORT`): making an operator align two ports by hand is a
+silent mismatch source — the child holds 8090 while the supervisor waits on 8091, which shows up as
+"triggers always return 503" while both sides look correct on their own.
+
+The image has **no** `HEALTHCHECK` and explicitly clears any inherited from the base image: a probe
+pointing at the executor's trigger port would resurrect the just-exited child. The only thing allowed
+to be checked is the supervisor's own `/healthz`, configured by the operator on the platform side and
+deliberately not baked into the image.
+
 ## Deployment steps
 
-**Not executable today.** The shape below is the target; landing it is the rest of Phase 3, see
-[ROADMAP-MULTI-ARCH.md (中文)](/ROADMAP-MULTI-ARCH.md).
+**Partly executable**: the image already builds (`docker/worker-sleep.Dockerfile`), but no platform
+configuration (Fly / compose / systemd) exists yet, so the full path is still not executable.
+Landing it is the rest of Phase 3, see [ROADMAP-MULTI-ARCH.md (中文)](/ROADMAP-MULTI-ARCH.md).
 
-Once implemented, the steps should look like this:
+The target shape is:
 
-1. Prepare one volume; both `data/bot{N}/` and `data/pixivflow/` live on it.
-2. Deploy the resident `publisher` and confirm direct-message submission works and webhook or
-   polling is established.
+1. Prepare one volume; both `data/bot{N}/` and `data/pixivflow/` live on it, mounted into both
+   containers.
+2. Deploy the resident `publisher` (unmodified upstream TelePost image) and confirm direct-message
+   submission works and webhook or polling is established.
 3. Configure the resident supervisor (`SUPERVISOR_CHILD_CMD` / `SCHEDULER_TRIGGER_TOKEN` /
    `SUPERVISOR_LISTEN` / `SUPERVISOR_CHILD_TRIGGER`): spawn the `executor` when a trigger arrives, and do not
    restart it after it exits. `SUPERVISOR_CHILD_CMD` must be a **single command** (the supervisor
