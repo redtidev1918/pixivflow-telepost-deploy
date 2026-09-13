@@ -86,8 +86,15 @@ kill_timeout = 60
   #
   # 065ad62 = v2.19.1 (released 2026-09-12), the first release that also carries
   # the Telegram credential-detection rules added after 2.19.0.
+  #
+  # 8938ca9 (master, 2026-09-13, PR #74) carries the schedule ADMISSION and TERMINAL
+  # OUTCOME observability added after the 2026-09-13 missed morning occurrence:
+  # every trigger arrival (before auth), refusal, rejection and terminal rollup now
+  # leaves one structured line, and `schedule.outcome` records a slot's business
+  # verdict once, from durable state. This commit is deployed together with the
+  # occurrence move to 10:00/22:00 that it exists to make observable.
   [build.args]
-    PIXIVFLOW_REF = '945772649d9fbcdddcedddc5dc2cb5d3e320519e'
+    PIXIVFLOW_REF = '8938ca91abe233aade5e593eba797285167598ed'
     PIXIVFLOW_VERSION = '2.19.5'
 
 [[mounts]]
