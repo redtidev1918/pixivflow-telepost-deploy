@@ -24,6 +24,10 @@ import { CRON_MAP } from '../src/cron-map';
  * them), and this file is about the dispatch envelope, not about the schedule.
  */
 const BOT1 = Object.values(CRON_MAP).find((b) => b.scheduleId === 'bot1-daily')!;
+const cronOf = (scheduleId: string): string =>
+  Object.keys(CRON_MAP).find((cron) => CRON_MAP[cron]!.scheduleId === scheduleId)!;
+const BOT1_CRON = cronOf('bot1-daily');
+const BOT2_CRON = cronOf('bot2-daily');
 const BASE = { baseUrl: 'https://pixivflow-scheduler.fly.dev', token: 'trigger-token' };
 const SECRET = 'hunter2-super-secret';
 
@@ -231,7 +235,7 @@ describe('scheduled(): the two log events', () => {
     const { calls, fetchImpl } = recordingFetch(() => jsonResponse({ disposition: 'accepted' }));
 
     try {
-      await worker.scheduled(controller('0 2,10 * * *'), env({ DISPATCH_FETCH: fetchImpl }));
+      await worker.scheduled(controller(BOT1_CRON), env({ DISPATCH_FETCH: fetchImpl }));
     } finally {
       restore();
     }
@@ -242,7 +246,7 @@ describe('scheduled(): the two log events', () => {
     // Everything the operator needs to answer "did the clock even try?".
     expect(started!.parsed.attempt_id).toBeTruthy();
     expect(started!.parsed.schedule_id).toBe('bot1-daily');
-    expect(started!.parsed.cron).toBe('0 2,10 * * *');
+    expect(started!.parsed.cron).toBe(BOT1_CRON);
     expect(started!.parsed.scheduled_time).toBe('2026-09-13T02:00:00.000Z');
     expect(started!.parsed.label).toBe(BOT1.label);
     expect(started!.parsed.target_host).toBe('pixivflow-scheduler.fly.dev');
@@ -271,7 +275,7 @@ describe('scheduled(): the two log events', () => {
 
     try {
       await worker.scheduled(
-        controller('0 2,10 * * *'),
+        controller(BOT1_CRON),
         env({ PIXIVFLOW_TRIGGER_BASE_URL: 'https://user:url-password@example.internal:8443/trigger', DISPATCH_FETCH: fetchImpl }),
       );
     } finally {
@@ -289,7 +293,7 @@ describe('scheduled(): the two log events', () => {
     const { calls, fetchImpl } = recordingFetch(() => jsonResponse({ disposition: 'accepted' }));
 
     try {
-      await worker.scheduled(controller('10 2,10 * * *'), env({ DISPATCH_FETCH: fetchImpl }));
+      await worker.scheduled(controller(BOT2_CRON), env({ DISPATCH_FETCH: fetchImpl }));
     } finally {
       restore();
     }
