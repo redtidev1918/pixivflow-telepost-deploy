@@ -35,7 +35,9 @@ ok()   { printf '  \033[1;32m✓\033[0m %s\n' "$1"; pass=$((pass + 1)); }
 bad()  { printf '  \033[1;31m✗\033[0m %s\n' "$1"; fail=$((fail + 1)); }
 info() { printf '  \033[36m▸\033[0m %s\n' "$1"; }
 
-# shellcheck disable=SC2329  # 由下面的 EXIT trap 调用，shellcheck 看不到间接调用
+# 由下面的 EXIT trap 调用：shellcheck 看不到间接调用，于是既报「函数从未被调用」(SC2329)
+# 也把函数体当成不可达代码 (SC2317)。两个都禁用，仅限这个函数。
+# shellcheck disable=SC2329,SC2317
 cleanup() {
   info "清理冒烟资源"
   "${COMPOSE[@]}" --project-name "$PROJECT" --env-file "$ENV_FILE" down -v --remove-orphans >/dev/null 2>&1 || true
