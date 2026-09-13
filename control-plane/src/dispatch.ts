@@ -26,10 +26,24 @@ export interface TriggerTarget {
   fetchImpl?: typeof fetch;
   /** Total attempts including the first. Kept small to stay inside the cron wall clock. */
   attempts?: number;
+  /**
+   * Self-identification sent as `X-Schedule-Provider`, for correlation only.
+   * Never used for authorization and never for occurrence identity: the executor
+   * logs it and nothing else.
+   */
+  provider?: string;
   /** Per-attempt timeout. The machine may need a cold start, but not minutes. */
   timeoutMs?: number;
   retryDelayMs?: number;
   now?: () => Date;
+  /**
+   * Explicit invocation id. `index.ts` mints one and passes it in so the
+   * `trigger.dispatch_started` line it logs *before* this call carries the same
+   * id as the `trigger.dispatched` line after it. Omitted means mint one here.
+   */
+  attemptId?: string;
+  /** Test seam for the invocation id. Defaults to `newAttemptId()`. */
+  newAttemptId?: () => string;
 }
 
 export interface DispatchOutcome {
@@ -42,6 +56,30 @@ export interface DispatchOutcome {
   disposition?: string;
   attemptAt: string;
   error?: string;
+  /**
+   * Identifies the *invocation*, not the HTTP request: identical across the
+   * retries of one call, different between calls. Sent to the executor as the
+   * `x-schedule-attempt-id` header so its side of the conversation can be joined
+   * to this one.
+   */
+  attemptId: string;
+  /** Wall time of the whole call, retries and the retry sleep included. */
+  elapsedMs: number;
+}
+
+/**
+ * One id per dispatched invocation, in its own namespace: a UUID generated from
+ * nothing else. Deliberately not derived from the token, the origin or the
+ * schedule id, so it can be logged and shipped into the executor's logs without
+ * carrying any part of a secret.
+ *
+ * Why it exists: the clock used to emit a single terminal line with no id at
+ * all, so a schedule occurrence that went missing could not be joined to the
+ * executor's side of the conversation - whether the POST was ever sent, and
+ * whether it was admitted or rejected, were both unknowable after the fact.
+ */
+export function newAttemptId(): string {
+  return crypto.randomUUID();
 }
 
 const DEFAULT_ATTEMPTS = 2;
@@ -83,18 +121,50 @@ export async function dispatchSchedule(
   const now = target.now ?? (() => new Date());
   const attemptAt = now().toISOString();
 
+  // Exactly one id per call, resolved before the loop and before any early
+  // return, so every outcome - including "we refused to send" - is joinable with
+  // the caller's `trigger.dispatch_started` line.
+  const attemptId = target.attemptId ?? (target.newAttemptId ?? newAttemptId)();
+  const provider = (target.provider ?? '').trim();
+  const startedAt = Date.now();
+  const elapsed = (): number => Date.now() - startedAt;
+
   const origin = (target.baseUrl ?? '').trim().replace(/\/+$/, '');
   if (!origin) {
     // Fail closed and loud: silently skipping would leave a schedule unrun and
     // look identical to "nothing was due".
-    return { ...base, ok: false, attempts: 0, attemptAt, error: 'trigger base url is not configured' };
+    return {
+      ...base,
+      ok: false,
+      attempts: 0,
+      attemptAt,
+      attemptId,
+      elapsedMs: elapsed(),
+      error: 'trigger base url is not configured',
+    };
   }
   if (!/^https?:\/\//.test(origin)) {
-    return { ...base, ok: false, attempts: 0, attemptAt, error: 'trigger base url must be http(s)' };
+    return {
+      ...base,
+      ok: false,
+      attempts: 0,
+      attemptAt,
+      attemptId,
+      elapsedMs: elapsed(),
+      error: 'trigger base url must be http(s)',
+    };
   }
   const token = (target.token ?? '').trim();
   if (!token) {
-    return { ...base, ok: false, attempts: 0, attemptAt, error: 'trigger token is not configured' };
+    return {
+      ...base,
+      ok: false,
+      attempts: 0,
+      attemptAt,
+      attemptId,
+      elapsedMs: elapsed(),
+      error: 'trigger token is not configured',
+    };
   }
 
   const url = `${origin}/internal/schedules/${encodeURIComponent(binding.scheduleId)}/run`;
@@ -119,6 +189,12 @@ export async function dispatchSchedule(
         headers: {
           'content-type': 'application/json',
           authorization: `Bearer ${token}`,
+          // The same id on every attempt of this invocation: a retry is the clock
+          // repeating itself, not a second trigger. The executor logs this value,
+          // which is what makes "was it admitted?" answerable after the fact.
+          'x-schedule-attempt-id': attemptId,
+          // Observability only; the executor must never authorize on this.
+          ...(provider ? { 'x-schedule-provider': provider } : {}),
         },
         body: JSON.stringify({ label: binding.label }),
         signal: controller.signal,
@@ -133,6 +209,8 @@ export async function dispatchSchedule(
           httpStatus: response.status,
           ...(disposition ? { disposition } : {}),
           attemptAt,
+          attemptId,
+          elapsedMs: elapsed(),
         };
       }
       lastError = `http ${response.status}${disposition ? ` (${disposition})` : ''}`;
@@ -147,7 +225,17 @@ export async function dispatchSchedule(
     }
   }
 
-  return { ...base, ok: false, attempts: sent, attemptAt, ...(lastError ? { error: lastError } : {}) };
+  return {
+    ...base,
+    ok: false,
+    attempts: sent,
+    attemptAt,
+    attemptId,
+    // Measured after the last retry sleep, so a bounded failure reports the time
+    // the cron invocation actually spent, not just the time in flight.
+    elapsedMs: elapsed(),
+    ...(lastError ? { error: lastError } : {}),
+  };
 }
 
 async function readDisposition(response: Response): Promise<string | undefined> {
