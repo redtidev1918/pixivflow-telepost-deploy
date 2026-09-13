@@ -1,0 +1,140 @@
+# 部署契约（统一部署模型）
+
+> **本页是「一套部署由哪些概念构成、每个概念的权威来源在哪」的唯一权威描述。**
+> 它把 `docker-compose.yml`、`fly/*.toml`、`control-plane/`、`deploy.go`、README 与 docs 里
+> 散落的部署逻辑收敛成**一个概念模型**。第一阶段不让程序读取它；它统一的是文档模型、
+> 目录命名与 Agent 契约。机器可读的实例见
+> [architecture-matrix.json](https://github.com/redtidev1918/pixivflow-telepost-deploy/blob/main/docs/reference/architecture-matrix.json)。
+
+## 为什么需要它
+
+同一件事曾经有三处说法：README 说一种拓扑，`fly.toml` 说一种，`docker-compose.yml` 又说一种。
+契约的目标是让每个概念**只有一个权威来源**，并让「这是哪种部署」可以从一个 manifest 读出来，
+而不是从十几个文档里猜。
+
+## 八个概念
+
+| 概念 | 回答的问题 | 权威来源 |
+| --- | --- | --- |
+| `DeploymentPreset` | 角色分别跑在哪里、哪些可以休眠 | [architectures/overview.md](../architectures/overview.md) + 矩阵 `presets` |
+| `RuntimeRole` | 谁拥有哪个决策 | [concepts/roles.md](../concepts/roles.md) + 矩阵 `roles` |
+| `LifecyclePolicy` | 谁可以睡、谁唤醒、谁决定停机 | [concepts/lifecycle.md](../concepts/lifecycle.md) + 矩阵 `enums.lifecycle` |
+| `StateOwnership` | 每个角色的状态放在哪个卷 | [concepts/state.md](../concepts/state.md) + 矩阵 `enums.stateLayout` |
+| `TriggerProvider` | 谁决定「什么时候跑」 | [concepts/scheduling.md](../concepts/scheduling.md) + 矩阵 `enums.clockProvider` |
+| `NetworkTransport` | 角色之间走什么传输、出口是否经代理 | [concepts/network.md](../concepts/network.md) + 矩阵 `enums.transport` |
+| `CredentialBoundary` | 谁持有哪个凭据、边界在哪些 preset 成立 | [concepts/credentials.md](../concepts/credentials.md) + 矩阵 `securityInvariants` |
+| `ResourceProfile` | 每个运行单元分多少内存 | [reference/environment.md](./environment.md) + 矩阵 `resourceProfiles` |
+
+这四个维度互相独立——这一条是整套设计的地基：
+
+```text
+逻辑架构（不变）        部署拓扑（可选）        资源档位（可选）      平台（可选）
+谁拥有哪个决策     ×   角色跑在哪里、     ×   每个运行单元     ×   谁执行这个拓扑
+                     谁能休眠、谁唤醒           分配多少内存
+```
+
+矩阵用 `dimensions[]` 显式记录：`logical-architecture` 的 `variesByDeployment` 为 `false`，
+其余三个为 `true`。**任何「因为换了部署方式所以业务语义变了」的说法都与本契约冲突。**
+
+## Manifest 形状
+
+一份 preset 的部署清单长这样（示例为当前生产 `split-worker`）。这是**文档模型**，不是运行时
+输入；具体值来自矩阵。
+
+```yaml
+preset: split-worker
+
+roles:
+  publisher:                     # 逻辑角色（永不改）
+    placement: fly               # 部署事实（可变）
+    lifecycle: always-on
+    owns_state: [
+      "/app/data/botN/",         # 每 Bot SQLite + runtime-policy.json
+    ]
+    credentials: [BOT*_TOKEN, BOT*_CHANNEL_ID, BOT*_OWNER_ID]
+    telegram_credentials: true
+
+  executor:
+    placement: fly
+    lifecycle: wake-run-exit
+    owns_state: ["/app/data"]    # 槽位账本 + 下载缓存 + outbox
+    credentials: [PIXIV_*, TELEPOST_BOT*_SUBMIT_TOKEN, SCHEDULER_TRIGGER_TOKEN]
+    telegram_credentials: false  # SI-1
+
+clock:
+  provider: cloudflare           # cloudflare | external | internal
+  placement: edge-serverless
+
+transport:
+  executor_to_publisher: flycast # loopback-http | container-network | flycast | private-overlay | public-https
+
+network:
+  mode: direct                   # direct | proxy
+
+state:
+  layout: own-volume             # own-volume | own-volume-subdirectory | shared-volume | none
+  volumes:
+    - { owner: executor, mount: "/app/data" }
+    - { owner: publisher, mount: "/app/data" }
+
+resource_profile: 512m           # 见 enums / resourceProfiles
+```
+
+**各字段的合法取值**全部定义在矩阵的 `enums` 里（`supportLevel`、`roleKind`、`lifecycle`、
+`clockProvider`、`telegramIngress`、`networkMode`、`transport`、`stateLayout`、`searchMode`、
+`combinationVerdict`）。新增取值必须同时改矩阵、`architectures/overview.md` 与本页，并由
+`architecture_docs_test.go` 校验一致。
+
+## Preset 与 Feature switch 的关系
+
+部署选择被有意设计成 **少量经过验证的 Preset + 有限 Feature switch**，而不是任意排列组合——
+后者会导致组合爆炸（见 [overview.md](../architectures/overview.md) 的「合法组合」）。
+
+| 维度 | 取值 | 默认 |
+| --- | --- | --- |
+| preset | `single-host` \| `single-machine-worker-sleep` \| `split-worker` \| `remote-worker` | 由用户选择 |
+| `clock` | `internal` \| `cloudflare` \| `external` | `internal` |
+| `telegramIngress` | `webhook` \| `polling` | `polling` |
+| `network` | `direct` \| `proxy` | `direct` |
+| `bots` | `1..N` | `2` |
+| `search` | `enabled` \| `disabled` | `disabled` |
+| `review` | `enabled`（固定） | `enabled` |
+
+组合是否成立由矩阵 `combinationRules` 回答，分四档：`supported`、
+`supported-with-limitations`、`experimental`、`invalid`。**用户不需要自己猜。**
+
+## Single source of truth
+
+| 概念 | 唯一权威 | 不允许再声明的地方 |
+| --- | --- | --- |
+| 架构 Preset 定义 | `architecture-matrix.json` + `architectures/*.md` | README、`fly/*.toml` 注释、compose 注释 |
+| Preset 矩阵（支持等级） | `architecture-matrix.json` `presets.*.status` | 任何第二处 `唯一生产拓扑` 说法 |
+| Fly 拓扑 | `fly/deploy.pixivflow.toml` + `fly/deploy.telepost.toml`（仅两份） | 第三份 `*.toml` |
+| Compose 拓扑 | `docker-compose.yml` | 另起一份 compose 变体 |
+| 调度契约 | [concepts/scheduling.md](../concepts/scheduling.md) | 段落式复述 |
+| 凭据契约 | [concepts/credentials.md](../concepts/credentials.md) | 任何打印凭据的脚本 |
+| 部署契约（本页） | 本文件 | README 里的「另一种说法」 |
+
+**禁止出现两个文件同时声明「唯一生产拓扑」。** 生产拓扑是 `split-worker`（`Recommended
+Fly.io production topology`），但它是「当前生产」，不是「唯一合法架构」。这句话本身就是
+`docs-validation` 要防的漂移。
+
+## Agent 与测试如何消费
+
+- `architecture_docs_test.go` 校验：矩阵里的 preset 名在 `overview.md`、`AGENTS.md` 与各
+  preset 文档中一致；标记为 `stable` 的 preset 必有对应文档；文档引用的配置文件存在；
+  枚举取值合法；不存在「唯一生产拓扑」的第二处声明；`split-worker` 安全契约未被破坏。
+- Agent 的读取顺序是：`AGENTS.md` → 本页 → 矩阵 → 具体 preset 文档。
+
+## 与此前状态的关系
+
+本契约不引入破坏性变更。`split-worker` 的线上配置、两份 Fly 配置、`control-plane/`、四个
+只读脚本与现有守护测试全部保持可用；本页只是给它们一个统一的名字与来源。
+
+## 相关页面
+
+- Preset 索引：[architectures/overview.md](../architectures/overview.md)
+- 角色契约：[concepts/roles.md](../concepts/roles.md)
+- 环境变量与资源档位：[reference/environment.md](./environment.md)
+- 平台：[platforms/docker.md](../platforms/docker.md)、[platforms/flyio.md](../platforms/flyio.md)、[platforms/vps.md](../platforms/vps.md)、[platforms/cloudflare.md](../platforms/cloudflare.md)
+- 迁移契约：[architectures/migration.md](../architectures/migration.md)
