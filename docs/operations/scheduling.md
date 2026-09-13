@@ -263,6 +263,63 @@ min_machines_running = 0
 
 ---
 
+## PRIMARY 时钟（cron-job.org）的权威配置
+
+PRIMARY 是一个**第三方 SaaS**，它的配置**不在这个仓库里**，因此这一节是它唯一的成文位置。
+控制台里的每一个值都必须与仓库里的声明一致；不一致时以
+`control-plane/src/cron-map.ts` 的 `primaryCron` 字段为准（`redundant-clock.test.ts` 会失败）。
+
+一个 schedule 一个 job，共两个。每个 job 每天触发**两次**（上午 + 晚间）。
+
+| Job | 计划（Asia/Shanghai） | URL |
+| --- | --- | --- |
+| `pixivflow-primary-bot1-daily` | 每天 `10:00` 与 `22:00` | `https://pixivflow-scheduler.fly.dev/internal/schedules/bot1-daily/run` |
+| `pixivflow-primary-bot2-daily` | 每天 `10:10` 与 `22:10` | `https://pixivflow-scheduler.fly.dev/internal/schedules/bot2-daily/run` |
+
+等价的 UTC 表达（`deploy manifest` / `cron-map.ts` 里读到的就是这两个）：
+
+```text
+bot1-daily   0 2,14 * * *
+bot2-daily  10 2,14 * * *
+```
+
+请求设置：
+
+| 字段 | 值 |
+| --- | --- |
+| Method | `POST` |
+| Body | 空（执行端从 schedule 自己的 cron 解析 occurrence；请求体里没有日期，因此不可能回填历史） |
+| Header | `Authorization: Bearer <SCHEDULER_TRIGGER_TOKEN>` |
+| Header | `X-Schedule-Provider: cron-job-org` |
+| Header | `X-Schedule-Attempt-Id`：**留空**。cron-job.org 无法生成一次性 id，而填一个固定值会伪装成「每次都是同一次调用」。执行端在缺少这个 header 时会**省略**该字段，因此「这个时钟没有发 attempt id」仍然是可见的，而不是被一个假 id 掩盖。 |
+| 触发历史 | **开启**（保存响应），否则 §1 的证据链第一段就无法取证 |
+| 失败通知 | **开启**，指向一个有人看的地址 |
+
+**时区**：cron-job.org 的计划按账号时区解释。账号设为 `Asia/Shanghai`，或按上面的 UTC
+表达式配置——**不要**依赖本机时区，这与执行端 `production.json` 里显式声明
+`"timezone": "Asia/Shanghai"` 是同一个理由。
+
+**凭据边界**：cron-job.org **只**持有 `SCHEDULER_TRIGGER_TOKEN`，它是 scheduler-only 的。
+它**绝不**持有 Fly API token、Telegram bot token 或 channel id、TelePost submit token、
+Pixiv 凭据、GitHub token 或 Cloudflare API token。因此这个 provider 被攻破或泄漏时，
+后果只有一条：**轮换 schedule trigger credential**，不需要动任何别的凭据。
+
+**它在结构上不能做的事**（不是「我们让它别做」，是它拿不到）：它无法生成 slot id、无法
+计算 occurrence、无法写任何业务表、无法启动或停止 Fly Machine、无法直连 TelePost。
+
+**它不需要、也不应该被健康检查轮询**：该 app 的 `auto_start_machines = true`，任何公网请求
+都会冷启动执行端。不要用轮询「确认 clock 活着」——那本身就是一次虚假唤醒。
+
+### 两个时钟的处置必须被记住
+
+| 观察 | 含义 | 处置 |
+| --- | --- | --- |
+| PRIMARY 到点、SECONDARY 得到 `already_running` / `already_completed` | 正常成功。**这不是重复执行**，是收敛 | 什么都不做 |
+| PRIMARY 没到、SECONDARY 得到 `accepted` | PRIMARY 漏跑；本次 occurrence 已被 SECONDARY 救回 | 本次成功，但要查 PRIMARY 的**触发历史**为什么没 fire |
+| 两个都到、都是 `accepted` | 不可能同时发生（同一 slot 只有一个能被受理） | 若观察到，说明是两次不同 occurrence → 检查时间配置 |
+| 两个都没到 | 两个独立故障域同时失效，或配置漂移 | 走人工补触发并开事故记录 |
+
+---
 ## 相关页面
 
 - 调度语义、槽位模型、触发 API：[调度契约](../concepts/scheduling.md)
