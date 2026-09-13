@@ -21,14 +21,14 @@ primary_region = 'iad'
     # Pin the released TelePost image. Never `latest`: a floating reference makes
     # "the same config" produce different code on different days.
     #
-    # 2.17.5 (tag v2.17.5) makes a slow submission decidable and idempotent:
-    # a submission is no longer hijacked mid-flight by the reconciliation sweep
-    # (the sweep only adopts rows that never had a control message), the staging
-    # phase runs on an explicit deadline budget and a request that outlives it
-    # fails deterministically, and a reused record whose downstream status is
-    # `failed` is answered as a permanent failure (HTTP 400) instead of a 200
-    # replay — so PixivFlow can never record a remote failure as a success.
-    TELEPOST_IMAGE = 'ghcr.io/redtidev1918/telepost:2.17.5'
+    # 2.17.6 (tag v2.17.6) classifies media from the FINAL artifact instead of
+    # source metadata: a big original that compresses under the photo limit, or
+    # a high-resolution small-byte image that needs one downscale, is sent as a
+    # photo instead of being permanently demoted to a document, and galleries
+    # keep source order instead of splitting into a photo album + document album.
+    # Animations are never staticized, and a Telegram-rejected photo is retried
+    # once (bounded) before falling back to document.
+    TELEPOST_IMAGE = 'ghcr.io/redtidev1918/telepost:2.17.6'
 
 [[mounts]]
   source = 'data'
