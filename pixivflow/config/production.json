@@ -82,6 +82,7 @@
         "type": "httpMultipart",
         "url": "${TELEPOST_API_BASE_URL}/api/bot1/v1/submissions",
         "readinessUrl": "${TELEPOST_API_BASE_URL}/api/bot1/v1/health",
+        "refetchOutcomeUrl": "${TELEPOST_API_BASE_URL}/api/bot1/v1/refetch/outcomes",
         "headers": {
           "Authorization": "Bearer ${TELEPOST_BOT1_SUBMIT_TOKEN}"
         },
@@ -99,7 +100,8 @@
           "pixiv_id": "{{pixivId}}",
           "source_label": "PixivFlow · {{slotName}}",
           "source_ref": "{{executionId}}",
-          "scheduled_at": "{{occurrenceAt}}"
+          "scheduled_at": "{{occurrenceAt}}",
+          "refetch_request_id": "{{refetchRequestId}}"
         },
         "maxAttempts": 3,
         "retryDelayMs": 3000
@@ -108,6 +110,7 @@
         "type": "httpMultipart",
         "url": "${TELEPOST_API_BASE_URL}/api/bot2/v1/submissions",
         "readinessUrl": "${TELEPOST_API_BASE_URL}/api/bot2/v1/health",
+        "refetchOutcomeUrl": "${TELEPOST_API_BASE_URL}/api/bot2/v1/refetch/outcomes",
         "headers": {
           "Authorization": "Bearer ${TELEPOST_BOT2_SUBMIT_TOKEN}"
         },
@@ -125,7 +128,8 @@
           "pixiv_id": "{{pixivId}}",
           "source_label": "PixivFlow · {{slotName}}",
           "source_ref": "{{executionId}}",
-          "scheduled_at": "{{occurrenceAt}}"
+          "scheduled_at": "{{occurrenceAt}}",
+          "refetch_request_id": "{{refetchRequestId}}"
         },
         "maxAttempts": 3,
         "retryDelayMs": 3000

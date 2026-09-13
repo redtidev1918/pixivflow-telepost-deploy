@@ -248,6 +248,15 @@ describe('telepost service topology', () => {
     const image = quoted(fly, 'TELEPOST_IMAGE');
     expect(image).toBeTruthy();
     expect(image!).toMatch(/:\d+\.\d+\.\d+$/);
-    expect(fly).not.toMatch(/PIXIVFLOW_|PIXIV_|NODE_OPTIONS|SCHEDULER_TRIGGER/);
+    // TelePost holds NO Pixiv credential, no schedule-trigger credential and
+    // no executor runtime tuning. The review-refetch pair
+    // (PIXIVFLOW_REFETCH_BASE_URL / PIXIVFLOW_REFETCH_TOKEN) is the ONE
+    // deliberate exception: like SCHEDULER_TRIGGER_TOKEN (clock → executor), it
+    // is a caller-side service-to-service credential, shared with the executor
+    // verifier and documented in docs/concepts/credentials.md — not executor
+    // configuration. Everything else with an executor/Pixiv footprint is banned.
+    expect(fly).not.toMatch(
+      /PIXIV_CLIENT|PIXIV_REFRESH|PIXIV_DEVICE|PIXIVFLOW_CONFIG|PIXIVFLOW_COMMAND|PIXIVFLOW_CONFIG_TEMPLATE|SCHEDULER_TRIGGER|NODE_OPTIONS/
+    );
   });
 });

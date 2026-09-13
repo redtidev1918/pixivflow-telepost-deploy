@@ -15,6 +15,7 @@
 | `TELEPOST_BOT*_SUBMIT_TOKEN` | 业务端签发、执行端持有 | 执行端向投稿接口鉴权 | TelePost 签发 / PixivFlow 使用 |
 | `PIXIV_CLIENT_ID` / `PIXIV_CLIENT_SECRET` / `PIXIV_DEVICE_TOKEN` / `PIXIV_REFRESH_TOKEN` | `executor` | Pixiv 登录与刷新 | PixivFlow |
 | `SCHEDULER_TRIGGER_TOKEN` | `clock` 持有、`executor` 校验 | 触发端点鉴权 | control-plane / PixivFlow |
+| `PIXIVFLOW_REFETCH_TOKEN` | `publisher` 持有、`executor` 校验 | 审核群单目标手动重抓鉴权；不授予定时触发权 | TelePost / PixivFlow |
 | `SUB_URL` | `network`（仅内置代理时） | 代理订阅 | proxy 单元 |
 
 ## 安全不变量（矩阵 `securityInvariants`）

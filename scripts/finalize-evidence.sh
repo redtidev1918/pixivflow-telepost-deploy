@@ -16,7 +16,7 @@
 #   ./scripts/finalize-evidence.sh [--root DIR] [--timeout 3600]
 set -uo pipefail
 
-root=/Users/hezzn/pixivflow-evidence/2026-09-13
+root="${EVIDENCE_DIR:-$(cd "$(dirname "$0")/.." && pwd)/evidence/2026-09-13}"
 timeout_s=3600
 while [[ $# -gt 0 ]]; do
   case "$1" in

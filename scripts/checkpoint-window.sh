@@ -42,7 +42,7 @@ cd "$repo_dir" || exit 6
 schedule_id=""
 at_arg=""
 out_dir=""
-watch_dir="/Users/hezzn/pixivflow-evidence/2026-09-13/watcher"
+watch_dir="${WATCH_EVIDENCE_DIR:-$repo_dir/evidence/2026-09-13/watcher}"
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -80,7 +80,7 @@ PY
 )
 fi
 
-[[ -n "$out_dir" ]] || out_dir="/Users/hezzn/pixivflow-evidence/2026-09-13/checkpoints"
+[[ -n "$out_dir" ]] || out_dir="${EVIDENCE_DIR:-$repo_dir/evidence/2026-09-13/checkpoints}"
 mkdir -p "$out_dir"
 
 # Belt and braces: this script must never turn a proxy var into a write.

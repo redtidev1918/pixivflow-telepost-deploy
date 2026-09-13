@@ -47,6 +47,9 @@ primary_region = 'iad'
   SEARCH_ANALYZER = 'simple'
   DB_CACHE_KB = '1024'
   TZ = 'Asia/Shanghai'
+  # Review-group refetch reaches the sleeping PixivFlow executor through Fly's
+  # HTTPS proxy; PIXIVFLOW_REFETCH_TOKEN is a separate shared Secret.
+  PIXIVFLOW_REFETCH_BASE_URL = 'https://pixivflow-scheduler.fly.dev'
 
 [http_service]
   internal_port = 8080
