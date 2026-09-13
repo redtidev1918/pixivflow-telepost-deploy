@@ -276,6 +276,29 @@ func TestConfigFilesReferencedByDocsExist(t *testing.T) {
 	}
 }
 
+func TestManifestContractPointsAtRealFiles(t *testing.T) {
+	raw := mustReadRaw(t, matrixPath)
+	var doc struct {
+		Manifest struct {
+			File       string `json:"file"`
+			Authority  string `json:"authority"`
+			RuntimeDep bool   `json:"runtimeDependency"`
+		} `json:"manifest"`
+	}
+	if err := json.Unmarshal(raw, &doc); err != nil {
+		t.Fatalf("parse manifest section: %v", err)
+	}
+	if doc.Manifest.Authority == "" {
+		t.Fatalf("matrix manifest.authority is empty; the contract needs one authority page")
+	}
+	if _, ok := readIfExists(t, doc.Manifest.Authority); !ok {
+		t.Errorf("matrix points the manifest contract at %s, which does not exist", doc.Manifest.Authority)
+	}
+	if doc.Manifest.RuntimeDep {
+		t.Errorf("the manifest must not be a runtime dependency (matrix manifest.runtimeDependency)")
+	}
+}
+
 func TestMirroredPagesExistInBothLanguages(t *testing.T) {
 	m := loadMatrix(t)
 

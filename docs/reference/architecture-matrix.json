@@ -362,7 +362,9 @@
         "telegramIngress": "polling",
         "network": "direct",
         "bots": 2,
-        "search": "disabled"
+        "search": "disabled",
+        "resourceProfile": "512m",
+        "executorLifecycle": "always-on"
       },
       "platforms": [
         "docker-compose",
@@ -484,7 +486,9 @@
         "telegramIngress": "webhook",
         "network": "direct",
         "bots": 2,
-        "search": "disabled"
+        "search": "disabled",
+        "resourceProfile": "512m",
+        "executorLifecycle": "spawn-on-demand"
       },
       "platforms": [
         "flyio",
@@ -653,7 +657,9 @@
         "telegramIngress": "webhook",
         "network": "direct",
         "bots": 2,
-        "search": "disabled"
+        "search": "disabled",
+        "resourceProfile": "512m",
+        "executorLifecycle": "wake-run-exit"
       },
       "platforms": [
         "flyio"
@@ -819,7 +825,9 @@
         "telegramIngress": "polling",
         "network": "direct",
         "bots": 2,
-        "search": "disabled"
+        "search": "disabled",
+        "resourceProfile": "512m",
+        "executorLifecycle": "always-on"
       },
       "platforms": [
         "docker-compose",
@@ -912,7 +920,8 @@
         "single-machine-worker-sleep",
         "remote-worker"
       ],
-      "doc": "docs/platforms/docker.md"
+      "doc": "docs/platforms/docker.md",
+      "role": "host"
     },
     {
       "platform": "flyio",
@@ -921,7 +930,8 @@
         "split-worker",
         "remote-worker"
       ],
-      "doc": "docs/platforms/flyio.md"
+      "doc": "docs/platforms/flyio.md",
+      "role": "host"
     },
     {
       "platform": "systemd",
@@ -930,7 +940,8 @@
         "single-machine-worker-sleep",
         "remote-worker"
       ],
-      "doc": "docs/platforms/vps.md"
+      "doc": "docs/platforms/vps.md",
+      "role": "host"
     },
     {
       "platform": "cloudflare",
@@ -938,7 +949,8 @@
         "split-worker",
         "remote-worker"
       ],
-      "doc": "docs/platforms/cloudflare.md"
+      "doc": "docs/platforms/cloudflare.md",
+      "role": "clock"
     }
   ],
   "combinationRules": {
@@ -946,78 +958,221 @@
       {
         "id": "internal-clock-co-located",
         "when": "clock=internal and executor lifecycle is always-on or spawn-on-demand",
-        "why": "the process that owns the clock is resident, so a cron tick always finds a live executor"
+        "why": "the process that owns the clock is resident, so a cron tick always finds a live executor",
+        "predicate": {
+          "all": [
+            {
+              "field": "clock",
+              "op": "in",
+              "value": [
+                "internal"
+              ]
+            },
+            {
+              "field": "executorLifecycle",
+              "op": "in",
+              "value": [
+                "always-on",
+                "spawn-on-demand"
+              ]
+            }
+          ]
+        }
       },
       {
         "id": "external-clock-wake-run-exit",
         "when": "clock=cloudflare|external and executor lifecycle is wake-run-exit",
-        "why": "the trigger request is what starts the machine, and the executor's own ledger stops it"
+        "why": "the trigger request is what starts the machine, and the executor's own ledger stops it",
+        "predicate": {
+          "all": [
+            {
+              "field": "clock",
+              "op": "in",
+              "value": [
+                "cloudflare",
+                "external"
+              ]
+            },
+            {
+              "field": "executorLifecycle",
+              "op": "eq",
+              "value": "wake-run-exit"
+            }
+          ]
+        }
       },
       {
         "id": "executor-free-download-concurrency",
         "when": "network=proxy with a bundled proxy unit",
-        "why": "the proxy is a separate unit with its own memory budget"
+        "why": "the proxy is a separate unit with its own memory budget",
+        "predicate": {
+          "all": [
+            {
+              "field": "network",
+              "op": "eq",
+              "value": "proxy"
+            }
+          ]
+        }
       }
     ],
     "supportedWithLimitations": [
       {
         "id": "webhook-without-public-ingress",
         "when": "telegramIngress=webhook and no public HTTPS endpoint",
-        "limitation": "requires a tunnel or a reverse proxy; otherwise use polling"
+        "limitation": "requires a tunnel or a reverse proxy; otherwise use polling",
+        "predicate": {
+          "all": [
+            {
+              "field": "telegramIngress",
+              "op": "eq",
+              "value": "webhook"
+            }
+          ]
+        }
       },
       {
         "id": "many-bots-on-512m",
         "when": "bots>=3 and any unit has a 512 MiB budget",
-        "limitation": "each bot is a process; expect OOM without a larger profile"
+        "limitation": "each bot is a process; expect OOM without a larger profile",
+        "predicate": {
+          "all": [
+            {
+              "field": "bots",
+              "op": "gte",
+              "value": 3
+            },
+            {
+              "field": "profileBudgetMiB",
+              "op": "lte",
+              "value": 512
+            }
+          ]
+        }
       },
       {
         "id": "co-located-hosts",
         "when": "preset is single-host or single-machine-worker-sleep",
-        "limitation": "hostCredentialIsolation=false: roles share host, .env and filesystem, so a co-located process can read the publisher's secret from the shared environment. The executor unit itself still receives no Telegram credential (SI-1); the supervisor spawns it with an allowlist environment."
+        "limitation": "hostCredentialIsolation=false: roles share host, .env and filesystem, so a co-located process can read the publisher's secret from the shared environment. The executor unit itself still receives no Telegram credential (SI-1); the supervisor spawns it with an allowlist environment.",
+        "predicate": {
+          "all": [
+            {
+              "field": "preset",
+              "op": "in",
+              "value": [
+                "single-host",
+                "single-machine-worker-sleep"
+              ]
+            }
+          ]
+        }
       }
     ],
     "experimental": [
       {
         "id": "single-machine-worker-sleep",
         "when": "preset=single-machine-worker-sleep with any switches",
-        "why": "the preset is designed but not implemented in this repository"
+        "why": "the preset is designed but not implemented in this repository",
+        "predicate": {
+          "all": [
+            {
+              "field": "preset",
+              "op": "eq",
+              "value": "single-machine-worker-sleep"
+            }
+          ]
+        }
       }
     ],
     "invalid": [
       {
         "id": "wake-run-exit-without-external-clock",
         "when": "executor lifecycle=wake-run-exit and clock=internal",
-        "why": "a stopped process cannot fire its own cron; nothing would ever wake it"
+        "why": "a stopped process cannot fire its own cron; nothing would ever wake it",
+        "predicate": {
+          "all": [
+            {
+              "field": "executorLifecycle",
+              "op": "eq",
+              "value": "wake-run-exit"
+            },
+            {
+              "field": "clock",
+              "op": "eq",
+              "value": "internal"
+            }
+          ]
+        }
       },
       {
         "id": "review-disabled",
         "when": "review.enabled=false",
-        "why": "publication without human approval is outside the product contract"
+        "why": "publication without human approval is outside the product contract",
+        "predicate": {
+          "all": [
+            {
+              "field": "review",
+              "op": "ne",
+              "value": "enabled"
+            }
+          ]
+        }
       },
       {
         "id": "search-on-512m",
         "when": "search=enabled and a unit budget is 512 MiB, while that unit also runs PixivFlow",
-        "why": "the tokenizer dictionary plus the downloader exceed the budget"
+        "why": "the tokenizer dictionary plus the downloader exceed the budget",
+        "predicate": {
+          "all": [
+            {
+              "field": "search",
+              "op": "eq",
+              "value": "enabled"
+            },
+            {
+              "field": "profileBudgetMiB",
+              "op": "lte",
+              "value": 512
+            }
+          ]
+        }
       },
       {
         "id": "bundled-proxy-on-256m",
         "when": "network=proxy (bundled) and the profile is 256m",
-        "why": "the proxy alone consumes 50-100 MiB"
+        "why": "the proxy alone consumes 50-100 MiB",
+        "predicate": {
+          "all": [
+            {
+              "field": "network",
+              "op": "eq",
+              "value": "proxy"
+            },
+            {
+              "field": "resourceProfile",
+              "op": "eq",
+              "value": "256m"
+            }
+          ]
+        }
       },
       {
         "id": "second-clock",
         "when": "more than one clock provider fires the same schedule set",
-        "why": "two clocks contend for the same Pixiv credential; duplicates are idempotent, contention is not"
+        "why": "two clocks contend for the same Pixiv credential; duplicates are idempotent, contention is not",
+        "checkableBy": "fly/**/*.toml + control-plane/src/cron-map.ts"
       },
       {
         "id": "executor-with-telegram-credentials",
         "when": "the executor unit/process holds any Telegram bot token, channel id, owner id or webhook secret, in any preset",
-        "why": "it would make the executor a candidate webhook owner and allow publishing outside review; SI-1 holds for every preset, co-location changes host isolation only"
+        "why": "it would make the executor a candidate webhook owner and allow publishing outside review; SI-1 holds for every preset, co-location changes host isolation only",
+        "checkableBy": "fly/deploy.pixivflow.toml + control-plane/test/webhook-ownership.test.ts"
       },
       {
         "id": "overlapping-state-namespaces",
         "when": "two roles write the same database or state namespace, even when they share one physical volume",
-        "why": "a shared physical volume with disjoint role-owned subdirectories is legal (single-host does this); overlapping namespaces make both roles recover and corrupt together and destroy failure isolation (SI-7)"
+        "why": "a shared physical volume with disjoint role-owned subdirectories is legal (single-host does this); overlapping namespaces make both roles recover and corrupt together and destroy failure isolation (SI-7)",
+        "checkableBy": "docker-compose.yml mounts + architecture_docs_test.go (SI-7)"
       }
     ]
   },
@@ -1227,5 +1382,59 @@
       "docs/en/WEBHOOK.md": "docs/en/platforms/docker.md",
       "docs/en/MIHOMO.md": "docs/en/platforms/proxy.md"
     }
+  },
+  "manifest": {
+    "file": "deployment.manifest.json",
+    "manifestVersion": 1,
+    "authority": "docs/reference/deployment-manifest.md",
+    "requiredFields": [
+      "manifestVersion",
+      "preset"
+    ],
+    "fields": {
+      "manifestVersion": {
+        "type": "int",
+        "required": true
+      },
+      "preset": {
+        "type": "preset-id",
+        "required": true,
+        "source": "presets"
+      },
+      "platform": {
+        "type": "host-platform",
+        "required": false,
+        "source": "platformSupport[role=host].platform",
+        "default": "presets.*.platforms[0]"
+      },
+      "executorLifecycle": {
+        "type": "lifecycle",
+        "required": false,
+        "source": "enums.lifecycle",
+        "default": "presets.*.defaults.executorLifecycle"
+      },
+      "resourceProfile": {
+        "type": "resource-profile-id",
+        "required": false,
+        "source": "resourceProfiles.profiles",
+        "default": "presets.*.defaults.resourceProfile"
+      },
+      "switches": {
+        "type": "object",
+        "required": false,
+        "source": "featureSwitches",
+        "keys": [
+          "clock",
+          "telegramIngress",
+          "network",
+          "bots",
+          "search",
+          "review"
+        ],
+        "default": "presets.*.defaults"
+      }
+    },
+    "runtimeDependency": false,
+    "notes": "The manifest is a deployment-compiler input. No business code reads it, and no platform branch may be derived from it at runtime. Its authority is this matrix; the CLI embeds the matrix at build time so the released artifact carries its own contract."
   }
 }
