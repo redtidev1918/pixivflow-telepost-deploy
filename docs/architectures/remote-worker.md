@@ -159,7 +159,7 @@ TELEPOST_BOT1_SUBMIT_TOKEN=...                          # 即使走私网也必�
 | `executor-host` 崩溃 | 只有执行平面 | 批次中断 | 账本使下次唤醒可续跑 |
 | `service-host` 崩溃 | 用户可见 | 私聊投稿不可用 | 重启常驻服务 |
 | 出口被 Pixiv 限流 | 只有执行平面 | `rate limit cooldown`、penalty 升级 | 换出口且重新取证 |
-| 两个时钟同时生效 | 两个 execution 抢同一个 Pixiv 凭据 | 限流与 penalty 升级、重复触发 | 只保留一个时钟 |
+| 两个 **PRIMARY** 时钟同时生效 | 两套 schedule 定义／两份执行状态争同一个 Pixiv 凭据 | 限流与 penalty 升级、重复触发 | 只保留一个 PRIMARY；延迟幂等重放（`redundant-external-clock`）不受影响 |
 | 投稿令牌缺失 | 投递全部 401 | outbox 快速累积 | 补 `TELEPOST_BOT{N}_SUBMIT_TOKEN` |
 | 主机时钟漂移 | occurrence 计算偏移 | 计划在错误时间执行 | 两端启用 NTP；`clock=internal` 的漂移只影响自己 |
 

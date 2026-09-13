@@ -1,8 +1,12 @@
 # Cloudflare (the clock plane)
 
 > **This page is the authoritative description of using a Cloudflare Worker as an external
-> clock.** It is the default `clock.provider` for `split-worker` (`control-plane/`). For clock
-> semantics and invariants see [scheduling.md (中文)](/concepts/scheduling.md):
+> clock.** Under `split-worker` it is the **SECONDARY** external clock (`control-plane/`): the
+> PRIMARY is cron-job.org, firing at the occurrence, and this Worker fires at the occurrence
+> +2 minutes. Both POST the same idempotent endpoint, and the only execution authority is
+> PixivFlow's durable slot ledger. **It is neither the execution authority nor the only clock.**
+> For clock semantics and invariants see [scheduling.md (中文)](/concepts/scheduling.md); for
+> production operations see the [scheduling runbook](/operations/scheduling.md):
 > **the Worker only decides when to wake; it owns no state.**
 
 ## What it does, and what it never does

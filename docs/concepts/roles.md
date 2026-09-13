@@ -106,8 +106,11 @@
 而是刻意的终局决定：
 
 - **不变量是「只有一个生产执行平面」，而不是「多个平面用锁协调」。** 矩阵 `SI-4` 要求
-  「同一 Pixiv 凭据最多只有一个在跑的生产执行」。满足它的方式是**不部署第二个执行平面**：
-  矩阵把 `second-clock` 列为 `invalid` 组合，理由正是「重复触发是幂等的，凭据争用不是」。
+  「同一 Pixiv 凭据最多只有一个在跑的生产执行」。满足它的方式是**不部署第二个执行权威**：
+  矩阵把 `second-clock` 列为 `invalid`，禁止的是第二个 **PRIMARY** 时钟（自带 schedule 定义或
+  自带执行状态的第二个调度器 / 第二个执行权威），理由正是「重复触发是幂等的，凭据争用不是」。
+  **延迟的幂等重放不受此限**：矩阵 `redundant-external-clock` 允许它，因为它不持有状态、
+  不推导 occurrence，只在同一个 durable slot 上收敛。见 [scheduling.md](./scheduling.md)。
 - **幂等已经覆盖了重复。** 触发是幂等的（同一 occurrence 收敛到同一个 Slot），Slot 级
   与作品级幂等由 PixivFlow 与 TelePost 各自拥有（见 [delivery.md](./delivery.md)）。
   在幂等之上再加一层锁，只是在给一个已经收敛的系统增加一个新的失败模式。
