@@ -1,7 +1,7 @@
 # Roadmap：多架构部署实现计划
 
-> **本文件是多架构演进的实施计划，不是已完成工作的说明。** Phase 1（本文档所处的阶段）
-> 只交付契约、文档与守护测试；Phase 2 起才动部署代码。
+> **本文件是多架构演进的实施计划，不是已完成工作的说明。** Phase 1 交付契约、文档与守护
+> 测试；Phase 2 交付部署清单（部署编译器的输入契约）；Phase 3 起才动运行时编排。
 > 契约的机器可读权威是
 > [`docs/reference/architecture-matrix.json`](https://github.com/redtidev1918/pixivflow-telepost-deploy/blob/main/docs/reference/architecture-matrix.json)。
 
@@ -55,6 +55,8 @@ scheduler 可不可以多实例、这个配置应该改在哪里」，不需要�
 
 ## Phase 2 —— 统一 deployment manifest
 
+**状态：完成。** 契约见 [部署清单](reference/deployment-manifest.md)。
+
 **目标**：让一个文件成为「这是一套什么部署」的机器可读声明，程序能读它。
 
 | 项 | 内容 |
@@ -65,15 +67,19 @@ scheduler 可不可以多实例、这个配置应该改在哪里」，不需要�
 | 校验 | manifest 的 preset ∈ 矩阵；开关组合 ∈ `combinationRules`；资源档位 ∈ `resourceProfiles` |
 | 不做 | 不改变现有 `deploy.go` 的部署路径；不改变 `fly/*.toml` 与 compose 的角色 |
 
-**验收标准**：
+**验收标准（已满足）**：
 
-- 从 `single-host` 部署目录生成的 manifest 声明 `preset: single-host`，
-  从生产 Fly 目录生成的声明 `preset: split-worker`，两者都通过校验。
-- 故意写一个非法组合（例如 `wake-run-exit` + `clock=internal`）时校验**失败**，
-  并指出违反的规则 id。
-- `deploy doctor` 输出当前 manifest 的 preset、开关与档位。
+- `deploy manifest` 从 `docker-compose.yml` 判定 `single-host`、从两份 Fly 配置判定
+  `split-worker`，两者都通过校验；`remote-worker` 与 sleep preset 无法从产物判定，
+  必须 `--preset` 显式声明。
+- 非法组合校验失败并给出规则 id（例如 `wake-run-exit-without-external-clock`），退出码非 0。
+- `deploy doctor` 打印当前目录的部署清单摘要（preset / 平台 / 生命周期 / 档位 / 开关）。
+- 矩阵新增可校验契约：每条组合规则要么带机器可判定 `predicate`（11 条），
+  要么显式声明由谁守护 `checkableBy`（3 条）；一致性测试强制二者必居其一。
+- 副作用：机器校验立刻抓出一处真实不一致——`remote-worker` 的默认 `clock=internal`
+  与「取第一个」推出的 `wake-run-exit` 自相矛盾，因此默认生命周期改为矩阵显式声明。
 
-**明确不做**：不把 manifest 作为运行时依赖；业务代码不读它。
+**明确不做**：不把 manifest 作为运行时依赖；业务代码不读它；不实现 sleep worker。
 
 ---
 
