@@ -7,494 +7,207 @@
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Docs](https://img.shields.io/badge/Docs-文档站点-6366f1?style=flat-square)](https://redtidev1918.github.io/pixivflow-telepost-deploy/)
 
-一个面向实际运行的 Pixiv 自动投稿部署套件：PixivFlow 负责按主题/榜单抓取作品，
-TelePost 负责投稿审核与频道发布。同一份配置可用于海外 VPS、国内服务器、无公网
-NAT 主机、Mac/Linux 本机和 Fly.io。默认（Compose）以两个独立容器运行：TelePost
-多 Bot supervisor 与 PixivFlow 调度器各自拉取 ghcr 镜像、经 HTTP 通信，适合
-512 MiB 小机器，不启动 WebUI。
+一个面向实际运行的 Pixiv 自动投稿部署套件。它把两个上游项目组合成一套可部署的系统：
 
-生产只有一个 webhook 负责人（TelePost）和一套执行账本（PixivFlow）。历史上曾同时存在
-两份「权威」实现，投稿机器人的 webhook 被指向 Cloudflare Worker，用户投稿被静默丢弃；
-那套实现与其上线门禁脚本已删除，`control-plane/test/` 下的守护测试会阻止它们回来。
+| 组件 | 负责什么 | 不负责什么 |
+| --- | --- | --- |
+| [PixivFlow](https://github.com/redtidev1918/PixivFlow) | 按主题/榜单抓取作品、选品、下载、可靠投递 | 不碰 Telegram 频道 |
+| [TelePost](https://github.com/redtidev1918/TelePost) | 接收投稿、人工审核、发布到频道 | 不做 Pixiv 登录与调度 |
 
-## 生产拓扑：两个应用 + 一个时钟
+**业务模型只有一套，部署拓扑可以选择。** 同一份业务语义可以跑在一台 VPS 上、一台
+512 MiB 机器上，或者拆成两台机器；变化的是角色跑在哪里、谁能休眠、谁唤醒谁、谁持有凭据，
+不是审核流程或调度语义。
 
-生产只有一种拓扑，由三个平面组成（完整契约见 **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)**）：
+---
 
-- **Cloudflare 只决定「何时唤醒」**：cron → schedule 标识 → 一个带触发令牌的 POST，
-  不计算 occurrence、不写业务表。见 `control-plane/` 与 [docs/SCHEDULING.md](docs/SCHEDULING.md)。
-- **PixivFlow**（`fly/deploy.pixivflow.toml`）：独立机器 + 独立卷，**平时停止**，
-  被触发请求由平台代理自动唤醒，跑完由自己的账本决定退出（`exitWhenIdle`）。
-- **TelePost**（`fly/deploy.telepost.toml`）：**常驻**，唯一持有 Telegram 令牌、
-  唯一能发布到频道的服务；人工批准前任何作品都不会进频道。
+## 我该选哪种部署方式？
 
-不用 Fly 时：**Docker Compose** 是单机自托管路径（所有角色在一个容器内），
-它与上面的生产拓扑不是同一组边界，区别写在 ARCHITECTURE 末节；systemd / 裸机同理。
+| 你的情况 | 推荐 |
+| --- | --- |
+| 我只有一台 VPS / NAS / 家用机 | `single-host` |
+| 我只有一个 512 MiB 的 Fly Machine | `single-machine-worker-sleep`（**当前仅设计，未实现**） |
+| 我希望最省 Fly 费用 | `split-worker` |
+| 我最在意可靠性 | `split-worker` |
+| 我有 VPS + 家用服务器 | `remote-worker` |
+| 我最在意 Pixiv 出口质量 | `remote-worker` |
+| 我只想最快跑起来 | `single-host` |
 
-定时、唤醒、停机、Slot 幂等与投递去重的原理和不变量见 [docs/SCHEDULING.md](docs/SCHEDULING.md)。
-
-## 特性
-
-- **主题自动投稿**：按 Pixiv 主题（tag 空间推导）或日榜抓取「昨日最热门」作品，
-  插画/小说各取 Top N，自动排除 AI 生成作品（读 Pixiv 官方 `illust_ai_type` 标记）。
-- **中文小说筛选**：`franc-min` 语言检测 + `strictLanguageFilter`，只投中文小说。
-- **审核群 + 回复链**：API 投稿先进审核群，多页图集按 ≤10 张一组打包成 Telegram
-  相册、相册间自动回复成链；审核通过后复用 `file_id` 发布到频道，不重复上传。
-- **完整 caption 模板**：标题/简介/标签/原链接/剧透策略全部可模板化；NSFW 收录与
-  Telegram 遮罩相互独立，默认不因 R-18 标签自动遮罩。标签会净化成可点击的 hashtag
-  （`r-18 → #r18`）。
-- **多网络模式**：Polling / Webhook / 可选 Mihomo 代理，同一套 `api/botN/v1/*` 接口。
-- **低内存友好**：512 MiB 即可运行——小相册 + 失败自动降级逐张、逐页强制 GC、
-  可调健康检查参数。
-- **远程更新**：Compose/systemd 部署下 PixivFlow 配置改文件即热重载，Fly 生产随镜像发布；
-  TelePost 可由 OWNER 用 `/botconfig` 持久化策略并只重载当前 Bot，批量策略用脚本短重启应用。
-- **不静默、不重复**：最终无候选会进审核群；PixivFlow 持久 outbox
-  防止短暂故障漏通知，TelePost SQLite 幂等记录防止重启后重复通知。
-
-## 许可证
-
-[MIT](LICENSE)
-
-本项目与 Pixiv、Telegram、Fly.io 无隶属或官方合作关系。部署者应只处理有权下载、保存和
-发布的内容，并自行遵守平台条款、版权要求与所在地法律。项目不会替部署者决定频道内容
-政策，也不提供规避平台限制或监管的保证。
-
-## 网络模式
-
-| 机器条件 | 启动方式 | TelePost 模式 |
-|---|---|---|
-| 无公网，Telegram/Pixiv 可直连 | `docker compose up -d` | AUTO 自动选择 Polling |
-| 有域名且 80/443 可入站 | `docker compose --profile webhook up -d` | AUTO 选择 Webhook |
-| 国内网络，需要代理 | `docker compose --profile proxy up -d` | Polling + Mihomo |
-| Fly.io | 两个应用各一条命令：`fly deploy -c fly/deploy.telepost.toml` 与 `fly deploy -c fly/deploy.pixivflow.toml` | Webhook |
-| Linux VPS（systemd，免 Docker） | `deploy --platform systemd` | Polling（源码直跑） |
-
-Polling 与 Webhook 都提供相同的 `http://127.0.0.1:8080/api/botN/v1/*`，因此
-PixivFlow 的投递配置无需随网络模式改变。Webhook 注册失败时 AUTO 会回退 Polling。
-
-## 一键部署工具（deploy）
-
-**Go 编译的单二进制**，Windows / macOS / Linux 直接运行，零运行时依赖
-（无需 Python / sh / venv / pip），也不需要 clone 本仓库。
-
-### 一键部署（全新机器）
-
-只装 **Docker** + 一个二进制，三条命令即可跑起来：
-
-```bash
-deploy init mybot        # 1) 就地生成全新部署目录（内嵌 compose/.env/示例配置模板，向导式填 Bot 信息）
-cd mybot
-deploy doctor && deploy deploy   # 2) 自检 → 3) 一键部署（docker compose pull/up + 健康检查）
+```text
+只有一台机器？
+├─ 是
+│  ├─ 内存 ≥ 1 GiB ─────────────────► single-host
+│  ├─ 内存 = 512 MiB
+│  │  ├─ 想省内存、能接受机器常驻计费 ─► single-machine-worker-sleep
+│  │  └─ 想省账单 ─────────────────► split-worker
+│  └─ 内存 = 256 MiB ──────────────► single-host，只跑业务端
+└─ 否
+   ├─ 用 Fly.io ────────────────────► split-worker
+   └─ 已有多节点 ───────────────────► remote-worker
 ```
 
-`init` 默认生成 Polling 模式的 `.env` 与双 Bot 示例配置，向导会继续询问部署
-场景：**Webhook**（有域名，自动填 `WEBHOOK_*` 并提示 `--profile webhook`）、
-**国内+Mihomo 代理**（填代理/订阅并提示 `--profile proxy`）或 **Fly.io**
-（生成 `telesubmit.fly.toml` 并提示 secrets 与 `--platform fly` 部署）；
-直接回车则保持 Polling。非交互（管道/CI）运行时全部静默、只生成占位配置。
+完整对照表、常见误配组合、以及「进程休眠 ≠ 机器休眠」这个最常见的混淆，
+见[**我该选哪种部署方式？**](docs/getting-started/choose-architecture.md)。
 
-没有 Docker 的 Linux VPS 用 systemd 后端（免 Docker、同机组合跑 TelePost +
-PixivFlow，见下文 systemd 说明）；完整场景对照见 [docs/SCENARIOS.md](docs/SCENARIOS.md)。
+---
 
-### 获取
+## 快速开始（默认 `single-host`）
 
-方式一：从 [Releases](https://github.com/redtidev1918/pixivflow-telepost-deploy/releases)
-下载对应平台的 `deploy-<os>-<arch>`（linux/darwin/windows × amd64/arm64），
-解压后改名 `deploy`，Linux/macOS 记得 `chmod +x`。
-
-方式二：源码编译（本机有 Go 1.22+）：
-
-```bash
-go build -o deploy .
-```
-
-### 用法
-
-二进制可在**任意目录**运行：当前目录不是仓库时，会沿目录树向上并回退到
-可执行文件所在目录自动定位仓库配置（`telesubmit.fly.toml` / `docker-compose.yml`）。
-
-```bash
-./deploy init <dir>             # 全新部署：生成部署目录并引导填写 Bot 信息
-./deploy doctor                 # 环境自检（依赖/配置/登录/网络）
-./deploy tp latest              # 升级 TelePost 到最新并部署（也可指定如 2.10.41）
-./deploy pf 2.10.31             # 升级 PixivFlow 到指定版本并部署（动图转 GIF 需 ≥2.10.31）
-# 生产：改 fly/deploy.pixivflow.toml 的 PIXIVFLOW_REF（40 位提交号）后 fly deploy
-./deploy status                 # 状态 / 健康
-./deploy logs 200               # 最近 200 行日志
-./deploy version                # 显示工具与当前配置版本
-```
-
-平台自动检测（默认 `--platform auto`）：存在 `telesubmit.fly.toml` 且 flyctl 已登录 →
-Fly.io；否则有 `docker-compose.yml` → Docker Compose；再否则 Linux 上有 systemctl →
-systemd。也可 `--platform fly|compose|systemd` 显式指定。
-
-- **Fly（生产）**：本仓库固定两份配置，一个应用一份：
-  `fly deploy -c fly/deploy.telepost.toml`（业务端，常驻）与
-  `fly deploy -c fly/deploy.pixivflow.toml`（执行端：自动唤醒、不自动停止、跑完自行退出）。
-  首次使用先把两份配置里的 `app` 改成自己的名字。镜像引用分别由 `TELEPOST_IMAGE`
-  （发布版本）与 `PIXIVFLOW_REF`（40 位提交号或发布 tag）固定，部署后
-  `./scripts/verify-images.sh` 会核对线上镜像与提交号是否就是固定的那个。
-  `combined.Dockerfile` 只组合已发布版本，不能部署 PixivFlow 未发布提交；要把未发布提交
-  部署到执行端，改 `PIXIVFLOW_REF` 即可——`docker/pixivflow-scheduler.Dockerfile`
-  在构建时按该提交号克隆、编译，并把版本与提交号烘焙进镜像。
-  单机自托管仍可用 `deploy init` 生成 `telesubmit.fly.toml`（见下）。
-- **Compose**：compose 后端拆成 `telepost` 与 `pixivflow` 两个独立 service，
-  各自拉取 ghcr 镜像（`.env` 的 `TELEPOST_IMAGE` / `PIXIVFLOW_IMAGE`），共享
-  `./data` 卷、经 HTTP 通信（投递基址 `TELEPOST_API_BASE_URL`，默认
-  `http://telepost:8080`）。升级用 `./deploy tp <版本>` / `./deploy pf <版本>`
-  （或直接改 `.env` 后 `docker compose up -d`）。
-- **systemd**（Linux 裸机，免 Docker）：`deploy --platform systemd` 自动
-  clone TelePost → 建 venv + `pip install` → 安装 Node + `npm i -g pixivflow`
-  （组合单机省钱形态）→ 引导填写 `BOT1_TOKEN`/`BOT1_CHANNEL_ID` 及是否启用
-  PixivFlow（写入 `/opt/telepost/.env`）→ 写 `/etc/systemd/system/telepost.service`
-  → `systemctl enable --now telepost`。TelePost 的 supervisor 同机托管 bot 与
-  PixivFlow 两个进程（复刻 Fly 上的省钱组合）。升级 `tp latest`（git pull + pip +
-  restart）、`pf latest`（npm 重装 + restart）。
-- 常用选项：`--dry-run`（只预览、不改配置）、`--verbose`（回显命令完整输出）、
-  `--retries N`（部署失败重试）、`--no-color`。
-- 每次运行写完整日志到 `/tmp/deploy-logs/`（Windows 在 `%TEMP%`），失败时终端会提示日志路径。
-
-先自检再部署：
-
-```bash
-./deploy doctor
-./deploy deploy          # 或 ./deploy tp latest
-```
-
-## 快速开始
-
-需要 Docker 24+、Compose v2。`bootstrap.sh`/`validate.sh` 还需要 bash 与
-python3（只用于本地生成与校验，运行时镜像内自带）。
-
-Linux/macOS（含 Git-Bash 的 Windows）一键初始化：
+需要 Docker 24+ 与 Compose v2。
 
 ```bash
 git clone https://github.com/redtidev1918/pixivflow-telepost-deploy
 cd pixivflow-telepost-deploy
-./scripts/bootstrap.sh
-```
-
-Windows 用户可手动完成同样的事：复制 `.env.example` 为 `.env`、把
-`pixivflow/config/fly-two-bots.example.json` 复制为 `data/pixivflow/config.json`。
-
-编辑 `.env`，至少填写 `BOT1_TOKEN`、`BOT1_CHANNEL_ID`、`BOT1_OWNER_ID`。启用
-PixivFlow 时再填写 `PIXIV_REFRESH_TOKEN` 和 Bot 内 `/gen_token` 生成的
-`TELEPOST_BOT1_SUBMIT_TOKEN`。编辑 `data/pixivflow/config.json`（参考
-`pixivflow/config/fly-two-bots.example.json`），把示例主题 `ミク`/`アークナイツ`
-替换成你需要的 tag、调整 Cron，并把要执行的计划改成 `"enabled": true`。
-
-```bash
+./scripts/bootstrap.sh                 # 生成 .env 与 data/pixivflow/config.json
+# 编辑 .env：至少填 BOT1_TOKEN、BOT1_CHANNEL_ID、BOT1_OWNER_ID
+# 编辑 data/pixivflow/config.json：换成你的 tag、调整 Cron、把要跑的计划改成 "enabled": true
 ./scripts/validate.sh
 docker compose up -d
-docker compose ps
 curl http://127.0.0.1:8080/health
 ```
 
-预构建镜像从 GHCR 拉取（公开）：`TELEPOST_IMAGE`（TelePost）与
-`PIXIVFLOW_IMAGE`（PixivFlow 精简调度镜像）由各自仓库发版构建，本仓库无需
-本地构建镜像（`--profile webhook/proxy` 的 Caddy/Mihomo 除外）。国内构建机
-可在 `.env` 设置 `BUILD_HTTP_PROXY` / `BUILD_HTTPS_PROXY`。
-生产环境建议把 `.env` 的 `TELEPOST_IMAGE` 与 `PIXIVFLOW_IMAGE` 固定到明确
-Release 标签；`latest` 适合首次体验，但会在重新拉取时升级。升级前先阅读
-CHANGELOG 并备份持久卷。
-
-## 两个 Bot 与审核策略
-
-每个 Bot 使用自己的 Token、频道、审核群和 API 投稿 Token。默认示例是“仅 API
-投稿进审核群，普通聊天投稿不审核”：
-
-```dotenv
-BOT1_API_REVIEW_REQUIRED=true
-BOT1_CHAT_REVIEW_REQUIRED=false
-BOT1_REVIEW_CHAT_ID=-100xxxxxxxxxx
-```
-
-Bot 2 使用对应的 `BOT2_*`。PixivFlow 模板中的两个 delivery target 固定投递到
-`/api/bot1/v1/submissions` 与 `/api/bot2/v1/submissions`。
-
-## 自动投稿的标题/简介/标签/链接/剧透
-
-PixivFlow 的 delivery 模板把投稿转成 TelePost 的 caption 字段，模板变量有
-`{{title}}`、`{{pixivId}}`、`{{type}}`、`{{tag}}`、`{{topic}}`、
-`{{workTags}}`、`{{link}}`（自动生成 Pixiv 作品/小说永久链接）、`{{topicTag}}`、
-`{{xRestrict}}`、`{{xRestrictLabel}}`、`{{xRestrictTag}}` 与
-`{{spoiler}}`（Pixiv `x_restrict > 0` 时为 `true`）。建议设计（已在示例配置中）：
-
-- `title` → `{{title}}`，频道内渲染为「🔖 标题」
-- `note` → 自动投稿来源、主题与作品 ID
-  （`Pixiv 每日热榜自动投稿 / 主题：{{topicTag}} · 作品ID：{{pixivId}} / 来源…`），
-  渲染为「📝 简介」；链接由 `link` 字段单独渲染，不重复占用简介
-  （JSON 模板换行写作 `\n`，不要写成会显示为字面量的 `\\n`）
-- `tags` → `["Pixiv", "{{topicTag}}", "{{xRestrictTag}}", "{{workTags}}"]`，
-  来源主题 + `AllAges/R18/R18G` 精确分级 + 作品自身标签；
-  数组字段默认按逗号拼接成 multipart 重复表单项，TelePost 按逗号/空格拆分为 `#标签`
-  （去重、保序、小写化、去 `#` 后统一加 `#`，上限 30 个）
-- `link` → `{{link}}`，渲染为「🔗 链接」；插画/小说永久链接由 PixivFlow 自动生成
-- `note` 额外显示 `{{xRestrictLabel}}（x_restrict={{xRestrict}}）`，明确区分
-  全年龄、R-18 和 R-18G
-- `spoiler` → `false`：默认不自动加 Telegram 剧透遮罩。`includeR18: true` 只决定是否
-  收录 NSFW，不再隐式决定展示方式
-- `anonymous` → `true`，频道内不显示投稿人
-- `idempotency_key` → `{{idempotencyKey}}`：PixivFlow 按 occurrence 生成
-  `pixivflow:<target>:<type>:<pixivId>:<slotId>:<targetId>`。同一次触发的 ACK 丢失重试
-  带同一个键 → TelePost 返回 `idempotent_replay`（不是新稿件）；新 occurrence 再投
-  同一作品则走 `duplicate_existing` 历史去重。不要用按作品固定的键，否则不同 occurrence
-  的合法重投无法与"ACK 丢失重试"区分。
-
-`spoiler` 是每个 delivery target 的显式策略，可按频道分别选择：
-
-| 配置值 | 行为 |
-|---|---|
-| `false` | 默认；任何作品都不自动遮罩 |
-| `"{{spoiler}}"` | 兼容旧行为；Pixiv `x_restrict > 0` 的作品自动遮罩 |
-| `true` | 该 target 的所有媒体都遮罩 |
-
-例如 Bot 1 可以保持 `false`，Bot 2 使用 `"{{spoiler}}"`。这里不会根据标题、tag
-或成人分级作未经部署者确认的进一步推断；需要更细规则时应拆成不同 delivery target，
-或由上游投稿时显式传入 `spoiler=true`。
-
-### 投稿链路与通用性
-
-PixivFlow 不依赖 TelePost 私有协议：它把作品文件与模板字段渲染成一次标准的
-`multipart/form-data` HTTP 请求（`files` 文件字段 + `title/tags/note/link/spoiler/
-anonymous/idempotency_key` 表单字段），`Authorization: Bearer <submit-token>` 鉴权。
-TelePost 接收后写入审核队列并把媒体暂存到审核群、只保存 Telegram `file_id`。
-因此：
-
-- 任何能发 multipart HTTP 的程序/cron/CI 都能复用同一 API 投稿（TelePost 仓库自带
-  API 说明与 token 由 Bot 内 `/gen_token` 签发）；PixivFlow 只是其中一个上游。
-- 反过来 PixivFlow 的 `httpMultipart` delivery 也可指向任意兼容该表单约定的接收端，
-  模板变量（`{{title}}/{{link}}/{{workTags}}/{{spoiler}}` 等）与接收方解耦。
-- 小说投稿为 `.txt` 文档（document），插画为图片；Pixiv 动图（ugoira）自 PixivFlow
-  **2.10.31** 起按每帧延迟合成**循环 GIF** 以动画（animation）直接播放，不再投递 ZIP +
-  帧 JSON。转换在运行时 spawn `python3` + `ffmpeg`：PixivFlow 独立镜像/合一台镜像已内置
-  ffmpeg；裸机（systemd）由 `deploy` 自动 `apt-get install -y ffmpeg`。审核群与频道都按
-  媒体类型发送，发布到频道时自动按每组 ≤10 拆成多个 Telegram media group。
-
-### 审核群相册与回复链
-
-多页图集进入审核群时，TelePost 会按每批最多 10 张组成 Telegram 相册；下一相册、小说
-`.txt` 文档和审核按钮回复上一批，在群内形成一份完整投稿。需要取消回复关系时设
-`REVIEW_PREVIEW_THREAD=0`。上传保留限速与 `RetryAfter` 退避，批准后继续复用 Telegram
-`file_id`，不会从 Fly 再次上传媒体。
-
-待审核稿进入群后，原始上传文件会立即从运行机器删除；SQLite 只保存 Telegram
-`file_id`、caption 和状态，因此积压基本不占内存，也不会把原图堆在 Fly 持久卷。默认
-`PENDING_REVIEW_RETENTION_DAYS=1`：超过一天仍未审核的稿件会标记为 `expired`，并删除
-对应的审核群相册、文档和按钮消息；每轮最多处理 20 条。轻量审计记录再按
-`REVIEW_RETENTION_DAYS=30` 清理。
-
-Telegram Bot API 只保证删除发送后 48 小时内的消息，因此需要自动清群时不要把待审核
-保留期设为 2 天或更长。设 `0` 可永久保留 pending；此时需自行管理审核群历史消息。
-`/health` 的 `storage.review_queue` 会返回各 Bot 的 pending/failed/expired/deleted 数量和最老
-pending 年龄，不包含标题、标签或投稿人等内容。
-
-### 单次手动测试（不等待 Cron）
+不想 clone 仓库？`deploy` 是 Go 编译的单二进制（Windows / macOS / Linux，零运行时依赖），
+三条命令部署到一台全新机器：
 
 ```bash
-# 在运行机器上执行一次，立即验证「昨日最热门 + 主题相关 tag + 含 R-18」链路：
-pixivflow download --config /app/data/pixivflow/config.json
+deploy init mybot                        # 向导式生成部署目录
+cd mybot
+deploy doctor && deploy deploy           # 自检 → 一键部署
 ```
 
-新增/修改 target 并保存后，PixivFlow 会热重载；配合
-`mode: "topic" + topic + date: "YESTERDAY" + topicDiscovery.includeR18: true + limit: 1`
-即得到「昨天最热门的主题相关 tag 1 部插画/小说（含 R-18）」并投递到对应 Bot 的审核群。
-插画加 `excludeAI: true` 会排除 AI 作品，判定有两层：Pixiv 官方 `illust_ai_type === 2`
-标记，以及作品标签中的 AI 标记（`生成AI` / `AI生成` / `Generative AI` / `AI-generated`
-等，含翻译名——官方字段缺失或尚未标注的作品也能拦住，零成本）。可选再加
-`aiMetadataCheck: true`：下载完成后扫描首页文件头部元数据（Stable Diffusion 的
-`parameters=` PNG tEXt、NovelAI EXIF 等），命中则跳过投递（仍记为已下载，不重复拉取）。
-小说加 `languageFilter: "chinese" + languageCandidateLimit: 20 + strictLanguageFilter: true`。若昨天没有中文候选，可设置 `noMatchPolicy: { "lookbackDays": 3, "notify": true }`：最多逐日回看 3 天，仍为空时通知对应审核群，不会静默改投日文小说。
-该通知与媒体投递共用 PixivFlow outbox 指数退避，TelePost 再以 SQLite
-幂等键跨重启去重；所以网络闪断时不会静默丢失，恢复后也不会刷屏。
-会按热度串行回填，直到找到 1 部可确认的中文小说。
+二进制从 [Releases](https://github.com/redtidev1918/pixivflow-telepost-deploy/releases)
+下载 `deploy-<os>-<arch>`。
 
-## 远程变更
+**完整步骤、验证清单与其它 preset 的入口**：[快速开始](docs/getting-started/quickstart.md)。
 
-Compose/systemd 部署下，PixivFlow 监听配置文件，校验通过后原子替换调度表，无需重启；
-Fly 生产执行端的配置随镜像发布（`watchConfig=false`），改配置需要重新构建并部署。
+---
 
-TelePost OWNER 可直接在 Telegram 使用 `/botconfig` 修改当前 Bot 的频道、审核群、
-API/聊天审核与频道署名策略；存在 pending 投稿时会拒绝切换频道或审核群。应用后只
-重载当前 Bot，另一个 Bot、PixivFlow、数据库、缓存和 outbox 不受影响。
+## 功能
 
-从 Mac 批量更新多个 Bot 时使用非敏感策略文件：
+- **主题自动投稿**：按 Pixiv 主题（tag 空间推导）或日榜抓取「昨日最热门」，插画/小说各取
+  Top N，按 Pixiv 官方 `illust_ai_type` 标记排除 AI 作品。
+- **中文小说筛选**：`franc-min` 语言检测 + `strictLanguageFilter`，只投中文小说。
+- **审核群 + 回复链**：多页图集按 ≤10 张打包成相册、相册间自动回复成链；审核通过后复用
+  `file_id` 发布，不重复上传。**人工批准前任何作品都不会进频道。**
+- **完整 caption 模板**：标题 / 简介 / 标签 / 原链接 / 剧透策略全部可模板化，
+  标签净化成可点击的 hashtag。
+- **多种网络模式**：Polling / Webhook / 可选代理，同一套 `api/botN/v1/*` 接口。
+- **低内存友好**：512 MiB 可运行；小相册 + 失败自动降级逐张、逐页强制 GC。
+- **不静默、不重复**：最终无候选也会通知审核群；持久 outbox 防漏投递，
+  SQLite 幂等键防重启后重复。
 
-```bash
-cp config/telepost-policy.example.json ./telepost-policy.json
-./scripts/apply_telepost_policy.sh ./telepost-policy.json   # 本机
-./scripts/push_telepost_policy.sh user@server /opt/pixivflow-telepost ./telepost-policy.json
+---
+
+## 支持哪些部署架构
+
+| Preset | 支持等级 | 实现状态 | 一句话 |
+| --- | --- | --- | --- |
+| [`single-host`](docs/architectures/single-host.md) | Stable | 已实现，CI 覆盖 | 一台机器跑全部角色 |
+| [`single-machine-worker-sleep`](docs/architectures/single-machine-worker-sleep.md) | Experimental | **仅设计，未实现** | 一台机器，执行进程按需拉起、空闲即退出 |
+| [`split-worker`](docs/architectures/split-worker.md) | Stable | 已实现、已测试、**当前生产** | 执行端与业务端各一台机器、各一个卷 |
+| [`remote-worker`](docs/architectures/remote-worker.md) | Beta | 已实现，未经端到端测试 | 两个角色跨机器跨网络 |
+
+每个 preset 的拓扑、资源要求、生命周期、状态位置、网络、优缺点、故障模型、成本模型、
+部署步骤与迁移路径都写在它自己的页面里，章节顺序固定。
+
+机器可读的权威定义（角色、preset、支持等级、功能开关、合法/非法组合、资源档位、安全不变量）：
+[`docs/reference/architecture-matrix.json`](docs/reference/architecture-matrix.json)，
+由 `architecture_docs_test.go` 在 CI 中强制与文档一致。
+
+---
+
+## 三个概念，不要混淆
+
+```text
+逻辑架构（不变）    谁拥有哪个决策 —— 与部署方式无关
+部署拓扑（可变）    角色跑在哪里、谁能休眠、谁唤醒谁
+资源档位（可变）    每个运行单元分多少内存
 ```
 
-详见 [远程更新](docs/REMOTE_UPDATES.md)。
+- **`executor` 永远不拥有 Telegram 令牌、频道和审核决定。** 共置只是物理事实，
+  所有权永不合并。见[角色契约](docs/concepts/roles.md)。
+- **`publisher` 永不休眠**：冷启动的投稿机器人对用户就是「坏了」。
+- **进程休眠 ≠ 机器休眠；省内存 ≠ 省计算账单。** 见[生命周期](docs/concepts/lifecycle.md)。
 
-## 公网 Webhook
+---
 
-域名 A/AAAA 记录指向服务器，放通 TCP 80/443 与 UDP 443，然后设置：
+## 文档
 
-```dotenv
-RUN_MODE=AUTO
-WEBHOOK_DOMAIN=bot.example.com
-WEBHOOK_URL=https://bot.example.com
-```
+文档站：<https://redtidev1918.github.io/pixivflow-telepost-deploy/>
+（中文为权威版本，英文镜像覆盖「选择架构 → 部署 → 运维」路径上的页面。）
 
-执行 `docker compose --profile webhook up -d`。Caddy 自动申请证书；TelePost 为
-每个 Bot 注册独立的 `/webhook/botN` 路径。不要把 8080 直接暴露到公网。
+| 我想… | 看这里 |
+| --- | --- |
+| 决定用哪种部署方式 | [选择部署方式](docs/getting-started/choose-architecture.md) |
+| 从零跑到第一个 bot | [快速开始](docs/getting-started/quickstart.md) |
+| 理解角色与所有权 | [角色契约](docs/concepts/roles.md) |
+| 理解休眠、唤醒、停机 | [生命周期](docs/concepts/lifecycle.md) |
+| 理解定时与槽位幂等 | [调度契约](docs/concepts/scheduling.md) |
+| 知道凭据放在哪、边界在哪 | [凭据契约](docs/concepts/credentials.md) |
+| 部署到 Fly.io | [Fly.io](docs/platforms/flyio.md) |
+| 部署到一台 VPS | [Docker](docs/platforms/docker.md) / [VPS 与裸机](docs/platforms/vps.md) |
+| 内存不够 / OOM | [性能与内存](docs/operations/performance.md) |
+| 排障 | [故障排查](docs/operations/troubleshooting.md) |
+| 从一种架构迁到另一种 | [迁移契约](docs/architectures/migration.md) |
+| 知道每个概念的权威来源 | [部署契约](docs/reference/deployment-contract.md) |
+| 看多架构的后续计划 | [Roadmap](docs/ROADMAP-MULTI-ARCH.md) |
 
-## 国内网络
+全部页面：[文档中心](docs/README.md)。
 
-如已有稳定外部代理，直接设置 `HTTP_PROXY_URL` 与 `EGRESS_ALL_PROXY`。使用仓库内
-Mihomo 时设置 `SUB_URL`，并将两项代理地址设为 `http://proxy:7890`，再执行：
-
-```bash
-docker compose --profile proxy up -d
-```
-
-Mihomo 通常还会占用 50–100 MiB。整机只有 512 MiB 时优先使用外部代理，或升级到
-1 GiB；不要靠删除失败缓存/outbox 换取表面上的低占用。详见
-[国内网络](docs/MIHOMO.md)。
-
-## 内存档位建议
-
-Compose 解耦后 telepost 与 pixivflow 是**两个独立容器**，各自的
-`mem_limit` 默认按整机 512 MiB 预算分配：**telepost 320m + pixivflow 192m**
-（`.env` 的 `TELEPOST_MEMORY_LIMIT` / `PIXIVFLOW_MEMORY_LIMIT` 可调）。
-
-| 档位 | 组合 | 做法 |
-|---|---|---|
-| **256 MiB** | 单 Bot、不跑 PixivFlow | 只启 telepost：`docker compose up -d telepost`，并设 `TELEPOST_MEMORY_LIMIT=256m` |
-| **512 MiB**（默认） | 双 Bot + PixivFlow 组合 | 默认分配即可：telepost 320m + pixivflow 192m |
-| **≥1 GiB** | 上述 + 更宽裕/WebUI | 调大 `TELEPOST_MEMORY_LIMIT=512m`、`PIXIVFLOW_MEMORY_LIMIT=384m`；WebUI 见下一节 |
-
-512 档约束（`docs/PERFORMANCE.md`）：
-
-- 最多两个 Bot，关闭搜索与 WebUI（`SEARCH_ENABLED=false`、`simple` 分词器）。
-- `download.concurrency=1`；多个计划同一 Cron 时会排队串行执行，带宽较紧张时可再错开
-  15–20 分钟降低连续峰值。
-- 需要复用下载内容时用 `storageMode=cache` + `delivery.deleteAfterDelivery=false`，同时
-  设置 `cacheRetentionDays=7` 与 `cacheMaxSizeMB=384`；outbox 独立保留，不参与缓存清理。
-- 保留 Compose 的日志轮转、96 MiB Node heap（`NODE_OPTIONS`）与小 SQLite cache。
-- 通过 `/health` 观察 `process_rss`、磁盘、cache 和 delivery outbox 指标。
-
-完整说明见 [性能与容量](docs/PERFORMANCE.md)。
-
-## 可选：PixivFlow WebUI 管理面板（需要 ≥1 GiB）
-
-默认 512 MiB 档不带 WebUI（见上表：≥1 GiB 时先把 `TELEPOST_MEMORY_LIMIT` /
-`PIXIVFLOW_MEMORY_LIMIT` 调大）。WebUI 在 PixivFlow 中是可选组件。需要管理面板时，
-用一个能访问 kit `./data` 的 PixivFlow webui 后端，前端两种方式**二选一**（都
-与 kit 的 telepost/pixivflow 容器共享 `./data`，同一 config → 同一个 SQLite 与
-下载目录；kit 镜像零改动）：
-
-### 方式 A：官方合体容器（一个容器 = API + 前端）
-
-```bash
-# 1) 准备一份含前端的 PixivFlow 镜像（官方源码仓库自带 webui-frontend 构建）
-git clone https://github.com/redtidev1918/PixivFlow /tmp/PixivFlow
-cd /tmp/PixivFlow && docker build -t pixivflow:webui .
-
-# 2) 与 kit 共卷启动（把下面的 /path/to/kit 换成部署目录）
-docker run -d --name pixivflow-webui --restart unless-stopped \
-  -p 127.0.0.1:3000:3000 \
-  -e PIXIV_DOWNLOADER_CONFIG=/app/data/pixivflow/config.json \
-  -e PORT=3000 -e HOST=0.0.0.0 \
-  -e STATIC_PATH=/app/webui-frontend/dist \
-  -e WEBUI_USERNAME=${WEBUI_USERNAME:-} \
-  -e WEBUI_PASSWORD=${WEBUI_PASSWORD:-} \
-  -v /path/to/kit/data:/app/data \
-  pixivflow:webui node dist/webui/index.js
-```
-
-访问 `http://127.0.0.1:3000`。
-
-### 方式 B：独立前端容器（推荐：前端镜像已发布，前后端分开升级）
-
-后端容器只跑 PixivFlow webui API（不设 `STATIC_PATH`；官方合体镜像同样适用）：
-
-```bash
-docker run -d --name pixivflow-webui-api --restart unless-stopped \
-  -p 127.0.0.1:3000:3000 \
-  -e PIXIV_DOWNLOADER_CONFIG=/app/data/pixivflow/config.json \
-  -e PORT=3000 -e HOST=0.0.0.0 \
-  -e WEBUI_USERNAME=${WEBUI_USERNAME:-} \
-  -e WEBUI_PASSWORD=${WEBUI_PASSWORD:-} \
-  -v /path/to/kit/data:/app/data \
-  pixivflow:webui node dist/webui/index.js
-```
-
-前端容器直接用已发布的
-[`pixivflow-webui`](https://github.com/redtidev1918/pixivflow-webui) 镜像
-（nginx 托管 + `/api`、`/socket.io` 反代；ghcr.io/redtidev1918/pixivflow-webui，
-amd64 + arm64）：
-
-```bash
-docker run -d --name pixivflow-webui-front --restart unless-stopped \
-  --add-host host.docker.internal:host-gateway \
-  -p 127.0.0.1:3001:80 \
-  -e UPSTREAM_API=http://host.docker.internal:3000 \
-  ghcr.io/redtidev1918/pixivflow-webui:latest
-```
-
-访问 `http://127.0.0.1:3001`。跨机部署时把 `UPSTREAM_API` 指向后端实际地址；
-后端 Basic Auth 的 `Authorization` 会经反代原样透传。也可 clone
-pixivflow-webui 后 `cp .env.example .env && docker compose up -d`（详见其 README）。
-
-公网暴露前务必同时设置 `WEBUI_USERNAME` 与 `WEBUI_PASSWORD`（两者都非空才启用
-Basic Auth）。
-
-要点与限制：
-
-- **内存**：webui 是又一个 Node 进程（约 150–300 MiB），只适合 ≥1 GiB 整机；
-  512 MiB 档不要开。可给容器加 `--memory 512m` 兜底。
-- **并发**：webui 与 pixivflow scheduler 共用同一个 SQLite / 下载目录（官方即按
-  共享卷设计）；日常查看、改计划没问题，但不要在 webui 里与 scheduler 同时触发
-  大规模下载/维护，避免 SQLite 锁竞争。
-- **版本对齐**：webui 后端镜像的 PixivFlow 版本不要低于 kit 内嵌的版本（Compose 默认
-  `pixivflow:2.12.3`），以免旧版本读不懂新 config 字段；config 用 `PIXIV_DOWNLOADER_CONFIG`
-  显式指向 kit 那份即可（相对路径会以该 config 为基准解析，各进程一致）。
-- **前端升级**：方式 B 的前端独立成镜像，换 tag 重启即可，无需重新构建后端。
+---
 
 ## 目录
 
 ```text
-deploy.go / go.mod                一键部署工具（Go 单二进制，随本套件 release 附带）
-docker-compose.yml                Compose：telepost + pixivflow 两服务 + 可选 Caddy/Mihomo
-docker/combined.Dockerfile        单机自托管（Compose）的 Release-only co-locate 层；**不用于生产 Fly**
-docker/pixivflow-scheduler.Dockerfile  生产 PixivFlow 调度镜像：按精确提交号构建，启动输出版本+提交号
-docker/{telepost,pixivflow}.Dockerfile  Fly 预构建镜像透传层（不使用 build.image）
-data/                             数据库、下载缓存、outbox、实际配置（不入库）
-pixivflow/config/*.example.json   多计划安全模板
-config/telepost-policy.example.json 非敏感频道/审核策略模板
-scripts/                          初始化、校验、本机/SSH 原子更新
-docs/                             架构、场景、性能、Webhook/代理等说明（定时投稿与省钱停机见 SCHEDULING.md；英文生产文档在 docs/en/）
-fly/                              生产唯一两份配置：deploy.telepost.toml（常驻）与 deploy.pixivflow.toml（外部调度、可唤醒）
-proxy/                            可选 Mihomo 镜像
-.github/workflows/release.yml      打 v* 标签时产出各平台 deploy 二进制并附到 Release
+deploy.go / init.go / go.mod     一键部署工具（Go 单二进制，随 Release 附带）
+deploy_test.go                   CLI 测试
+architecture_docs_test.go        文档一致性测试（preset / 矩阵 / 链接 / 契约）
+docker-compose.yml               compose 拓扑：telepost + pixivflow + 可选 Caddy / Mihomo
+fly/deploy.telepost.toml         业务端唯一拓扑来源（常驻）
+fly/deploy.pixivflow.toml        执行端唯一拓扑来源（平时停止、跑完退出）
+control-plane/                   Cloudflare 薄时钟：cron → schedule id → 一次带令牌的 POST
+docker/                          镜像定义（透传层、按提交号构建的调度镜像、单机合体镜像）
+pixivflow/config/*.example.json  多计划安全模板
+config/                          非敏感频道/审核策略模板
+scripts/                         初始化、校验、只读生产核对
+docs/                            文档：架构、概念、平台、运维、参考
+proxy/                           可选 Mihomo 镜像
+data/                            数据库、下载缓存、outbox、实际配置（不入库）
 ```
 
-各平台 `deploy` 二进制见 [Releases](https://github.com/redtidev1918/pixivflow-telepost-deploy/releases)。
+---
 
 ## 安全边界
 
-- `.env`、`data/`、`proxy-data/` 和上传临时文件均被忽略。
-- Bot Token、Pixiv Refresh Token、投稿 Token、代理订阅 URL 只能放 `.env` 或平台
-  Secret，不得放 JSON 模板、Git 历史或聊天截图。
-- 根 API 默认只绑定 `127.0.0.1`；Webhook 通过 Caddy 反代。
-- 修改频道前先处理旧审核群中的 pending 投稿，并确认 Bot 已是新频道管理员。
+- `.env`、`data/`、`proxy-data/` 与上传临时文件均被忽略。
+- Bot Token、Pixiv Refresh Token、投稿 Token、代理订阅 URL 只能放 `.env` 或平台 Secret，
+  不得放 JSON 模板、Git 历史或聊天截图。
+- `split-worker` 与 `remote-worker` 下，执行端**没有任何 Telegram 令牌与频道 ID**，
+  因此它无法直发频道、无法绕过审核、也无法成为 webhook owner。
+  `single-host` 与 `single-machine-worker-sleep` 下两个角色共处一台机器，这条边界**不成立**。
+  `control-plane/test/webhook-ownership.test.ts` 静态守护前者。
+- Telegram webhook 只有一个负责人：TelePost 启动时注册；本仓库的任何脚本都不注册它。
+- 根 API 默认只绑定 `127.0.0.1`；Webhook 经反向代进入站。
+- 一旦凭据曾进入 Issue、日志、截图或 Git 历史，应立即吊销——自动检查不能替代轮换。
 
-公开仓库会在 CI 中检查常见 Token 格式与不应跟踪的运行时路径，Docker 构建上下文也通过
-`.dockerignore` 排除本地 Secret 和数据。但自动检查不能替代 Token 轮换：一旦凭据曾进入
-Issue、日志、截图或 Git 历史，应立即吊销。
+完整规则：[凭据契约](docs/concepts/credentials.md)、[SECURITY.md](SECURITY.md)。
+
+---
 
 ## 参与项目
 
-- 架构与组件边界：[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
-- 加第 N 个频道（多 bot）：[docs/MULTI-BOT.md](docs/MULTI-BOT.md)
-- Fly 生命周期（平时停止 / 唤醒 / 跑完退出）：[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) 的「生命周期」一节
 - 贡献代码：[CONTRIBUTING.md](CONTRIBUTING.md)
+  （改完请跑 `go test ./...`、`./scripts/validate.sh --examples`、`(cd control-plane && npm test)`）
 - 使用与排障：[SUPPORT.md](SUPPORT.md)
 - 私下报告漏洞：[SECURITY.md](SECURITY.md)
 - 社区行为准则：[CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md)
 
 上游项目：[PixivFlow](https://github.com/redtidev1918/PixivFlow) ·
 [TelePost](https://github.com/redtidev1918/TelePost)
+
+## 许可证
+
+[MIT](LICENSE)
+
+本项目与 Pixiv、Telegram、Fly.io 无隶属或官方合作关系。部署者应只处理有权下载、保存和
+发布的内容，并自行遵守平台条款、版权要求与所在地法律。项目不会替部署者决定频道内容政策，
+也不提供规避平台限制或监管的保证。

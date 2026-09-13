@@ -2,7 +2,7 @@
 
 > 本文是从旧「无服务器」时期的事故记录中保留下来的**事实**部分。当时的控制面描述
 > （Cloudflare Worker + D1 业务状态机、GitHub Actions 作为执行平面）已被当前拓扑取代，
-> 见 [架构与信任边界](/ARCHITECTURE.md)：Cloudflare 只是薄时钟，PixivFlow 是唯一的
+> 见 [角色与所有权](/concepts/roles.md)：Cloudflare 只是薄时钟，PixivFlow 是唯一的
 > Pixiv 执行与可靠性平面。事故本身与结论不受拓扑变更影响。
 
 ## 背景
@@ -68,7 +68,7 @@ PixivFlow 依赖几个彼此独立的 Pixiv 数据面，必须分别取得资格
 | App API | `app-api.pixiv.net` |
 | 媒体 CDN | `i.pximg.net`（请求携带 `Referer: https://app-api.pixiv.net/`） |
 
-当前拓扑下（见 [架构与信任边界](/ARCHITECTURE.md)）：Cloudflare 只作为薄时钟，PixivFlow 是
+当前拓扑下（见 [角色与所有权](/concepts/roles.md)）：Cloudflare 只作为薄时钟，PixivFlow 是
 唯一的 Pixiv 执行与可靠性平面，TelePost 是唯一的 Telegram webhook / 审核 / 发布平面。
 执行出口是**可替换的、需先取得资格的资源**；GitHub-hosted runner 仍然实现着，也仍然适合 CI、
 影子与轻量测试，但**当前不作为 Pixiv 数据面的生产出口**。
