@@ -33,6 +33,7 @@ Docker Compose 与 Fly.io 三种后端交付。
 | 加第 2、3 个频道 | [多 Bot：加第 N 个频道](operations/multi-bot.md) |
 | 内存不够 / OOM 调优 | [性能与内存调优](operations/performance.md) |
 | 服务不正常 | [故障排查](operations/troubleshooting.md) → [监控与只读核对](operations/monitoring.md) |
+| 某次定时投稿没跑出来 | [调度运维手册](operations/scheduling.md)（证据链、排查顺序、admission 日志与终态） |
 | 备份或恢复 | [备份与恢复](operations/backup.md) → [持久状态与卷](concepts/state.md) |
 | 升级或回滚 | [升级与回滚](operations/upgrades.md) |
 | 换一种部署架构 | [架构迁移契约](architectures/migration.md) |
@@ -56,6 +57,10 @@ Docker Compose 与 Fly.io 三种后端交付。
 | `remote-worker` | Beta | [远端执行端](architectures/remote-worker.md) |
 
 架构选择入口：[总览](architectures/overview.md) 与 [我该选哪种部署方式](getting-started/choose-architecture.md)。
+
+生产 `split-worker` 用**两个独立的外部时钟**（PRIMARY cron-job.org 准点 / SECONDARY Cloudflare +2 分钟），
+执行权威只有 PixivFlow 的槽位账本；运维读法见 [调度运维手册](operations/scheduling.md)，
+决策背景见 [2026-09-13 漏跑事故](incidents/2026-09-13-schedule-trigger-miss.md)。
 
 ## 全部文档
 
@@ -110,6 +115,7 @@ Docker Compose 与 Fly.io 三种后端交付。
 | [故障排查](operations/troubleshooting.md) | 症状表、反模式、具体诊断 |
 | [性能与内存调优](operations/performance.md) | 先测量、杠杆、资源档位、两条硬规则 |
 | [多 Bot](operations/multi-bot.md) | 自动发现 `BOT{N}_TOKEN`、各 preset 加 bot、投递到新 Bot |
+| [调度运维手册](operations/scheduling.md) | 一次定时投稿的证据链、排查顺序、admission 日志与 `schedule.outcome` 读法、五个状态、为什么不要轮询执行端 |
 
 **参考**
 
@@ -120,6 +126,7 @@ Docker Compose 与 Fly.io 三种后端交付。
 | [架构矩阵](https://github.com/redtidev1918/pixivflow-telepost-deploy/blob/main/docs/reference/architecture-matrix.json) | 机器可读的 preset / 角色 / 组合 / 档位 / 不变量（GitHub 打开） |
 | [Roadmap：多架构实现计划](ROADMAP-MULTI-ARCH.md) | Phase 1–5：契约 → manifest → worker-sleep → remote-worker → CLI |
 | [事故：Pixiv 出口限流 2026-09-11](incidents/2026-09-11-pixiv-egress-rate-limit.md) | 控制面兼容不等于执行面兼容；出口资格必须单独取证 |
+| [事故：定时触发漏跑 2026-09-13](incidents/2026-09-13-schedule-trigger-miss.md) | 单时钟无法自证；「Machine started」不是受理证据；冗余外部时钟决策与如实的部署状态 |
 
 **English**
 

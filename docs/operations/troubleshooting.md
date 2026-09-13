@@ -36,8 +36,12 @@
 3. **绝不启用平台 auto-stop。** 平台看到的是「HTTP 连接已空闲」，而一次 10–40 分钟的下载还在跑；
    历史上一个机器级休眠变体因此把批次砍成两半（commit `a98c3a7` 已删除该变体）。停机只能由
    执行端自己的账本 (`exitWhenIdle`) 决定。
-4. **绝不部署第二个 clock 或 watchdog。** 两个时钟会争同一个 Pixiv 凭据；重复投递是幂等的，
-   凭据争用不是。一个生产计划集恰好一个活跃时钟。
+4. **绝不部署第二个 PRIMARY 时钟、第二个调度器或第二份执行状态。** 危险的是「两个执行权威」，
+   不是「两个触发器」：一个生产计划集恰好一个 **PRIMARY** 时钟。
+   生产**刻意**跑两个外部时钟（PRIMARY cron-job.org 准点 / SECONDARY Cloudflare +2 分钟），
+   两者只 POST 同一个幂等端点，谁后到都在前一个创建的 slot 上收敛。
+   **不要把 SECONDARY 当作清理对象关掉** —— 关掉它就是把单时钟的单点故障装回去，
+   而 2026-09-13 的事故正是这么发生的。见 [调度运维手册](./scheduling.md)。
 5. **绝不在 TelePost 之外注册 Telegram webhook。** 历史上 webhook 曾被指到 Cloudflare Worker 上，
    Worker 对每条 update 回 `200 {ok:true}`，Telegram 报告一切健康，用户投稿却被静默丢弃。
    归属只由 TelePost 拥有，`control-plane/test/webhook-ownership.test.ts` 静态守护，

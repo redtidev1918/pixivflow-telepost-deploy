@@ -74,7 +74,7 @@ TelePost。
 | --- | --- | --- | --- | --- | --- | --- |
 | `single-host` | Stable | 已实现，CI 覆盖 | 1 | `always-on` | host=false | 一个 `./data` 物理卷、互不相交的角色子目录；pixivflow 容器只收 `BOT*_SUBMIT_TOKEN`；容器网络投递 |
 | `single-machine-worker-sleep` | Experimental | **未实现**（supervisor 已实现） | 1 | `spawn-on-demand` | host=false | 机器永不停机；只有 `executor` 进程退出；supervisor 用环境白名单 spawn，Telegram secret 不继承；停机决策权归 `executor` 账本 |
-| `split-worker` | Stable | 已实现、已测试、**当前生产** | 2 + 时钟 | `wake-run-exit` | host=true | 两份 Fly 配置 + 两个卷；执行端无健康检查、无平台 auto-stop、`restart.policy=never` |
+| `split-worker` | Stable | 已实现、已测试、**当前生产** | 2 + 时钟 | `wake-run-exit` | host=true | 两份 Fly 配置 + 两个卷；执行端无健康检查、无平台 auto-stop、`restart.policy=never`；生产运行两个外部时钟（PRIMARY cron-job.org / SECONDARY Cloudflare +2 分钟，见第 9 节） |
 | `remote-worker` | Beta | 已实现，未经端到端测试 | 2（可跨平台） | `wake-run-exit` 或 `always-on` | host=true | 私网叠加网或公网 HTTPS；bearer 认证在私网上也必须开启 |
 
 「host」列是 `hostCredentialIsolation`（主机级凭据隔离）。**另一列不存在但恒成立**：
@@ -113,6 +113,8 @@ split-worker:
   separate machines, separate volumes
   executor 机器可以停止；唤醒 = 触发请求经平台代理；停机 = executor 自己的账本
   hostCredentialIsolation=true：执行镜像里没有任何 Telegram 令牌
+  两个外部时钟作用于同一套 schedule（PRIMARY cron-job.org 准点 / SECONDARY Cloudflare +2 分钟）
+  执行权威只有 PixivFlow 的 durable slot ledger；重复触发在同一 slot 上收敛（见第 9 节）
 
 remote-worker:
   executor 是远端可替换执行资源
@@ -133,7 +135,7 @@ remote-worker:
 | 执行端 `wake-run-exit` + `clock=internal` | **非法**：停止的进程无法触发自己的 cron |
 | `review.enabled=false` | **非法**：未经人工批准就发布 |
 | 两个角色写同一个状态命名空间（即使共享物理卷） | **非法**：共享卷 + 互不相交的角色子目录合法；命名空间重叠才非法（SI-7） |
-| 同一套 schedule 有两个时钟 | **非法**：重复触发幂等，凭据争用不是 |
+| 同一套 schedule 有两个 **PRIMARY** 时钟（或第二个调度器 / 第二个执行权威） | **非法**：重复触发幂等，凭据争用不是。**延迟的幂等重放合法**——见第 9 节与矩阵 `redundant-external-clock` |
 
 ---
 
@@ -175,7 +177,7 @@ if SINGLE_HOST:   ...
 | 凭据归属与处理 | `docs/concepts/credentials.md` | 任何脚本、任何新文档 |
 | Fly 拓扑 | `fly/deploy.pixivflow.toml` + `fly/deploy.telepost.toml`（仅两份） | 第三份 `fly/*.toml` |
 | Compose 拓扑 | `docker-compose.yml`（preset 覆盖层只换执行侧运行方式，见上表） | 另起一份拓扑定义、让默认 `up` 少起服务 |
-| 时钟平面 | `control-plane/` | 第二个 Worker、第二份 cron 映射 |
+| 时钟平面 | `control-plane/`（**SECONDARY** 时钟：Cloudflare Cron）+ `docs/reference/deployment-contract.md` 的 provider 映射 | 第二个 Worker、第二份 cron 映射、第二套 schedule 定义 |
 | 部署清单（部署编译器的输入） | `docs/reference/deployment-manifest.md` + 矩阵 `manifest` | 业务代码读取清单、由清单推导平台分支 |
 | 部署契约本身 | `docs/reference/deployment-contract.md` | README 里的「另一种说法」 |
 
@@ -189,7 +191,7 @@ if SINGLE_HOST:   ...
 
 | 路径 | 是什么 | 不是什么 |
 | --- | --- | --- |
-| `control-plane/` | cron → schedule id 映射 + 一次带令牌的 POST | 不是第二个调度器，不是审核/发布服务 |
+| `control-plane/` | **SECONDARY** 时钟（Cloudflare Cron）：cron → schedule id 映射 + 一次带令牌的 POST | 不是**执行权威**、不是第二个调度器、不是审核/发布服务；**PRIMARY** 时钟（cron-job.org）不在本仓库里 |
 | `fly/deploy.pixivflow.toml` | 执行端（`split-worker`）唯一拓扑来源 | 不包含 Telegram 配置 |
 | `fly/deploy.telepost.toml` | 业务端唯一拓扑来源 | 不包含 Pixiv/调度配置 |
 | `pixivflow/config/production.json` | 执行端随镜像发布的运行配置 | 不是可热改的运行中状态 |
@@ -285,3 +287,64 @@ worker-sleep 的真机验收是单独一条命令，只在一次性 512 MiB 测�
   文档与门禁脚本已删除，请勿重新引入。
 - TelePost 仓库根目录有它自己的 `AGENTS.md` 职责契约，改动跨仓库边界时先读它；
   PixivFlow 目前没有 `AGENTS.md`，其边界以本仓库 `docs/concepts/roles.md` 为准。
+- **冗余外部时钟尚未在生产完成部署。** 代码与配置只在 `feat/redundant-external-clock` 分支上提交
+  （`3085035`）。剩下两个**互相独立**的 operator 步骤：① 执行端镜像的生产部署；
+  ② cron-job.org 控制台里 PRIMARY 表达式的配置。两步都完成后，必须回到
+  [`docs/incidents/2026-09-13-schedule-trigger-miss.md`](docs/incidents/2026-09-13-schedule-trigger-miss.md)
+  的「决策状态」一节写入时间戳；在此之前不得写成「已部署」或「已在生产验证」。
+
+---
+
+## 9. 调度所有权（Scheduling ownership）
+
+本节的规则与 preset 无关，四个 preset 全部成立。矩阵 `combinationRules` 的 `second-clock`
+（非法）与 `redundant-external-clock`（合法、带限制）是本节的机器可读对应物，
+文字权威是 [`docs/concepts/scheduling.md`](docs/concepts/scheduling.md)。
+
+```text
+- PixivFlow owns occurrence identity.
+- PixivFlow owns durable slot state.
+- External clock providers only trigger.
+- External clocks never generate slot IDs.
+- External clocks never call TelePost directly.
+- External clocks never control Fly Machines.
+- Duplicate external triggers are expected and safe.
+- Provider failover is handled through idempotent trigger replay.
+```
+
+### 生产默认运维策略
+
+```text
+primary external clock:     cron-job.org      在 occurrence 准点触发
+secondary external clock:   Cloudflare Cron   occurrence + 2 分钟触发（SECONDARY_OFFSET_MINUTES = 2）
+execution authority:        PixivFlow durable slot ledger（唯一）
+```
+
+- **Cloudflare 不是执行权威，cron-job.org 也不是。** 两个时钟都只 POST 同一个受认证的幂等端点
+  `POST /internal/schedules/{scheduleId}/run`；谁后到就在前一个创建的 slot 上收敛。
+- **冗余时钟 ≠ 第二个调度器。** 时钟不拥有执行状态，调度器拥有。仍然非法的是：第二个 **PRIMARY**
+  时钟、第二套 schedule 定义、第二份执行状态、第二个执行权威。
+- **provider ≠ architecture。** PRIMARY / SECONDARY 是 operational provider assignment，**不是**
+  第五个 preset；preset 集合永远只有 `single-host` / `single-machine-worker-sleep` /
+  `split-worker` / `remote-worker`。provider 映射只写在
+  [部署契约](docs/reference/deployment-contract.md)，不写进任何 preset 定义。
+- **第三方 provider 只持有 `SCHEDULER_TRIGGER_TOKEN`。** 它**绝不**持有 Fly API token、
+  Telegram bot token 或 channel id、TelePost submit token、Pixiv 凭据、GitHub token 或
+  Cloudflare API token。泄漏的后果因此只有一条：轮换 schedule trigger credential。
+- **偏移必须为正。** 提前触发会解析到**下一次** fire，即另一个 occurrence；生产取 2 分钟，
+  边界由 PixivFlow 对真实 resolver 的测试给出（704 分钟）。
+- **「Machine started」不是「schedule 被受理」的证据。** 执行端有 `auto_start_machines = true`
+  与 `min_machines_running = 0`，**任何**公网 HTTP 请求都能把 stopped 的机器叫起来。
+  同理不要轮询执行端端点读状态：那会冷启动机器并烧掉一个 idle grace 窗口。
+  判断「触发是否被受理」只能读执行端的 admission 日志与 durable 账本，见
+  [调度运维手册](docs/operations/scheduling.md)。
+
+```text
+Do not replace this with GitHub Actions cron without an explicit architecture decision.
+```
+
+GitHub Actions 定时工作流**不是**这个时钟，也**不是**看门狗：本仓库历史上的 GitHub Actions
+执行平面已在 2026-09-11 的出口事故里被判定不是生产数据面的合格出口（见
+[事故记录](docs/incidents/2026-09-11-pixiv-egress-rate-limit.md)）。
+**不得新增任何 scheduled workflow**，也不得把定时工作流写成时钟或看门狗。
+VPS / systemd timer 只允许用于开发、人工排障与紧急触发。

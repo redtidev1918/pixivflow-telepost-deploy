@@ -172,7 +172,7 @@ important configuration difference between this preset and `single-host`.
 | `executor-host` crash | Only the execution plane | The batch is interrupted | The ledger lets the next wake resume |
 | `service-host` crash | User-visible | Direct-message submission unavailable | Restart the resident service |
 | Egress rate-limited by Pixiv | Only the execution plane | `rate limit cooldown`, escalating penalty | Change egress and requalify |
-| Two clocks active at once | Two executions contend for the same Pixiv credential | Rate limiting, escalating penalty, duplicate triggering | Keep exactly one clock |
+| Two **PRIMARY** clocks active at once | Two schedule definitions / two copies of execution state contend for the same Pixiv credential | Rate limiting, escalating penalty, duplicate triggering | Keep exactly one PRIMARY; a delayed idempotent replay (`redundant-external-clock`) is unaffected |
 | Missing submit token | Every delivery is a 401 | The outbox accumulates fast | Add `TELEPOST_BOT{N}_SUBMIT_TOKEN` |
 | Host clock drift | occurrence computation shifts | Runs execute at the wrong time | Enable NTP on both ends; with `clock=internal` the drift only affects its own side |
 

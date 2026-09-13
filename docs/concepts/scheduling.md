@@ -3,7 +3,8 @@
 > **本页是「定时投稿怎么触发、机器能不能停、重试会不会重复」的唯一权威描述。**
 > 它是逻辑角色 `clock` 与 `executor` 结合部的展开：时钟只决定**何时唤醒**，执行端拥有
 > **occurrence、槽位与幂等**。矩阵的 `SI-4`（同一 Pixiv 凭据最多一个活跃执行）与
-> `combinationRules` 的 `second-clock`（非法）由本页守护。角色所有权见 [roles.md](./roles.md)，
+> `combinationRules` 的 `second-clock`（非法）和 `redundant-external-clock`（合法、带限制）
+> 由本页守护。角色所有权见 [roles.md](./roles.md)，
 > 生命周期见 [lifecycle.md](./lifecycle.md)。PixivFlow 配置字段语义以其 `CONFIG.md` 为准。
 
 ## 三句话契约
@@ -12,18 +13,20 @@
    然后结束。它**不计算 occurrence、不换算时区、不生成槽位标识、不写任何业务表**。
 2. **执行端拥有 occurrence 与槽位**：`<scheduleId>@<计划时刻>` 由执行端用自己的 cron + timezone
    解析得出；时钟不参与。
-3. **重复触发是幂等的，凭据争用不是**：所以触发可以重复，时钟只能有一个。
+3. **重复触发是幂等的，凭据争用不是**：所以触发可以重复，**外部时钟可以有多个，
+   但执行权威只能有一个**——多出来的那个不能是第二个调度器。
 
 ## 时钟 provider（feature switch）
 
 | 取值 | 谁 | 适用 | 说明 |
 | --- | --- | --- | --- |
 | `internal` | 执行端进程内 cron | `single-host`、`single-machine-worker-sleep`、`remote-worker` | 常驻进程到点即跑；`exitWhenIdle` 不生效 |
-| `cloudflare` | `control-plane/` 薄 Worker | `split-worker`（生产）、`remote-worker` | cron → scheduleId → 一次带令牌 POST；无数据库绑定 |
-| `external` | 任何能发带 Bearer 的 POST 的 cron | `split-worker`、`remote-worker` | cron-job.org / EasyCron / 自建 cron 都可以 |
+| `cloudflare` | `control-plane/` 薄 Worker | `split-worker`（生产的 **SECONDARY** 时钟）、`remote-worker` | cron → scheduleId → 一次带令牌 POST；无数据库绑定 |
+| `external` | 任何能发带 Bearer 的 POST 的 cron | `split-worker`（生产的 **PRIMARY** 时钟是 cron-job.org）、`remote-worker` | cron-job.org / EasyCron / 自建 cron 都可以；VPS / systemd timer 只用于开发、人工排障与紧急触发 |
 
 矩阵 `enums.clockProvider` 是这张表的来源。**provider 可替换不需要改业务核心**：执行端只认
-「受认证的 HTTP 触发」。
+「受认证的 HTTP 触发」。**这一维度选的是 provider 类别，不是「时钟个数」**——生产 `split-worker`
+同时配置两个 provider，见下面的「冗余外部时钟」。
 
 ### 关键约束：`wake-run-exit` 必须有外部时钟
 
@@ -134,15 +137,46 @@ Content-Type: application/json
 **cron → schedule id 的映射是数据驱动的**，可支持任意数量、任意 cron 的 schedule，不在代码里
 写 morning/evening。
 
-- **Cloudflare Worker（生产主时钟）**：`control-plane/`。Cron 用 UTC（北京 10:00/18:00 =
-  UTC 02:00/10:00）。Worker 只做三件事：映射 cron → schedule id、带令牌 POST、记录结果。
+- **Cloudflare Worker（生产 SECONDARY 时钟）**：`control-plane/`。Cron 用 UTC（北京 10:00/22:00 =
+  UTC 02:00/14:00）。Worker 只做三件事：映射 cron → schedule id、带令牌 POST、记录结果。
   它**不计算 occurrence、不换算时区、不生成槽位标识、不写业务表、没有数据库绑定**。
   Secret：`SCHEDULER_TRIGGER_TOKEN`；`[vars]`：`PIXIVFLOW_TRIGGER_BASE_URL`。
   见 [cloudflare.md](../platforms/cloudflare.md)。
 - **external**：任何能发带 Bearer 的 POST 的东西都行；替换时钟不需要改 PixivFlow Core。
-- **绝不部署第二个时钟或看门狗。** 矩阵把 `second-clock` 列为 `invalid`：触发端本身幂等，
-  重复触发只会得到同一个处置结果；而多个唤醒源会在同一 occurrence 上抢同一个 Pixiv 凭据。
-  `SI-4` 要求「同一 Pixiv 凭据最多一个在跑的生产执行」。
+  生产的 **PRIMARY** 时钟是 cron-job.org（取值就是 `external`），在 occurrence **准点**触发。
+
+### 冗余外部时钟：两个时钟合法，第二个调度器不合法
+
+**禁止的是第二个 PRIMARY 时钟 / 第二个调度器 / 第二个执行权威**（矩阵 `second-clock`）：
+它自带另一套 schedule 定义或另一份执行状态——那才会在同一个 occurrence 上争抢同一个 Pixiv 凭据。
+`SI-4` 要求「同一 Pixiv 凭据最多一个在跑的生产执行」，满足它的方式是**不部署第二个执行平面**，
+而不是「只许有一个时钟」。
+
+**允许且推荐的是延迟的幂等重放**（矩阵 `redundant-external-clock`，`supportedWithLimitations`）：
+
+```text
+PRIMARY    cron-job.org       在 occurrence 准点触发
+SECONDARY  Cloudflare Cron    occurrence + 2 分钟触发
+SSOT       PixivFlow durable slot ledger
+```
+
+- 两个时钟都只 POST 同一个受认证的幂等端点 `POST /internal/schedules/{scheduleId}/run`，
+  谁都不计算 occurrence、不持有状态、不生成 slot id。
+- **重复触发是预期的、安全的。** 谁后到就在前一个创建的 slot 上收敛，因为 durable slot ledger 是
+  唯一的执行权威；重复触发得到同一个处置结果，不会跑第二次。
+- **偏移必须为正，且落在 resolver 的 LEAD 窗口内。** 负偏移会解析到**下一次** fire，那是完全不同的
+  一个 occurrence。生产取的 2 分钟是对真实 resolver 证明出来的
+  （`PixivFlow/src/__tests__/scheduler/redundantClockOffset.test.ts`），边界是 704 分钟。
+- **一个 provider 静默失火时，另一个仍在同一 occurrence 上触发。** 单一时钟无法报告**自己**没有
+  执行——这正是 2026-09-13 事故的实质（见
+  [事故记录](../incidents/2026-09-13-schedule-trigger-miss.md)）。
+- 声明与守护：`control-plane/src/cron-map.ts`（`SECONDARY_OFFSET_MINUTES = 2`）与
+  `control-plane/wrangler.toml`，由 `control-plane/test/redundant-clock.test.ts` 校验
+  「secondary = primary + 文档化偏移」。
+
+> **冗余时钟 ≠ 第二个调度器。** 区别只有一条：时钟不拥有执行状态，调度器拥有。
+> 运维姿势（证据链、排查顺序、admission 日志、五个状态）见
+> [调度运维手册](../operations/scheduling.md)。
 
 ## 执行端生命周期
 
@@ -181,3 +215,5 @@ stopped（省钱，健康 idle）
 - 投递与幂等键：[delivery.md](./delivery.md)
 - 时钟平面怎么部署：[cloudflare.md](../platforms/cloudflare.md)
 - 停机 / 唤醒参数的线上核对：[monitoring.md](../operations/monitoring.md)
+- 一次触发到底断在哪一步：[调度运维手册](../operations/scheduling.md)
+- 冗余时钟决策的来源：[2026-09-13 漏跑事故](../incidents/2026-09-13-schedule-trigger-miss.md)

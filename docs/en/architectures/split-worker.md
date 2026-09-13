@@ -35,14 +35,17 @@ If you have only one machine, or do not want to maintain an external clock, look
 ## Topology
 
 ```text
-Cloudflare Cron (thin clock: cron → scheduleId → one authenticated POST)
+PRIMARY    cron-job.org        fires AT the occurrence
+        ─┐
+         ├─► the same authenticated, idempotent POST /internal/schedules/{scheduleId}/run
+SECONDARY  ─┘   Cloudflare Cron (occurrence + 2 minutes)
         │
         ▼
 Fly Proxy (wakes the stopped machine automatically)
         │
         ▼
 Fly App: pixivflow-scheduler        own machine + own volume, normally stopped
-  executor
+  executor  ── durable slot ledger = the single execution authority
         │  existing httpMultipart delivery + stable idempotency key
         ▼
 Fly App: telesubmit-multi-bot        resident
@@ -52,9 +55,42 @@ Fly App: telesubmit-multi-bot        resident
 Telegram channel
 ```
 
+### Clock topology: PRIMARY / SECONDARY
+
+Production `split-worker` runs **two independent external clocks** over **the same** schedule set:
+
+| | Provider | Fire time (Asia/Shanghai) | Expression (UTC) |
+| --- | --- | --- | --- |
+| **PRIMARY** | cron-job.org | at the occurrence: `bot1-daily` 10:00 / 22:00, `bot2-daily` 10:10 / 22:10 | `bot1` `0 2,14 * * *`; `bot2` `10 2,14 * * *` |
+| **SECONDARY** | Cloudflare Cron (`control-plane/`) | occurrence + 2 minutes | `bot1` `2 2,14 * * *`; `bot2` `12 2,14 * * *` |
+
+The machine-readable sources of both declarations are `control-plane/src/cron-map.ts`
+(`SECONDARY_OFFSET_MINUTES = 2`) and `control-plane/wrangler.toml`;
+`control-plane/test/redundant-clock.test.ts` fails when the secondary stops being the primary plus
+the documented offset.
+
+- **There is exactly one execution authority: PixivFlow's durable slot ledger.** Neither clock
+  computes an occurrence, owns state, generates a slot id, calls TelePost, or controls a Fly
+  Machine. Each of them only sends one idempotent trigger.
+- **Whichever arrives second converges on the slot the first one created.** Duplicate triggers are
+  expected and safe: they yield the same disposition and never start a second run.
+- **The `executor` lifecycle is still `wake-run-exit`**: the wake is the trigger request through the
+  platform proxy, and the stop decision belongs to the executor's own ledger. That is independent of
+  how many clocks exist.
+
+> **PRIMARY / SECONDARY is an operational provider assignment, not a new deployment preset.**
+> The preset set is still exactly four. **Provider != architecture**: changing the clock provider
+> changes no role ownership, does not change the topology's shape, and requires no change to the
+> business core. Choosing a provider is an operational decision, recorded in the
+> [deployment contract](../reference/deployment-contract.md) and in `control-plane/` — never in a
+> preset definition.
+
+Why the offset is 2 minutes, why it must be positive, and why Cloudflare is not the primary:
+see the [2026-09-13 missed-trigger incident (中文)](/incidents/2026-09-13-schedule-trigger-miss.md).
+
 | Plane | Deployment unit | State it owns | It never owns |
 | --- | --- | --- | --- |
-| `clock` | `control-plane/` (Worker `pixivflow-control-plane`) | cron → schedule id mapping, one trigger token | occurrence, slots, credentials, review, publication, Telegram |
+| `clock` | PRIMARY `cron-job.org` + SECONDARY `control-plane/` (Worker `pixivflow-control-plane`) | cron → schedule id mapping, one trigger token | occurrence, slots, credentials, review, publication, Telegram |
 | `executor` | `fly/deploy.pixivflow.toml` (app `pixivflow-scheduler`) | slot ledger, execution lease, download cache, delivery outbox, Pixiv credentials | **Telegram token, channel, review decision** |
 | `publisher` + `telegram-ingress` | `fly/deploy.telepost.toml` (app `telesubmit-multi-bot`) | user sessions, submission idempotency keys, review queue, publication records, Telegram token | Pixiv login, downloads, slot scheduling |
 
@@ -70,7 +106,8 @@ brought the mixed topology back.
 
 | Unit | Fly machine | Notes |
 | --- | --- | --- |
-| `clock-edge` | 0 (Cloudflare Workers) | within the free allowance |
+| `clock-edge` | 0 (Cloudflare Workers, SECONDARY) | within the free allowance; no database binding, no state |
+| `clock-primary` | 0 (cron-job.org, PRIMARY) | a second provider in a second failure domain; configured in its console only, this repository never registers it |
 | `worker-machine` | 1 × 512 MiB | runtime memory bounded by `NODE_OPTIONS=--max-old-space-size=384` and `download.concurrency=1` |
 | `service-machine` | 1 × 512 MiB | two bots; `SEARCH_ENABLED=false`, `DB_CACHE_KB=1024` |
 
@@ -124,7 +161,7 @@ runs).
 | --- | --- |
 | A health check on the `executor` | A probe is itself a request. The Fly proxy would wake a machine that just decided it had finished, and `stopped` would never be reached. |
 | Using platform auto-stop to stop the `executor` | The trigger side answers as soon as it persists, so in the proxy's view the connection has long been idle while downloads are still running (measured: 10–40 minutes). Inferring a stop from idleness cuts batches in half. |
-| Deploying a second clock or a watchdog | The trigger side is idempotent, so duplicate triggering is harmless; but multiple wake sources contend for the same Pixiv credential on the same occurrence. |
+| Deploying a second **PRIMARY** clock (or a second scheduler, or a second execution authority) | The trigger side is idempotent, so a **delayed duplicate trigger is harmless**; what is dangerous is a second set of schedule definitions or a second copy of execution state, because that is what contends for the same Pixiv credential on the same occurrence. A redundant external clock — PRIMARY plus a delayed SECONDARY — converges through the same durable slot and is **not** in this category. |
 
 ---
 
@@ -193,10 +230,11 @@ that it cannot wake a stopped machine, so it was replaced by `.flycast` in commi
 
 ## Weaknesses
 
-- **More components.** Two Fly apps + one Cloudflare Worker + two volumes.
+- **More components.** Two Fly apps + one Cloudflare Worker + one cron-job.org account + two volumes.
 - **One more volume**: backup and recovery must cover two locations.
-- **An external wake trigger is required.** The clock has exactly one owner; a dead clock means a
-  missed run, and this deployment does not back-fill.
+- **An external wake trigger is required.** Production runs two clocks in two independent failure
+  domains (PRIMARY cron-job.org / SECONDARY Cloudflare), so one provider failing silently no longer
+  means a missed run; if both fail, the run is still not back-filled.
 - **Deployment and debugging are more complex.** "The machine is stopped" has to be understood as a
   healthy state, not a failure.
 - **Deeper platform coupling.** The current two configurations are Fly-specific (Flycast, Fly Proxy
@@ -212,7 +250,8 @@ that it cannot wake a stopped machine, so it was replaced by `.flycast` in commi
 | `executor` misconfigured with a health check or auto-stop | Only the execution plane | Batches cut in half, or the `stopped` state unreachable | Remove the check and the auto-stop |
 | `publisher` crash | User-visible | Direct-message submission looks broken | `restart.policy = 'always'` restarts it automatically |
 | The clock misses a trigger | That occurrence is lost | That scheduled run does not execute | **No back-fill** (`catchUpMissedRuns=false`); the next run is normal |
-| A second clock comes online | The two planes contend for the same Pixiv credential | Rate limiting and escalating penalty | Take the second clock offline immediately |
+| One clock fires nothing, silently | The occurrence still runs | No fire record on that provider's side | **The other clock fires on the same occurrence** (+2 minutes); a missed run means neither fired, and it is then **not** back-filled (`catchUpMissedRuns=false`) |
+| A second **PRIMARY** clock (or a second scheduler) comes online | The two planes contend for the same Pixiv credential | Rate limiting and escalating penalty | Take the second primary offline immediately; keep exactly one execution authority |
 | Volume loss | The corresponding plane | Ledger/outbox or review queue disappears | Restore from a volume snapshot |
 | Egress rate-limited by Pixiv | Only the execution plane | `rate limit cooldown`, escalating penalty | Change egress and requalify; see the [incident record (中文)](/incidents/2026-09-11-pixiv-egress-rate-limit.md) |
 
@@ -225,7 +264,8 @@ which is the core benefit of this preset over `single-host`.
 
 | Item | Notes |
 | --- | --- |
-| `clock-edge` | A Cloudflare Worker, within the free allowance |
+| `clock-edge` | A Cloudflare Worker (SECONDARY), within the free allowance |
+| `clock-primary` | cron-job.org (PRIMARY), within its own tier; this repository never registers it |
 | `worker-machine` | Billed only while awake; normally `stopped` |
 | `service-machine` | Billed resident — that is the price of "submissions answer immediately" |
 | The two volumes | Billed by capacity, independent of running state |
@@ -261,8 +301,23 @@ fly secrets set -a <your-pixivflow-app> \
   SCHEDULER_TRIGGER_TOKEN=...
 # no Telegram token should appear on the executor side.
 
-# 4) clock
+# 4) clock: two independent providers over the same schedule set
+#    4a) SECONDARY: Cloudflare Worker
 cd control-plane && npx wrangler secret put SCHEDULER_TRIGGER_TOKEN && npx wrangler deploy
+
+#    4b) PRIMARY: the cron-job.org console
+#        This repository does not register it and does not hold its credential —
+#        a separate failure domain is the whole reason two clocks exist.
+#        Create two cron jobs pointing at the same endpoint as 4a,
+#        with Authorization: Bearer <SCHEDULER_TRIGGER_TOKEN>
+#
+#          bot1-daily   0 2,14 * * *
+#          bot2-daily  10 2,14 * * *
+#
+#        The expressions come from the `PRIMARY_CRONS` export in
+#        control-plane/src/cron-map.ts, so the operator runbook and the contract
+#        test read one list instead of copying it twice.
+#        Deploying the two clocks is TWO separate operator steps; record each one.
 ```
 
 Post-deployment checks (all read-only; they print `SKIP` when a variable is missing and never print
@@ -303,4 +358,4 @@ Reverse migration holds as well. The data that must move, and the files that mus
 | Saves the compute bill | No | **No** | **Yes** | Yes |
 | Host credential isolation (`hostCredentialIsolation`) | No | No | **Yes** | **Yes** |
 | Executor holds Telegram credentials (SI-1) | **No** | **No** | **No** | **No** |
-| Needs an external clock | No | Optional | Required (`cloudflare`/`external`) | Optional |
+| Needs an external clock | No | Optional | Required, and production runs two (PRIMARY `cron-job.org` + SECONDARY `cloudflare`; `external` is a provider value) | Optional |
