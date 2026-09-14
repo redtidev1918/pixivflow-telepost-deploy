@@ -25,6 +25,7 @@
 | 执行端跑完又被拉起 | `fly machine list -a pixivflow-scheduler --json` 的 `restart.policy` | 必须是 `no`（Machines API 拼写）/ `never`（`fly.toml` 拼写） | 用平台 auto-stop 代替执行端自己的账本 |
 | 时钟没触发 | `python3 scripts/cf-clock-readonly.py <worker>`（退出码 2 = 缺凭据） | 对不上就改 `control-plane/src/cron-map.ts` + `control-plane/wrangler.toml` | 再加一个时钟或看门狗 |
 | 审核群“重抓”提示未配置或请求未受理 | TelePost 的 `PIXIVFLOW_REFETCH_BASE_URL` / `PIXIVFLOW_REFETCH_TOKEN`、PixivFlow 的同名 Token、执行端 `manual-` Slot 日志 | 两端配相同的专用 Secret；确认原审核稿有 `target_id`，再核对 HTTP 202 与后续 Slot 终态 | 打开旧的 `PIXIVFLOW_ENABLED`；把“机器已唤醒”当作重抓成功 |
+| 审核群刷“重抓仍在处理中 / 重抓超时未完成” | TelePost `refetch_attempts`（`state`/`failure_code`）、PixivFlow `schedule_slots`（`manual-` 前缀）+ `outbox`、TelePost `reviews.refetch_request_id` | 以业务终态为准：attempt 必须落到 `replaced / no_alternative / failed / obsolete` 之一。已受理 attempt 先查 PixivFlow durable cell（`GET /internal/targets/:id/refetch/:requestId`）；`failure_code='legacy_refetch_correlation_broken'` 是 2.20.0 字面量 bug 的历史终态（见 [refetch-production-verification.md](refetch-production-verification.md)），不是当前失败 | 把「还在投递/远端未知」的 attempt 凭本地时间判失败；把字面量 `{{refetchRequestId}}` 当合法 UUID 放行 |
 
 ## 反模式（直说）
 
