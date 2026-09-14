@@ -94,8 +94,8 @@ kill_timeout = 60
   # verdict once, from durable state. This commit is deployed together with the
   # occurrence move to 10:00/22:00 that it exists to make observable.
   [build.args]
-    PIXIVFLOW_REF = '2229fb7b45a68dd8947db409d337e1fe69d53f57'
-    PIXIVFLOW_VERSION = '2.20.0'
+    PIXIVFLOW_REF = '834a545f7368903621d5615f254b32644dd1716c'
+    PIXIVFLOW_VERSION = '2.20.1'
 
 [[mounts]]
   source = 'pixivflow_data'
