@@ -19,11 +19,16 @@ for n in 1 2; do
     echo "==> 跳过 bot${n}（未提供 BOT${n}_TOKEN）"
     continue
   fi
-  echo "==> 配置 bot${n} 的 Mini App menu button: $MINIAPP_URL"
+  # WebApp 按启动 URL 的 ?bot= 选择 API 前缀（/api/botN/v1）；menu 按钮带上它。
+  case "$MINIAPP_URL" in
+    *\?*) bot_url="${MINIAPP_URL}&bot=bot${n}" ;;
+    *)    bot_url="${MINIAPP_URL}?bot=bot${n}" ;;
+  esac
+  echo "==> 配置 bot${n} 的 Mini App menu button: $bot_url"
   if ! curl -sS -f -m 20 \
     "https://api.telegram.org/bot${token}/setChatMenuButton" \
     -H 'Content-Type: application/json' \
-    -d "{\"menu_button\":{\"type\":\"web_app\",\"text\":\"🖥 打开 TelePost\",\"web_app\":{\"url\":\"${MINIAPP_URL}\"}}}"; then
+    -d "{\"menu_button\":{\"type\":\"web_app\",\"text\":\"🖥 打开 TelePost\",\"web_app\":{\"url\":\"${bot_url}\"}}}"; then
     echo "   bot${n} 配置失败" >&2
     rc=1
   else
