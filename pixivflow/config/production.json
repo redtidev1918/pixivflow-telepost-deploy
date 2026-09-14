@@ -74,7 +74,8 @@
     "minConcurrency": 1,
     "maxRetries": 3,
     "retryDelay": 3000,
-    "timeout": 90000
+    "timeout": 90000,
+    "maxFallbackStages": 3
   },
   "delivery": {
     "targets": {
@@ -104,7 +105,8 @@
           "refetch_request_id": "{{refetchRequestId}}"
         },
         "maxAttempts": 3,
-        "retryDelayMs": 3000
+        "retryDelayMs": 3000,
+        "scheduleOutcomeUrl": "${TELEPOST_API_BASE_URL}/api/bot1/v1/schedule/outcomes"
       },
       "bot2-submit": {
         "type": "httpMultipart",
@@ -132,7 +134,8 @@
           "refetch_request_id": "{{refetchRequestId}}"
         },
         "maxAttempts": 3,
-        "retryDelayMs": 3000
+        "retryDelayMs": 3000,
+        "scheduleOutcomeUrl": "${TELEPOST_API_BASE_URL}/api/bot2/v1/schedule/outcomes"
       }
     }
   },
