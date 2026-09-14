@@ -49,8 +49,9 @@ cdaedd018e4dcd5aae9a4d18df0894abcfe1d7e2`；TelePost 容器内 `RELEASE_VERSION 
 ## 历史 poisoned attempt 收敛（幂等，带 audit）
 
 `stale_timeout` 是旧 watchdog 崩溃兜底码，且不再被新代码产生（封闭集合）。对
-`state='failed' AND failure_code='stale_timeout'` 的 4 条历史 attempt，用
-`scripts/reconcile_legacy_refetch_attempts.py` 改写为
+`state='failed' AND failure_code='stale_timeout'` 的 4 条历史 attempt，用 TelePost 仓库的
+脚本 `reconcile_legacy_refetch_attempts.py`（位于其 scripts 目录；dry-run 默认、
+`--apply` 才写，幂等）改写为
 `legacy_refetch_correlation_broken` 并逐条写 `review.refetch_legacy_reconciled` audit：
 
 ```text
