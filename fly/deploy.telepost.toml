@@ -52,7 +52,7 @@ primary_region = 'iad'
     # the real Tabbar (no hard-coded safe-area offsets), and the identity
     # / provenance model (submitter_user_id, actor_kind/subject) with audited
     # legacy backfill tooling.
-    TELEPOST_IMAGE = 'ghcr.io/redtidev1918/telepost:2.24.1'
+    TELEPOST_IMAGE = 'ghcr.io/redtidev1918/telepost:2.24.2'
 
 [[mounts]]
   source = 'data'
