@@ -94,8 +94,15 @@ kill_timeout = 60
   # verdict once, from durable state. This commit is deployed together with the
   # occurrence move to 10:00/22:00 that it exists to make observable.
   [build.args]
-    PIXIVFLOW_REF = '834a545f7368903621d5615f254b32644dd1716c'
-    PIXIVFLOW_VERSION = '2.20.1'
+    # cdaedd0 = v2.20.2 (released 2026-09-14). Converges manual refetch from
+    # durable slot state: refetch-outcome notifications go to refetchOutcomeUrl
+    # (2.20.0/2.20.1 dead-lettered every outcome on the missing notificationUrl),
+    # noteTerminalRefetchCell reports retry-exhausted / abort / dead-letter
+    # terminals, GET /internal/targets/:id/refetch/:requestId exposes the exact
+    # manual cell for TelePost's watchdog, unresolved {{refetchRequestId}} is
+    # refused before the HTTP request, and duplicate/failed cells are terminal.
+    PIXIVFLOW_REF = 'cdaedd018e4dcd5aae9a4d18df0894abcfe1d7e2'
+    PIXIVFLOW_VERSION = '2.20.2'
 
 [[mounts]]
   source = 'pixivflow_data'
