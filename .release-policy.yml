@@ -1,6 +1,8 @@
 {
   "kind": "hybrid",
-  "versioning": {"mode": "release-please"},
+  "versioning": {
+    "mode": "release-please"
+  },
   "build": {
     "test": "go test ./... && ./scripts/validate.sh --examples",
     "command": "./scripts/build-release",
@@ -18,7 +20,9 @@
     "optional": []
   },
   "registries": {
-    "github": {"required": true},
+    "github": {
+      "required": true
+    },
     "ghcr": {
       "required": false,
       "context": ".",
@@ -31,7 +35,12 @@
   "release": {
     "post_publish": "python3 .github/scripts/update_download_page.py && git config user.name github-actions[bot] && git config user.email 41898282+github-actions[bot]@users.noreply.github.com && git add docs/download.md docs/en/download.md && (git diff --cached --quiet || (git commit -m 'docs: update release download page' && git push))"
   },
-  "retention": {"stable": 1, "prerelease": 1, "failed_draft": 3},
+  "retention": {
+    "stable": 1,
+    "prerelease": 1,
+    "failed_draft": 3,
+    "pruneStable": true
+  },
   "checksums": true,
   "sbom": true,
   "repository": {
@@ -43,9 +52,16 @@
         "closeParked": true,
         "deleteBranch": false,
         "exempt": {
-          "branches": ["release-please--*"],
-          "actors": ["github-actions[bot]", "dependabot[bot]"],
-          "labels": ["keep-open"]
+          "branches": [
+            "release-please--*"
+          ],
+          "actors": [
+            "github-actions[bot]",
+            "dependabot[bot]"
+          ],
+          "labels": [
+            "keep-open"
+          ]
         }
       }
     },
@@ -61,7 +77,9 @@
         "requireLatestBase": true,
         "operations": {
           "cutover": {
-            "branches": ["chore/cutover-*"],
+            "branches": [
+              "chore/cutover-*"
+            ],
             "allowedPaths": [
               "control-plane/wrangler.toml",
               "fly/*.toml",
