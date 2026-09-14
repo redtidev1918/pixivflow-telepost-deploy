@@ -49,6 +49,9 @@ primary_region = 'iad'
   ROUTER_CHILD_READY_TIMEOUT = '120'
   PENDING_REVIEW_RETENTION_DAYS = '1'
   PENDING_REVIEW_CLEANUP_BATCH_SIZE = '20'
+  # Replaced (superseded) review cards are deleted after this many days;
+  # refetch lineage (attempts / seen candidates) is kept regardless. 0 disables.
+  SUPERSEDED_RETENTION_DAYS = '14'
   REVIEW_PREVIEW_THREAD = '1'
   REVIEW_PREVIEW_INTERVAL_SECONDS = '0.75'
   REVIEW_PREVIEW_TIMEOUT_SECONDS = '120'
