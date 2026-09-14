@@ -41,7 +41,12 @@ primary_region = 'iad'
     # 2.23.0 appends a 点击投稿 channel footer link to confirmed channel
     # publishes (CHANNEL_FOOTER_LINK / CHANNEL_FOOTER_TEXT; previews stay
     # clean). Configured per bot below.
-    TELEPOST_IMAGE = 'ghcr.io/redtidev1918/telepost:2.23.0'
+    # 2.23.1 = provenance-validated refetch replacement (commit-after-staging),
+    # durable-slot watchdog reconciliation instead of a local-time stale fail,
+    # and the Mini App launch-data fix: initData comes from the Telegram SDK
+    # (retrieveRawInitData) with the WebApp bridge only as a compatibility
+    # fallback, plus a real auth error taxonomy.
+    TELEPOST_IMAGE = 'ghcr.io/redtidev1918/telepost:2.23.1'
 
 [[mounts]]
   source = 'data'
