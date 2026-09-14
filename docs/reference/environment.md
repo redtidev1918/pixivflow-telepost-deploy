@@ -79,6 +79,8 @@
 | `BOT{N}_CHAT_REVIEW_REQUIRED` | `false` | 聊天投稿是否先审 |
 | `BOT{N}_REVIEW_CHAT_ID` | 空 | 审核群 |
 | `BOT{N}_WEBHOOK_SECRET_TOKEN` | 空 | webhook secret |
+| `BOT{N}_CHANNEL_FOOTER_LINK` | 空 | 频道正式发布时在 caption 最下追加「点击投稿」链接（指向该 bot）；空 = 关闭。审核预览不带（TelePost ≥2.23.0） |
+| `BOT{N}_CHANNEL_FOOTER_TEXT` | `点击投稿` | footer 链接文本 |
 | `TELEPOST_BOT{N}_SUBMIT_TOKEN` | 空 | 执行端投递鉴权令牌 |
 | `SEARCH_ENABLED` | `false` | 搜索索引 |
 | `SEARCH_ANALYZER` | `simple` | `jieba` 会额外占约 100 MB |
