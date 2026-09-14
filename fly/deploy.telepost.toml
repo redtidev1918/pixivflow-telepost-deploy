@@ -38,7 +38,7 @@ primary_region = 'iad'
     # 2.20.1 fixed the Docker build that 2.20.0 image publish depended on.
     # 2.17.6 classifies media from the FINAL artifact instead of source
     # metadata; 2.21.1 keeps that behavior.
-    TELEPOST_IMAGE = 'ghcr.io/redtidev1918/telepost:2.21.1'
+    TELEPOST_IMAGE = 'ghcr.io/redtidev1918/telepost:2.22.0'
 
 [[mounts]]
   source = 'data'
