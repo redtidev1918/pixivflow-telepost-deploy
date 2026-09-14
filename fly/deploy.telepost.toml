@@ -32,12 +32,12 @@ primary_region = 'iad'
     #
     # 2.20.0 added same-domain static hosting for the Mini App (webapp/dist
     # served at /app/ by the TelePost webhook server; router forwards /app/*);
-    # 2.20.4 fixes a 2.20.1 regression: the static-host mount crashed the bot
+    # 2.21.1 fixes a 2.20.1 regression: the static-host mount crashed the bot
     # child at startup; /app/* is now a single handler (assets + SPA fallback).
     # 2.20.1 fixed the Docker build that 2.20.0 image publish depended on.
     # 2.17.6 classifies media from the FINAL artifact instead of source
-    # metadata; 2.20.4 keeps that behavior.
-    TELEPOST_IMAGE = 'ghcr.io/redtidev1918/telepost:2.21.0'
+    # metadata; 2.21.1 keeps that behavior.
+    TELEPOST_IMAGE = 'ghcr.io/redtidev1918/telepost:2.21.1'
 
 [[mounts]]
   source = 'data'
@@ -52,6 +52,10 @@ primary_region = 'iad'
   # Replaced (superseded) review cards are deleted after this many days;
   # refetch lineage (attempts / seen candidates) is kept regardless. 0 disables.
   SUPERSEDED_RETENTION_DAYS = '14'
+  # Refetch progress: remind the review group after 5 min of silence, fail the
+  # attempt with a user-visible notice after 45 min with no terminal outcome.
+  REFETCH_PROGRESS_REMIND_MINUTES = '5'
+  REFETCH_STALE_TIMEOUT_MINUTES = '45'
   REVIEW_PREVIEW_THREAD = '1'
   REVIEW_PREVIEW_INTERVAL_SECONDS = '0.75'
   REVIEW_PREVIEW_TIMEOUT_SECONDS = '120'
@@ -63,7 +67,7 @@ primary_region = 'iad'
   # HTTPS proxy; PIXIVFLOW_REFETCH_TOKEN is a separate shared Secret.
   PIXIVFLOW_REFETCH_BASE_URL = 'https://pixivflow-scheduler.fly.dev'
   # Telegram Mini App surface. dist/ is served same-domain at /app/ by the
-  # TelePost webhook server (2.20.4); MINIAPP_SESSION_SECRET is a separate
+  # TelePost webhook server (2.21.1); MINIAPP_SESSION_SECRET is a separate
   # shared Secret (≥32 chars, never the bot token). Rollback: set back to false.
   MINIAPP_ENABLED = 'true'
   MINIAPP_SESSION_TTL = '1800'
