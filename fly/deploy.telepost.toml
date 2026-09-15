@@ -66,7 +66,14 @@ primary_region = 'iad'
     # media (document-only never does), and 投稿人 comes only from explicit
     # submitter identity — API token aliases are never shown as the author
     # (internal review surfaces show 来源 instead).
-    TELEPOST_IMAGE = 'ghcr.io/redtidev1918/telepost:2.27.3'
+    # 2.27.4 = refetch generation replacement hardening: a committed
+    # replacement atomically supersedes the old generation and installs the
+    # new chain head; superseded generations are terminal history that
+    # refuses every moderation action (409 review_superseded) and never
+    # emits a rejection notification; the replaced review card loses its
+    # actions; failed/no-alternative refetch leaves the current review
+    # untouched. Rejection DMs now also reach human Mini App submitters.
+    TELEPOST_IMAGE = 'ghcr.io/redtidev1918/telepost:2.27.4'
 
 [[mounts]]
   source = 'data'
