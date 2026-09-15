@@ -73,7 +73,7 @@ primary_region = 'iad'
     # emits a rejection notification; the replaced review card loses its
     # actions; failed/no-alternative refetch leaves the current review
     # untouched. Rejection DMs now also reach human Mini App submitters.
-    TELEPOST_IMAGE = 'ghcr.io/redtidev1918/telepost:2.27.4'
+    TELEPOST_IMAGE = 'ghcr.io/redtidev1918/telepost:2.28.0'
 
 [[mounts]]
   source = 'data'
