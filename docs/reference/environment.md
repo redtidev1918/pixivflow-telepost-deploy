@@ -138,6 +138,23 @@
 | `SCHEDULER_TRIGGER_TOKEN` | Worker secret | 与执行端同值 |
 | `PIXIVFLOW_TRIGGER_BASE_URL` | `wrangler.toml` `[vars]` | 执行端公网 HTTPS 基址 |
 
+### Telegraph access token 运维（`TELEGRAPH_ACCESS_TOKEN`）
+
+`TELEGRAPH_ACCESS_TOKEN` 是 **TelePress 上游 Telegraph 账户令牌**，经 `flyctl secrets set` /
+`secrets deploy` 注入，**绝不**写进本仓库或日志（见 [`credentials.md`](../concepts/credentials.md)）。
+
+- **校验**：令牌可匿名创建；用 `POST https://api.telegra.ph/getAccountInfo`（`--data-urlencode`
+  传 `access_token` + `fields=["short_name"]`），`ok=true` 且 `short_name` 非空即有效。容器内部可
+  在 `-C 'env'` 看到的令牌上重复此校验。
+- **占位 / 失效即预览休眠**：`NOVEL_PREVIEW_ENABLED=true` 只凭「token 非空」即启用。令牌若是全 0
+  占位或已失效，**Telegraph 预览按失败隔离**——不发布预览、不生成坏链接，TXT document 照常发布
+  （这是特性契约，不是故障）。因此「预览没出现」先区分：token 缺失/失效（预览休眠）还是内容超限
+  （`NOVEL_PREVIEW_MAX_BYTES`）。
+- **故障注入铁律（AGENTS.md §6-13）**：以「临时失效令牌」跑失败隔离 E2E，结束前必须恢复有效令牌、
+  复核 `getAccountInfo`、并做一次真实 happy-path 发布；绝不允许占位/失效令牌留在生产。
+- **轮换**：`flyctl secrets set TELEGRAPH_ACCESS_TOKEN=<new>` → `flyctl secrets deploy
+  -a telesubmit-multi-bot -c fly/deploy.telepost.toml` → 复核 `/health` 与一次真实发布。
+
 ## 与旧文档的关系
 
 本页取代了 README 中散落的「内存档位建议」表格与 `.env.example` 的口头说明，并把旧 `PERFORMANCE.md` 的档位结论作为**档位维度**统一到
