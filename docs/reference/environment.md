@@ -90,6 +90,10 @@
 | `PENDING_REVIEW_CLEANUP_BATCH_SIZE` | `20` | 每轮过期清理条数 |
 | `MEDIA_GROUP_CAPACITY` | `10` | 频道发布的 media-group 容量 SSOT（Telegram 上限）。11 张 → root 10 + reply 1；21 → 10 + 10 + 1。缺省即可，仅当 Telegram 上限变化时调整（clamp 到 10） |
 | `BOT{n}_MINIAPP_SUBMIT_CTA` | `false` | 频道 CTA 直达该 bot 的 Mini App 投稿页（`https://t.me/<bot>?startapp=submit`；startapp 只导航，身份仍由服务器校验 initData 决定）。未启用/链接缺失回退旧 bot 深链，绝不生成坏链接 |
+| `NOVEL_PREVIEW_ENABLED` | `false` | TXT 小说通过 TelePress 发布到 Telegraph，频道 caption 增加「🔗 在线阅读」链接（2.31.0）。可选发布增强：TXT document 仍是权威下载产物；Telegraph 失败/超时绝不回滚发布；每个发布幂等一个 Telegraph 页。需配合 `TELEGRAPH_ACCESS_TOKEN` secret；未配置 token/库时特性休眠（不计失败） |
+| `NOVEL_PREVIEW_TIMEOUT_SECONDS` | `15` | 读取 TXT + 发布 Telegraph 的严格超时上界；超时按 preview timeout 隔离，发布照常 |
+| `NOVEL_PREVIEW_MAX_BYTES` | `4194304` | 预览可读入的最大 TXT 字节（默认 4 MiB）；超限不生成预览，不影响 document 发布 |
+| `TELEGRAPH_ACCESS_TOKEN` | （无） | Telegraph 账户 access token，经 `fly secrets set` 注入，绝不写日志/仓库。可用匿名 Telegraph 账户创建；仅 `NOVEL_PREVIEW_ENABLED=true` 时读取 |
 | `REVIEW_RETENTION_DAYS` | `30` | 审计记录保留 |
 | `REVIEW_PREVIEW_THREAD` | `1` | 多页审核预览是否回复成链 |
 | `BIND_ADDRESS` | `127.0.0.1` | 根 API 绑定地址 |

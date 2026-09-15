@@ -73,7 +73,9 @@ primary_region = 'iad'
     # emits a rejection notification; the replaced review card loses its
     # actions; failed/no-alternative refetch leaves the current review
     # untouched. Rejection DMs now also reach human Mini App submitters.
-    TELEPOST_IMAGE = 'ghcr.io/redtidev1918/telepost:2.28.0'
+    # 2.31.0 (2026-09-15): optional TelePress novel TXT preview (Telegraph
+    # 在线阅读 link); 2.30.0 review/main inline submission CTA.
+    TELEPOST_IMAGE = 'ghcr.io/redtidev1918/telepost:2.31.0'
 
 [[mounts]]
   source = 'data'
@@ -123,6 +125,19 @@ primary_region = 'iad'
   # each bot points at itself; empty (= unset) disables the footer.
   BOT1_CHANNEL_FOOTER_LINK = 'https://t.me/xgdPost_bot'
   BOT2_CHANNEL_FOOTER_LINK = 'https://t.me/vorePost_bot'
+  # Submission CTA (2.30.0): when enabled the channel footer opens the OWNING
+  # bot's Mini App submission page directly (https://t.me/<bot>?startapp=submit;
+  # startapp is navigation intent only — auth stays server-validated initData).
+  # Unset/false keeps the pre-existing bot deep link — never a broken link.
+  BOT1_MINIAPP_SUBMIT_CTA = 'true'
+  BOT2_MINIAPP_SUBMIT_CTA = 'true'
+  # Novel TXT Telegraph preview (2.31.0): OPTIONAL enrichment. The TXT
+  # document remains the authoritative downloadable artifact; Telegraph
+  # failure/timeout never fails a publication; one Telegraph page per
+  # publication (retries reuse the URL). Requires the TELEGRAPH_ACCESS_TOKEN
+  # secret (fly secrets set; never logged/comitted). Rollback: set to 'false'.
+  NOVEL_PREVIEW_ENABLED = 'true'
+  NOVEL_PREVIEW_TIMEOUT_SECONDS = '15'
 
 [http_service]
   internal_port = 8080
