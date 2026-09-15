@@ -73,9 +73,12 @@ primary_region = 'iad'
     # emits a rejection notification; the replaced review card loses its
     # actions; failed/no-alternative refetch leaves the current review
     # untouched. Rejection DMs now also reach human Mini App submitters.
-    # 2.31.0 (2026-09-15): optional TelePress novel TXT preview (Telegraph
-    # 在线阅读 link); 2.30.0 review/main inline submission CTA.
-    TELEPOST_IMAGE = 'ghcr.io/redtidev1918/telepost:2.31.0'
+    # 2.31.1 (2026-09-16): per-bot MINIAPP_SUBMIT_CTA now propagates into the
+    # child bot processes, so the deploy's BOT{n}_MINIAPP_SUBMIT_CTA=true
+    # actually turns on the [✉️ 我要投稿] inline submission CTA (previously
+    # the per-bot toggle never reached the child env and the old textual
+    # "点击投稿" footer remained). Requires 2.30.0+ CTA + 2.31.0 preview.
+    TELEPOST_IMAGE = 'ghcr.io/redtidev1918/telepost:2.31.1'
 
 [[mounts]]
   source = 'data'
