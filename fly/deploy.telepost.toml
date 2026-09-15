@@ -59,7 +59,14 @@ primary_region = 'iad'
     # revision chain, publish-by-revision) and submitter publication
     # notification (bound to publication success only, one durable idempotent
     # DM per publication; SUBMITTER_PUBLISH_NOTIFY=off|published|with_changes).
-    TELEPOST_IMAGE = 'ghcr.io/redtidev1918/telepost:2.27.1'
+    # 2.27.2 = editorial update is PATCH semantics (partial saves accumulate
+    # on the draft instead of silently reverting unmentioned fields).
+    # 2.27.3 = publication presentation SSOT: the spoiler '点击查看' media
+    # hint only appears when the publication really carries previewable
+    # media (document-only never does), and 投稿人 comes only from explicit
+    # submitter identity — API token aliases are never shown as the author
+    # (internal review surfaces show 来源 instead).
+    TELEPOST_IMAGE = 'ghcr.io/redtidev1918/telepost:2.27.3'
 
 [[mounts]]
   source = 'data'
