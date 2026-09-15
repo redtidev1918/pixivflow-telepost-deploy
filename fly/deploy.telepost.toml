@@ -52,11 +52,14 @@ primary_region = 'iad'
     # the real Tabbar (no hard-coded safe-area offsets), and the identity
     # / provenance model (submitter_user_id, actor_kind/subject) with audited
     # legacy backfill tooling.
+    # 2.27.1 = fix: plain submissions (empty review_chain_id) are their own
+    # chain head, so reviewers can edit/publish fresh submissions (prev.
+    # 2.27.0 falsely declared every new submission obsolete).
     # 2.27.0 = reviewer-edited publication (immutable original + editorial
     # revision chain, publish-by-revision) and submitter publication
     # notification (bound to publication success only, one durable idempotent
     # DM per publication; SUBMITTER_PUBLISH_NOTIFY=off|published|with_changes).
-    TELEPOST_IMAGE = 'ghcr.io/redtidev1918/telepost:2.27.0'
+    TELEPOST_IMAGE = 'ghcr.io/redtidev1918/telepost:2.27.1'
 
 [[mounts]]
   source = 'data'
