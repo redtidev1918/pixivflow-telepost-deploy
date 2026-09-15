@@ -123,6 +123,12 @@ primary_region = 'iad'
   # each bot points at itself; empty (= unset) disables the footer.
   BOT1_CHANNEL_FOOTER_LINK = 'https://t.me/xgdPost_bot'
   BOT2_CHANNEL_FOOTER_LINK = 'https://t.me/vorePost_bot'
+  # Submission CTA (2.30.0): when enabled the channel footer opens the OWNING
+  # bot's Mini App submission page directly (https://t.me/<bot>?startapp=submit;
+  # startapp is navigation intent only — auth stays server-validated initData).
+  # Unset/false keeps the pre-existing bot deep link — never a broken link.
+  BOT1_MINIAPP_SUBMIT_CTA = 'true'
+  BOT2_MINIAPP_SUBMIT_CTA = 'true'
 
 [http_service]
   internal_port = 8080
