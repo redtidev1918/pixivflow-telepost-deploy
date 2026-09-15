@@ -7,12 +7,26 @@
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Docs](https://img.shields.io/badge/Docs-文档站点-6366f1?style=flat-square)](https://redtidev1918.github.io/pixivflow-telepost-deploy/)
 
-一个面向实际运行的 Pixiv 自动投稿部署套件。它把两个上游项目组合成一套可部署的系统：
+**PixivFlow + TelePost 的部署与运维套件。** 它把两个上游项目组合成一套可部署、可运维的系统：
 
 | 组件 | 负责什么 | 不负责什么 |
 | --- | --- | --- |
 | [PixivFlow](https://github.com/redtidev1918/PixivFlow) | 按主题/榜单抓取作品、选品、下载、可靠投递 | 不碰 Telegram 频道 |
 | [TelePost](https://github.com/redtidev1918/TelePost) | 接收投稿、人工审核、发布到频道 | 不做 Pixiv 登录与调度 |
+
+**PixivFlow 和 TelePost 都可以独立使用**，各自都有自己的文档、安装方式与部署方式。
+本仓库只在你希望把两者组合成一条完整工作流时才需要——它不重新实现任何一边的业务逻辑，
+只负责部署、组合与长期运维。
+
+## 这个仓库适合谁
+
+- **适合**：想把「Pixiv 自动收集」与「Telegram 频道的人工审核 / 发布」串成一条长期运行的
+  工作流，并且需要可复现的部署（Docker / VPS / Fly.io）、版本 pin、运维脚本与架构契约。
+- **不需要**：只想下载和筛选 Pixiv 内容 —— 用
+  [PixivFlow](https://github.com/redtidev1918/PixivFlow) 自己的安装与 Docker 文档即可；
+  只想做一个 Telegram 投稿 / 审核机器人 —— 下一个
+  [TelePost](https://github.com/redtidev1918/TelePost) Release 二进制即可；
+  或者只是分别试用其中一个项目。
 
 **业务模型只有一套，部署拓扑可以选择。** 同一份业务语义可以跑在一台 VPS 上、一台
 512 MiB 机器上，或者拆成两台机器；变化的是角色跑在哪里、谁能休眠、谁唤醒谁、谁持有凭据，
@@ -81,7 +95,12 @@ deploy doctor && deploy deploy           # 自检 → 一键部署
 
 ---
 
-## 功能
+## 组合起来能做什么
+
+下面描述的是「两个上游项目组合部署之后」的完整能力。每一项的实现都在上游仓库里：
+内容发现、选品、下载与投递属于
+[PixivFlow](https://github.com/redtidev1918/PixivFlow)，投稿接收、人工审核与发布属于
+[TelePost](https://github.com/redtidev1918/TelePost)；本仓库负责把它们部署起来并长期运维。
 
 - **主题自动投稿**：按 Pixiv 主题（tag 空间推导）或日榜抓取「昨日最热门」，插画/小说各取
   Top N，按 Pixiv 官方 `illust_ai_type` 标记排除 AI 作品。
@@ -223,8 +242,12 @@ data/                            数据库、下载缓存、outbox、实际配�
 - 私下报告漏洞：[SECURITY.md](SECURITY.md)
 - 社区行为准则：[CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md)
 
-上游项目：[PixivFlow](https://github.com/redtidev1918/PixivFlow) ·
-[TelePost](https://github.com/redtidev1918/TelePost)
+## 相关项目
+
+| 项目 | 是什么 | 与本仓库的关系 |
+| --- | --- | --- |
+| [PixivFlow](https://github.com/redtidev1918/PixivFlow) | Pixiv 下载、筛选与自动收集工具：批量下载、定时任务、可靠 HTTP 交付 | 本仓库部署的上游执行端。它可以完全独立使用，只跑它不需要本仓库 |
+| [TelePost](https://github.com/redtidev1918/TelePost) | Telegram 频道投稿、审核与自动化发布平台：Chat、Mini App、多 Bot、HTTP API | 本仓库部署的上游业务端。它也可以完全独立使用（下一个 Release 二进制即可） |
 
 ## 许可证
 
