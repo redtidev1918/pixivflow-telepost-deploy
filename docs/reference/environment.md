@@ -88,6 +88,8 @@
 | `MALLOC_ARENA_MAX` | `2` | 防 glibc arena 膨胀 |
 | `PENDING_REVIEW_RETENTION_DAYS` | `1` | pending 保留；>2 会超出 Telegram 48h 删除窗口 |
 | `PENDING_REVIEW_CLEANUP_BATCH_SIZE` | `20` | 每轮过期清理条数 |
+| `MEDIA_GROUP_CAPACITY` | `10` | 频道发布的 media-group 容量 SSOT（Telegram 上限）。11 张 → root 10 + reply 1；21 → 10 + 10 + 1。缺省即可，仅当 Telegram 上限变化时调整（clamp 到 10） |
+| `BOT{n}_MINIAPP_SUBMIT_CTA` | `false` | 频道 CTA 直达该 bot 的 Mini App 投稿页（`https://t.me/<bot>?startapp=submit`；startapp 只导航，身份仍由服务器校验 initData 决定）。未启用/链接缺失回退旧 bot 深链，绝不生成坏链接 |
 | `REVIEW_RETENTION_DAYS` | `30` | 审计记录保留 |
 | `REVIEW_PREVIEW_THREAD` | `1` | 多页审核预览是否回复成链 |
 | `BIND_ADDRESS` | `127.0.0.1` | 根 API 绑定地址 |
@@ -105,6 +107,15 @@
 | `NODE_OPTIONS` | `--max-old-space-size=96 --expose-gc` | V8 堆上限 |
 | `PIXIV_DB_CACHE_KB` | `4096` | PixivFlow SQLite 缓存 |
 | `PIXIV_LOG_LEVEL` | `info` | 日志级别 |
+
+随镜像发布的 `pixivflow/config/production.json`（非 env）中的资源治理配置：
+
+- `pixiv.accountId = "default"`：Pixiv 凭据 profile 的稳定内部标识，是资源治理的
+  Resource Identity（`pixiv-account:<accountId>`）；绝不使用 bot/schedule/target 名或凭据本身。
+- `schedulerRuntime.resourceGovernance.pixivAccounts["default"].maxConcurrency = 1`：
+  同一 Pixiv 账户的并发准入容量。bot1 + bot2 共享该账户 → 所有 Pixiv-consuming work
+  （定时 / fallback / manual refetch / 手动恢复）共用同一个 capacity，第一版生产建议 1；
+  排队等待是正常状态，不是失败。未来若真实数据证明安全可升为 2，无需改调度架构。
 
 ### 网络 / 代理
 

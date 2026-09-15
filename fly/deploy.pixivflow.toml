@@ -101,8 +101,18 @@ kill_timeout = 60
     # terminals, GET /internal/targets/:id/refetch/:requestId exposes the exact
     # manual cell for TelePost's watchdog, unresolved {{refetchRequestId}} is
     # refused before the HTTP request, and duplicate/failed cells are terminal.
-    PIXIVFLOW_REF = '1645d9fc32e0052fc62bc5d3821f68e5096776ee'
-    PIXIVFLOW_VERSION = '2.20.5'
+    # 3783257 = v2.21.0 (released 2026-09-15). Resource-scoped execution
+    # governance: one admission mechanism (FIFO, per-resource capacity) that
+    # every Pixiv-consuming work item passes — schedule, candidate fallback,
+    # manual refetch and manual normal/relaxed recovery — so bot1/bot2 sharing
+    # one Pixiv account can no longer run four Pixiv jobs at once. Queue waiting
+    # is unfinished work (never an execution failure) and prevents premature
+    # idle shutdown. Also carries durable normalized terminal reasons on every
+    # terminal cell and the manual recovery presets (normal / relaxed,
+    # occurrence-scoped). Governance stays dormant until the resource identity
+    # and capacity exist in the baked production config (see the comment there).
+    PIXIVFLOW_REF = '3783257880d1c3bec77bbf910bcd9c2c15d16cfa'
+    PIXIVFLOW_VERSION = '2.21.0'
 
 [[mounts]]
   source = 'pixivflow_data'
