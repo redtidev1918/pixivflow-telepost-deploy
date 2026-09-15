@@ -101,8 +101,8 @@ kill_timeout = 60
     # terminals, GET /internal/targets/:id/refetch/:requestId exposes the exact
     # manual cell for TelePost's watchdog, unresolved {{refetchRequestId}} is
     # refused before the HTTP request, and duplicate/failed cells are terminal.
-    PIXIVFLOW_REF = 'f4f10abdb7adc486b19a7945b14132bf0a65334f'
-    PIXIVFLOW_VERSION = '2.20.4'
+    PIXIVFLOW_REF = '1645d9fc32e0052fc62bc5d3821f68e5096776ee'
+    PIXIVFLOW_VERSION = '2.20.5'
 
 [[mounts]]
   source = 'pixivflow_data'
