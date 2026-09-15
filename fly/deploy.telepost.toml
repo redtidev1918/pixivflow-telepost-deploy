@@ -52,7 +52,7 @@ primary_region = 'iad'
     # the real Tabbar (no hard-coded safe-area offsets), and the identity
     # / provenance model (submitter_user_id, actor_kind/subject) with audited
     # legacy backfill tooling.
-    TELEPOST_IMAGE = 'ghcr.io/redtidev1918/telepost:2.26.0'
+    TELEPOST_IMAGE = 'ghcr.io/redtidev1918/telepost:2.26.1'
 
 [[mounts]]
   source = 'data'
@@ -71,6 +71,10 @@ primary_region = 'iad'
   # attempt with a user-visible notice after 45 min with no terminal outcome.
   REFETCH_PROGRESS_REMIND_MINUTES = '5'
   REFETCH_STALE_TIMEOUT_MINUTES = '45'
+  # Watchdog recovery: same-UUID idempotent wake after 12 min without progress,
+  # hard-stall the attempt (failed + notified) after 90 min with no terminal.
+  REFETCH_WAKE_MINUTES = '12'
+  REFETCH_HARD_TIMEOUT_MINUTES = '90'
   REVIEW_PREVIEW_THREAD = '1'
   REVIEW_PREVIEW_INTERVAL_SECONDS = '0.75'
   REVIEW_PREVIEW_TIMEOUT_SECONDS = '120'
