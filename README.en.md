@@ -7,13 +7,30 @@
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Docs](https://img.shields.io/badge/Docs-documentation_site-6366f1?style=flat-square)](https://redtidev1918.github.io/pixivflow-telepost-deploy/)
 
-A deployment kit built for running Pixiv auto-posting for real. It wires two upstream projects
-into one deployable system:
+**Deployment and operations toolkit for PixivFlow + TelePost.** It wires the two upstream
+projects into one deployable, operable system:
 
 | Component | Owns | Does not own |
 | --- | --- | --- |
 | [PixivFlow](https://github.com/redtidev1918/PixivFlow) | Fetching works by theme/ranking, selection, downloads, reliable delivery | Anything Telegram-channel related |
 | [TelePost](https://github.com/redtidev1918/TelePost) | Receiving submissions, human review, publishing to channels | Pixiv login or scheduling |
+
+**PixivFlow and TelePost are both usable on their own**, each with its own documentation,
+installation path, and deployment options. This repository is only needed when you want to compose
+the two into one complete workflow — it does not reimplement either side's business logic, it only
+deploys, composes, and operates them.
+
+## Who this is for
+
+- **For you** if you want the "collect from Pixiv automatically" half and the "human review, then
+  publish to a Telegram channel" half running as one long-lived workflow, with reproducible
+  deployment (Docker / VPS / Fly.io), pinned versions, operations scripts, and architecture
+  contracts.
+- **Not for you** if you only want to download and filter Pixiv content — use
+  [PixivFlow](https://github.com/redtidev1918/PixivFlow)'s own install and Docker docs; if you only
+  want a Telegram submission/review bot — grab a
+  [TelePost](https://github.com/redtidev1918/TelePost) release binary; or if you are just trying one
+  of the two projects out.
 
 **One business model; several deployment topologies.** The same business semantics can run on
 one VPS, on one 512 MiB machine, or split across two machines. What changes is where roles run,
@@ -85,7 +102,13 @@ Download the `deploy-<os>-<arch>` binary from
 
 ---
 
-## Features
+## What the composed system does
+
+The capabilities below describe the two upstream projects working together. Each one is implemented
+upstream: discovery, selection, downloads, and delivery belong to
+[PixivFlow](https://github.com/redtidev1918/PixivFlow); receiving submissions, human review, and
+publishing belong to [TelePost](https://github.com/redtidev1918/TelePost). This repository deploys
+and operates them.
 
 - **Automatic themed posting**: fetch "yesterday's hottest" by Pixiv theme (tag-space derivation)
   or daily rankings; take the top N illustrations and novels each; exclude AI works using Pixiv's
@@ -245,8 +268,12 @@ Full rules: [credentials (Chinese)](docs/concepts/credentials.md), [SECURITY.md]
 - Private vulnerability reports: [SECURITY.md](SECURITY.md)
 - Code of conduct: [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md)
 
-Upstream projects: [PixivFlow](https://github.com/redtidev1918/PixivFlow) ·
-[TelePost](https://github.com/redtidev1918/TelePost)
+## Related projects
+
+| Project | What it is | How it relates to this repo |
+| --- | --- | --- |
+| [PixivFlow](https://github.com/redtidev1918/PixivFlow) | Pixiv downloader, filter and automatic collection tool: batch downloads, scheduling, reliable HTTP delivery | The upstream executor this repo deploys. It is fully standalone; running it alone needs nothing from here |
+| [TelePost](https://github.com/redtidev1918/TelePost) | Telegram channel submission, moderation and automated publishing platform: chat, Mini App, multi-bot, HTTP API | The upstream publisher this repo deploys. It is also fully standalone (a release binary is enough) |
 
 ## License
 
