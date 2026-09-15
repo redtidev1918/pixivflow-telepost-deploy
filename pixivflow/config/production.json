@@ -5,7 +5,8 @@
     "clientSecret": "${PIXIV_CLIENT_SECRET}",
     "deviceToken": "${PIXIV_DEVICE_TOKEN}",
     "refreshToken": "${PIXIV_REFRESH_TOKEN}",
-    "userAgent": "PixivAndroidApp/5.0.234 (Android 11; Pixel 6)"
+    "userAgent": "PixivAndroidApp/5.0.234 (Android 11; Pixel 6)",
+    "accountId": "default"
   },
   "network": {
     "timeoutMs": 30000,
@@ -65,7 +66,14 @@
     },
     "exitWhenIdle": true,
     "idleGraceMs": 900000,
-    "maxLifetimeMs": 10800000
+    "maxLifetimeMs": 10800000,
+    "resourceGovernance": {
+      "pixivAccounts": {
+        "default": {
+          "maxConcurrency": 1
+        }
+      }
+    }
   },
   "download": {
     "concurrency": 1,
