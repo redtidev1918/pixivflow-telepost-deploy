@@ -111,8 +111,8 @@ kill_timeout = 60
     # terminal cell and the manual recovery presets (normal / relaxed,
     # occurrence-scoped). Governance stays dormant until the resource identity
     # and capacity exist in the baked production config (see the comment there).
-    PIXIVFLOW_REF = '3783257880d1c3bec77bbf910bcd9c2c15d16cfa'
-    PIXIVFLOW_VERSION = '2.21.0'
+    PIXIVFLOW_REF = 'e6cd6211dba78c25b095ea7ce307a0afc5f2b734'
+    PIXIVFLOW_VERSION = '2.22.0'
 
 [[mounts]]
   source = 'pixivflow_data'
