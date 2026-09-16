@@ -84,7 +84,10 @@ primary_region = 'iad'
     # CTA belongs only to final Channel Publications); a confirmed channel
     # root is never deleted nor re-run when the linked-discussion overflow
     # fails. Depends on 2.31.1 telepost.
-    TELEPOST_IMAGE = 'ghcr.io/redtidev1918/telepost:2.31.2'
+    # 2.31.3 (2026-09-16): submission ConversationHandler updates commit their
+    # next state and stop later PTB groups, preventing duplicate catch-all and
+    # legacy callback handling of the same Telegram update.
+    TELEPOST_IMAGE = 'ghcr.io/redtidev1918/telepost:2.31.3'
 
 [[mounts]]
   source = 'data'
