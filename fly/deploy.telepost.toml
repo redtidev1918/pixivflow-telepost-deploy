@@ -87,7 +87,13 @@ primary_region = 'iad'
     # 2.31.3 (2026-09-16): submission ConversationHandler updates commit their
     # next state and stop later PTB groups, preventing duplicate catch-all and
     # legacy callback handling of the same Telegram update.
-    TELEPOST_IMAGE = 'ghcr.io/redtidev1918/telepost:2.31.3'
+    # 2.31.4 (2026-09-16): channel publication footers now carry BOTH semantic
+    # actions as caption text links — ✉️ TG 投稿 (?start=submit) always and
+    # 📱 Mini App (?startapp=submit) when MINIAPP_SUBMIT_CTA is on (no more
+    # single opaque inline button that opens the Mini App); TXT previews add a
+    # distinct 📖 在线阅读 action; Mini App tag separator hint/placeholder UX
+    # updated. Deploy config (BOT{n}_MINIAPP_SUBMIT_CTA=true) is unchanged.
+    TELEPOST_IMAGE = 'ghcr.io/redtidev1918/telepost:2.31.4'
 
 [[mounts]]
   source = 'data'
