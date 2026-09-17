@@ -20,7 +20,10 @@ Fly Proxy  auto_start_machines = true ──► 唤醒停止的执行端机器
       │
       ▼
 pixivflow-scheduler（独立机器 + 独立卷，平时 stopped，跑完 exit(0)）
-      │  POST /api/botN/v1/submissions   （Flycast 私网 + bearer）
+      │ POST /publish/rich-novel（富媒体小说，Flycast 私网 + bearer）
+      ▼
+telepress-publish（常驻机器，无持久卷；Catbox 上传 + Telegraph 页面）
+      │ POST /api/botN/v1/submissions（Flycast 私网 + bearer）
       ▼
 telesubmit-multi-bot（常驻机器 + 独立卷，唯一持有 Telegram 令牌）
       │
@@ -32,18 +35,20 @@ Telegram（审核群 → 人工批准 → 频道）
 `pixivflow.lifecycle = wake-run-exit`、`clock.allowed = [cloudflare, external]`、
 `transport = flycast`、`stateLayout = own-volume`，`status = stable`。
 
-## 两份 Fly 配置，一个应用一份
+## 三份 Fly 配置，一个应用一份
 
 | 文件 | 应用 | 生命周期 | 卷 |
 | --- | --- | --- | --- |
 | `fly/deploy.telepost.toml` | 业务端 | `always-on`（`auto_stop=false`, `min=1`, 长期 `/health` 检查） | `data` → `/app/data` |
 | `fly/deploy.pixivflow.toml` | 执行端 | `wake-run-exit`（`auto_start=true`, `auto_stop=false`, `restart=never`，**无** checks） | `pixivflow_data` → `/app/data` |
+| `fly/deploy.telepress.toml` | 富媒体发布端 | `always-on`（`auto_stop=false`, `min=1`, `/` 检查） | 无（Catbox/Telegraph 远端状态） |
 
-首次使用把两份配置里的 `app` 改成自己的名字，然后：
+首次使用把三份配置里的 `app` 改成自己的名字，然后：
 
 ```bash
 fly deploy -c fly/deploy.telepost.toml  --ha=false
 fly deploy -c fly/deploy.pixivflow.toml --ha=false
+fly deploy -c fly/deploy.telepress.toml --ha=false
 ```
 
 ## 部署前必读的三条生命周期规则
@@ -65,8 +70,9 @@ fly deploy -c fly/deploy.pixivflow.toml --ha=false
 
 | 应用 | 固定方式 | 规则 |
 | --- | --- | --- |
-| 业务端 | `TELEPOST_IMAGE`（发布版本，如 `...telepost:2.17.5`） | **绝不用 `latest`** |
+| 业务端 | `TELEPOST_IMAGE`（发布版本，如 `...telepost:2.35.0`） | **绝不用 `latest`** |
 | 执行端 | `PIXIVFLOW_REF`（**40 位提交号**） | 绝不用分支名，也不用 tag |
+| 富媒体发布端 | TelePress 镜像/版本（见 `docker/telepress.Dockerfile`） | 发布流水线固定；不依赖 `latest` |
 
 `PIXIVFLOW_REF` 必须是 40 位提交号：镜像运行时会回显 build-arg 字面量
 （`PIXIVFLOW_REVISION=${PIXIVFLOW_VERSION}+${PIXIVFLOW_REF}`），钉 tag 会让「正在跑哪个提交」
@@ -90,6 +96,13 @@ fly secrets set -a pixivflow-scheduler \
 fly secrets set -a telesubmit-multi-bot \
   BOT1_TOKEN=... BOT1_CHANNEL_ID=... BOT1_OWNER_ID=... \
   TELEPOST_BOT1_SUBMIT_TOKEN=...
+
+# 富媒体发布端：Telegraph 账号 + 供 PixivFlow 调用 /publish/rich-novel 的密钥
+fly secrets set -a telepress-publish \
+  TELEGRAPH_ACCESS_TOKEN=... \
+  TELEPRESS_API_KEY=...
+
+# 执行端配置里把 richNovelPreview.headers 用同一个 TELEPRESS_API_KEY
 ```
 
 Fly secret 在机器停止时不可见（`inactive`），这是正常现象——唤醒不是通过 secret，而是通过
@@ -97,11 +110,13 @@ Fly secret 在机器停止时不可见（`inactive`），这是正常现象—�
 
 ## 传输的两条硬约束
 
-1. **业务端 `force_https = false` 不能删**：明文 Flycast 投递（WireGuard 保护的 6PN）若被
+1. **`force_https = false` 不能删**：明文 Flycast 投递（WireGuard 保护的 6PN）若被
    Fly proxy 301 到 HTTPS，执行端不跟这条路，投递变死路。对公网，Telegram webhook 与审核 API
-   仍走 HTTPS。
+   仍走 HTTPS。执行端到 TelePress 的 `http://telepress-publish.flycast` 与到
+   TelePost 的 `http://telesubmit-multi-bot.flycast` 都是同一语义。
 2. **执行端 `TELEPOST_API_BASE_URL = http://telesubmit-multi-bot.flycast`**：这是执行端唯一
    够得到业务端的方式，且**不带** Telegram 令牌与频道 id（`SI-1`）。
+   富媒体小说的 TelePress 目标同理走 `http://telepress-publish.flycast/publish/rich-novel`。
 
 ## 时钟
 
@@ -116,6 +131,7 @@ Fly secret 在机器停止时不可见（`inactive`），这是正常现象—�
 ./scripts/verify-webhooks.sh      # webhook 归属只有 TelePost（SI-2）
 fly status -a telesubmit-multi-bot
 fly status -a pixivflow-scheduler  # 空闲时应为 stopped：健康状态，不是故障
+fly status -a telepress-publish    # 常驻；实际无需手动停机
 ```
 
 ## 成本模型

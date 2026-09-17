@@ -80,7 +80,7 @@ Docker Compose 与 Fly.io 三种后端交付。
 | [总览](architectures/overview.md) | Preset 矩阵、支持等级、角色落点、功能开关、合法与非法组合、平台支持 |
 | [single-host](architectures/single-host.md) | 一台机器跑全部角色；Compose 参考实现 |
 | [single-machine-worker-sleep](architectures/single-machine-worker-sleep.md) | 一台机器，业务常驻、执行进程按需；**进程编排已实现，preset 仍不可部署** |
-| [split-worker](architectures/split-worker.md) | 当前生产：两台机器、两个卷、外部时钟、执行端平时停止 |
+| [split-worker](architectures/split-worker.md) | 当前生产：三个 Fly 应用（executor / telepress-publish publish / TelePost publisher）、两个卷、外部时钟、执行端平时停止 |
 | [remote-worker](architectures/remote-worker.md) | 跨机器跨网络；placement 组合（云-云 / 云-家 / 家-云） |
 | [迁移契约](architectures/migration.md) | 哪些数据必须搬、哪些不需要、迁移顺序、迁移期禁忌 |
 
@@ -101,7 +101,7 @@ Docker Compose 与 Fly.io 三种后端交付。
 | 文档 | 内容 |
 | --- | --- |
 | [Docker Compose](platforms/docker.md) | `single-host` 操作说明；Polling / Webhook / 代理三种网络模式 |
-| [Fly.io](platforms/flyio.md) | `split-worker` 操作说明；两份配置、生命周期规则、镜像固定、传输约束 |
+| [Fly.io](platforms/flyio.md) | `split-worker` 操作说明；三份配置（pixivflow / telepost / telepress）、生命周期规则、镜像固定、传输约束 |
 | [VPS 与裸机](platforms/vps.md) | systemd 后端、512 MiB 注意、出口资格 |
 | [Cloudflare 时钟平面](platforms/cloudflare.md) | 薄 Worker 做什么、绝不做什么、部署与验证 |
 | [代理与出口](platforms/proxy.md) | 内置 Mihomo 或外部代理、构建期代理、出口资格不等于可达性 |

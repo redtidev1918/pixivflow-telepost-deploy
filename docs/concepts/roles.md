@@ -28,6 +28,7 @@
 | 角色 | 负责人 | 拥有状态 | 生命周期 | 凭据 | 入站 | 出站 | 故障域 |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | `clock` | control-plane（Cloudflare Worker）或 PixivFlow internal 调度器 | 无（cron → scheduleId 映射在配置文件里） | `always-on` | `SCHEDULER_TRIGGER_TOKEN` | 平台 cron 事件 | 一次 `POST /internal/schedules/{scheduleId}/run` | 漏唤醒即漏跑一次，永不回补 |
+| `publish` | TelePress | 无持久状态（Catbox/Telegraph 远端状态） | `always-on` | `TELEGRAPH_ACCESS_TOKEN`、`TELEPRESS_API_KEY`（若启用富媒体入口） | 受认证 `POST /publish/rich-novel` | 上传图片、渲染 Telegraph | 富媒体发布；故障只影响在线阅读，不影响 Telegram 投稿 |
 | `executor` | PixivFlow | 槽位账本、下载缓存与元数据、投递 outbox、Pixiv 凭据材料、限流状态 | `always-on` / `wake-run-exit` / `spawn-on-demand`（由 preset 决定） | `PIXIV_CLIENT_ID`、`PIXIV_CLIENT_SECRET`、`PIXIV_DEVICE_TOKEN`、`PIXIV_REFRESH_TOKEN`、`TELEPOST_BOT*_SUBMIT_TOKEN`、`SCHEDULER_TRIGGER_TOKEN` | 受认证触发 POST | 对投稿接口的 `multipart/form-data` 投递 | 与 Telegram 隔离；崩溃或 OOM 不会丢掉用户投稿 |
 | `publisher` | TelePost | 每 Bot SQLite、审核队列、发布记录、每 Bot 幂等记录、运行时策略覆盖 | `always-on` | `BOT*_TOKEN`、`BOT*_CHANNEL_ID`、`BOT*_OWNER_ID`、`TELEPOST_BOT*_SUBMIT_TOKEN` | 投稿 API、审核回调 | Telegram Bot API（审核群、频道） | 用户可见；冷启动表现为「投稿按钮坏了」 |
 | `telegram-ingress` | TelePost | 无（webhook 归属是平台侧状态） | `always-on` | `BOT*_TOKEN`、`BOT*_WEBHOOK_SECRET_TOKEN` | Telegram update（webhook 或 polling） | 交给 `publisher` 的同一进程处理 | 第二个 webhook 负责人出现时，每条投稿被签收后静默丢弃 |
@@ -52,7 +53,7 @@
 | 审核 FSM 与人工决定 | TelePost | 否 |
 | 频道发布与频道凭据 | TelePost | 否 |
 | cron → scheduleId 映射、一次触发 POST | 本仓库 `control-plane/` | 是，且仅此一项 |
-| 部署拓扑（两份 Fly 配置）、卷与生命周期参数 | 本仓库 `fly/` | 是 |
+| 部署拓扑（三份 Fly 配置：pixivflow / telepost / telepress）、卷与生命周期参数 | 本仓库 `fly/` | 是 |
 | 运行配置的随镜像发布（`pixivflow/config/production.json`） | 本仓库 | 是 |
 | 只读运维与验收脚本 | 本仓库 `scripts/` | 是 |
 
