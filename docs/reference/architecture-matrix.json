@@ -1,6 +1,6 @@
 {
-  "matrixVersion": 1,
-  "updated": "2026-09-13",
+  "matrixVersion": 2,
+  "updated": "2026-09-17T00:00:00Z",
   "purpose": "The machine-readable authority for which deployment topologies this repository supports. Humans read docs/architectures/overview.md; agents and tests read this file. Validated by architecture_docs_test.go.",
   "authority": {
     "roleContract": "docs/concepts/roles.md",
@@ -627,7 +627,8 @@
           "control-plane/test/deployment-contract.test.ts",
           "control-plane/test/webhook-ownership.test.ts",
           "scripts/verify-production.sh",
-          "scripts/smoke-pixivflow.sh"
+          "scripts/smoke-pixivflow.sh",
+          "fly/deploy.telepress.toml"
         ]
       },
       "summary": {
@@ -777,8 +778,9 @@
         "flyio": {
           "status": "stable",
           "artifacts": [
+            "fly/deploy.pixivflow.toml",
             "fly/deploy.telepost.toml",
-            "fly/deploy.pixivflow.toml"
+            "fly/deploy.telepress.toml"
           ]
         }
       }
