@@ -35,6 +35,7 @@
   - [多 Bot：加第 N 个频道](/operations/multi-bot.md)
   - [worker-sleep 端到端验收（512 MiB）](/operations/worker-sleep-acceptance.md)
 - 参考
+  - [跨仓库契约（PixivFlow ↔ TelePost）](/CONTRACT.md)
   - [部署契约（统一部署模型）](/reference/deployment-contract.md)
   - [部署清单 deployment.manifest.json](/reference/deployment-manifest.md)
   - [环境变量与资源档位](/reference/environment.md)
