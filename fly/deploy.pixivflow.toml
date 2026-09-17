@@ -111,13 +111,15 @@ kill_timeout = 60
     # terminal cell and the manual recovery presets (normal / relaxed,
     # occurrence-scoped). Governance stays dormant until the resource identity
     # and capacity exist in the baked production config (see the comment there).
-    # 0c2e825 (tag) = v2.22.1 (commit d7d2489, released 2026-09-16). Settles
-    # deterministic/non-retryable delivery ACKs in the FIRST drain round:
-    # permanent rejections and local configuration errors dead-letter immediately
-    # instead of parking in retry_wait until the attempt budget expires, which
-    # previously left the owning Slot running forever and blocked idle shutdown.
-    PIXIVFLOW_REF = 'd7d248938926828a1b7993429d9746b134359211'
-    PIXIVFLOW_VERSION = '2.22.1'
+    # d7d2489 = v2.22.1 (released 2026-09-16). Settles deterministic/non-retryable
+    # delivery ACKs in the FIRST drain round.
+    # f664f8c = v2.23.0 (released 2026-09-17). Business outcome taxonomy
+    # (no_candidate/duplicate_only are normal ends, never internal_error),
+    # recovery request business-state mapping (recoverStatus returns
+    # business_state + user message), observability structured logs/admin API,
+    # and duplicate-only dead-end terminals (bot1 9/16 RCA end-to-end).
+    PIXIVFLOW_REF = 'f664f8cc1c6a817e6779c13ff76e48f98654e6ab'
+    PIXIVFLOW_VERSION = '2.23.0'
 
 [[mounts]]
   source = 'pixivflow_data'
