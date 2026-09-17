@@ -1,0 +1,45 @@
+# TelePress: the content-publishing layer for the rich-novel pipeline.
+#
+# It exposes POST /publish/rich-novel (md + local images -> Catbox -> Telegraph
+# nodes -> {url, assets[]}). PixivFlow calls it over Flycast before a novel
+# submission is enqueued; TelePost only consumes the resulting preview URL.
+#
+# Deploy:
+#   fly create telepress-publish                       # once
+#   fly secrets set -a telepress-publish \
+#     TELEGRAPH_ACCESS_TOKEN=... \
+#     TELEPRESS_API_KEY=...                            # runtime only
+#   fly deploy -a telepress-publish -c fly/deploy.telepress.toml --ha=false
+
+app = 'telepress-publish'
+primary_region = 'iad'
+kill_signal = 'SIGTERM'
+kill_timeout = 60
+
+[build]
+  dockerfile = '../docker/telepress.Dockerfile'
+
+# Catbox is the default image host (no API key needed for uploads). TelePress
+# reads env config; secrets are provided via `fly secrets`, never committed.
+[env]
+  TELEPRESS_IMAGE_HOST_TYPE = 'catbox'
+
+[http_service]
+  internal_port = 8000
+  # Plain HTTP stays acceptable on the private network: the PixivFlow worker
+  # reaches this app over Flycast (WireGuard-protected 6PN), and force_https
+  # would 301 that delivery into a dead end.
+  force_https = false
+  auto_stop_machines = false
+  auto_start_machines = true
+  min_machines_running = 1
+
+  [[http_service.checks]]
+    interval = '15s'
+    timeout = '3s'
+    grace_period = '15s'
+    method = 'GET'
+    path = '/'
+
+[[restart]]
+  policy = 'always'

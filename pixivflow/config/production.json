@@ -177,7 +177,14 @@
       "limit": 1,
       "storageMode": "cache",
       "delivery": {
-        "target": "bot1-submit"
+        "target": "bot1-submit",
+        "richNovelPreview": {
+          "url": "http://telepress-publish.flycast/publish/rich-novel",
+          "headers": {
+            "Authorization": "Bearer ${TELEPRESS_API_KEY}"
+          },
+          "field": "novel_preview_url"
+        }
       },
       "topic": "ボテ腹",
       "date": "YESTERDAY",
@@ -221,7 +228,14 @@
       "limit": 1,
       "storageMode": "cache",
       "delivery": {
-        "target": "bot2-submit"
+        "target": "bot2-submit",
+        "richNovelPreview": {
+          "url": "http://telepress-publish.flycast/publish/rich-novel",
+          "headers": {
+            "Authorization": "Bearer ${TELEPRESS_API_KEY}"
+          },
+          "field": "novel_preview_url"
+        }
       },
       "topic": "丸呑み",
       "date": "YESTERDAY",
