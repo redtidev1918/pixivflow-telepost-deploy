@@ -18,7 +18,8 @@
 2. 投稿响应（TelePost → PixivFlow）
 3. Refetch 终态 outcome（PixivFlow → TelePost）
 4. Schedule outcome（PixivFlow → TelePost）
-5. 变更纪律（review checklist）
+5. 富媒体预览链路（TelePress「/publish/rich-novel」→ Telegraph）
+6. 变更纪律（review checklist）
 
 ---
 
@@ -135,7 +136,56 @@ PixivFlow 默认 multipart 字段名即 `files` / `previews`（可经 operator �
 
 ---
 
-## 5. 变更纪律（review checklist）
+## 5. 富媒体预览链路（TelePress「/publish/rich-novel」→ Telegraph）
+
+TelePress 是内容发布基础设施，不在 PixivFlow ↔ TelePost 的 HTTP 边界里，但它
+跟这条边界的「预览入口」有关：PixivFlow 把富媒体小说发布到 Telegraph，TelePost
+只在订阅 payload 里消费一个 URL，不解析 Pixiv/Novel 数据结构。
+
+### 5.1 TelePress `POST /publish/rich-novel`
+
+| multipart part | 必填 | 说明 |
+|---|---|---|
+| `md` | 是 | 一个 markdown 文件，内含 `![](images/001.jpg)` 这类**相对路径**本地图引用。 |
+| `images` | 否（可重复） | 本地图片文件；**multipart 文件名必须与 markdown 引用路径一致**（如 `images/001.jpg`），可重复提交多张，顺序按图片在正文中的引用决定。 |
+| `title` | 否 | Telegraph 页面标题，缺省取文档名。 |
+| `token` | 否 | 可选 Telegraph token。 |
+
+成功 `200` 响应：
+
+```jsonc
+{
+  "status": "success",
+  "url": "https://telegra.ph/...",   // 即预览页 preview_url
+  "assets": [
+    {
+      "local": "images/001.jpg",
+      "remote": "https://files.catbox.moe/xxxx.jpg", // 上传成功
+      "status": "uploaded"
+    },
+    {
+      "local": "images/002.jpg",
+      "remote": null,                                // 上传失败，页面仍发布（保留原引用）
+      "status": "failed"
+    }
+  ]
+}
+```
+
+- `url` 是最终 Telegraph 在线阅读页，供下游作为 `preview_url`。
+- `assets[].status` 为 `uploaded` / `failed`；失败不阻止发布，但必须能审计。
+- 渲染保证：正文、插图按源顺序生成 Telegraph node（`img` 内联，不是附件列表/纯文本链接）。
+
+### 5.2 preview_url 传播（PixivFlow → TelePost payload）
+
+- PixivFlow 在自己配置的投稿模板里可选写入文本字段 **`novel_preview_url`**（值就是
+  TelePress 返回的 `url`）。该字段是 operator 可配置模板的一部分，不是固定 schema，
+  但字段名需保持三处一致（PixivFlow 配置 / 本文档 / TelePost 读取）。
+- TelePost 读取 `novel_preview_url`：存在且非空时，频道帖子脚注渲染
+  `📖 在线阅读`；不存在时保持旧纯文本逻辑（纯 txt / 无预览链接）。
+- TelePost 不理解 NovelAsset / Pixiv 数据结构，只消费 URL。
+
+## 6. 变更纪律（review checklist）
 
 任何改动这两个方向的 payload 形状（包括 RFC 1 新增富媒体相关字段、RFC 2 新增通知相关字段）：
 
