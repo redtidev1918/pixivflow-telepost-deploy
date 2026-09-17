@@ -324,7 +324,7 @@ cd control-plane && npx wrangler secret put SCHEDULER_TRIGGER_TOKEN && npx wrang
 
 | | `single-host` | `single-machine-worker-sleep` | `split-worker` | `remote-worker` |
 | --- | --- | --- | --- | --- |
-| 机器数 | 1 | 1 | 2 | 2（可跨平台） |
+| 机器数 | 1 | 1 | 3（executor / publish / publisher） | 2（可跨平台） |
 | `executor` 是否可停 | 否（常驻容器） | 是（进程） | 是（机器） | 视平台 |
 | 省内存 | 否 | **是** | 部分 | 部分 |
 | 省计算账单 | 否 | **否** | **是** | 是 |

@@ -220,7 +220,8 @@ Fly.io production topology`），但它是「当前生产」，不是「唯一�
 
 ## 与此前状态的关系
 
-本契约不引入破坏性变更。`split-worker` 的线上配置、两份 Fly 配置、`control-plane/`、四个
+本契约不引入破坏性变更。`split-worker` 的线上配置、三份 Fly 配置
+（`deploy.pixivflow.toml` / `deploy.telepost.toml` / `deploy.telepress.toml`）、`control-plane/`、四个
 只读脚本与现有守护测试全部保持可用；本页只是给它们一个统一的名字与来源。
 
 冗余外部时钟是**同一份拓扑的 operational 变更**，不是第五个 preset：preset 集合、角色所有权、

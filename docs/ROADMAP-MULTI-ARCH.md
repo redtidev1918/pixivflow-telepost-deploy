@@ -190,7 +190,7 @@ Where are you deploying?
 | 生成物 | 说明 |
 | --- | --- |
 | `.env` | 只含该 preset 需要的键，带占位符与注释 |
-| compose / Fly 配置 | 按平台生成，符合两份 Fly 配置契约 |
+| compose / Fly 配置 | 按平台生成，符合当前 Fly 拓扑来源契约（split-worker 三份配置） |
 | Cloudflare 配置 | 仅 `clock=cloudflare` 时生成 `control-plane` 部署指引 |
 | resource profile | 按档位写入 `TELEPOST_MEMORY_LIMIT` / `PIXIVFLOW_MEMORY_LIMIT` |
 | manifest | Phase 2 的 manifest 文件，声明 preset 与开关 |
@@ -210,7 +210,7 @@ Where are you deploying?
 | 不变量 | 为什么 |
 | --- | --- |
 | 当前线上 `split-worker` 保持可用 | 生产在跑；任何阶段都不做破坏性迁移 |
-| 两份 Fly 配置仍是唯一 Fly 拓扑来源 | `control-plane/test/deployment-contract.test.ts` 守护 |
+| 当前生产 split-worker 的 Fly 拓扑来源是三份配置（`deploy.pixivflow.toml` / `deploy.telepost.toml` / `deploy.telepress.toml`） | `control-plane/test/deployment-contract.test.ts` 守护 |
 | `executor` 不持有 Telegram 凭据（`split-worker` / `remote-worker`） | webhook 归属与审核边界的根基 |
 | 停机决策权归 `executor` 自己的账本 | 平台 auto-stop 与健康检查都会截断批次 |
 | 每套 schedule 只有一个时钟 | 重复触发幂等，凭据争用不是 |

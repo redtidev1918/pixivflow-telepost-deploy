@@ -335,7 +335,8 @@ docker compose -f docker-compose.yml -f docker-compose.worker-sleep.yml up -d
 ### Fly / systemd 形态
 
 **缺失。** Fly 形态需要这个 preset 自己的机器拓扑，也就是第三份 `fly/*.toml`，而它与
-「只有两份 Fly 配置」的契约冲突——这需要先决定怎么表达，见
+`control-plane/test/deployment-contract.test.ts` 目前承认 split-worker 的
+三份 Fly 配置；sleep preset 仍需要新增自己的 `fly/*.toml`（或只支持 compose/systemd），见
 [ROADMAP-MULTI-ARCH.md](../ROADMAP-MULTI-ARCH.md) 的 Phase 3。
 
 ### compose 的完整步骤形态
