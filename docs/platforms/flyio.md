@@ -70,7 +70,7 @@ fly deploy -c fly/deploy.telepress.toml --ha=false
 
 | 应用 | 固定方式 | 规则 |
 | --- | --- | --- |
-| 业务端 | `TELEPOST_IMAGE`（发布版本，如 `...telepost:2.35.0`） | **绝不用 `latest`** |
+| 业务端 | `TELEPOST_IMAGE`（发布版本，如 `...telepost:2.35.1`） | **绝不用 `latest`** |
 | 执行端 | `PIXIVFLOW_REF`（**40 位提交号**） | 绝不用分支名，也不用 tag |
 | 富媒体发布端 | TelePress 镜像/版本（见 `docker/telepress.Dockerfile`） | 发布流水线固定；不依赖 `latest` |
 
