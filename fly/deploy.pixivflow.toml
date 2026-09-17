@@ -122,8 +122,8 @@ kill_timeout = 60
     # (data-faithful webview novel: images/illusts + inline image download to
     # <txt>/images/, additive sidecar metadata) and failure-visibility Phase A
     # (silent notification skips become traceable via logger). RFC 1 + RFC 2.
-    PIXIVFLOW_REF = '8c7fa0a4b74bab5a659a2960b751888355245ce7'
-    PIXIVFLOW_VERSION = '2.24.0'
+    PIXIVFLOW_REF = '532ba353488925d9870c887ddcb91d5791a4af70'
+    PIXIVFLOW_VERSION = '2.25.0'
 
 [[mounts]]
   source = 'pixivflow_data'
