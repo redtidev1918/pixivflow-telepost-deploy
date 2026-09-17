@@ -93,7 +93,11 @@ primary_region = 'iad'
     # single opaque inline button that opens the Mini App); TXT previews add a
     # distinct 📖 在线阅读 action; Mini App tag separator hint/placeholder UX
     # updated. Deploy config (BOT{n}_MINIAPP_SUBMIT_CTA=true) is unchanged.
-    TELEPOST_IMAGE = 'ghcr.io/redtidev1918/telepost:2.31.4'
+    # 2.32.0 (2026-09-17): submission resubmit outcome model — verified
+    # reject→resubmit lineage (review_chain_id / generation / supersedes),
+    # pending resubmit is ignored idempotently, distinct user outcomes, and a
+    # Mini App 重投 button (resubmit_available). Requires 2.32.0 telepost.
+    TELEPOST_IMAGE = 'ghcr.io/redtidev1918/telepost:2.32.0'
 
 [[mounts]]
   source = 'data'
