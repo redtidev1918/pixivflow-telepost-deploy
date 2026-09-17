@@ -188,7 +188,7 @@ deploy doctor && deploy deploy
 | 目标 | 需要搬的状态 | 主要动作 |
 | --- | --- | --- |
 | `single-machine-worker-sleep` | 同一个 `./data` 目录 | 改成由常驻 supervisor 按需拉起 executor；当前**未实现**，先读该 preset 的状态字段 |
-| `split-worker` | PixivFlow 与 TelePost 的状态分别搬到两个卷 | 两套 Fly 配置、一个外部时钟；执行端重建时确认下载缓存的相对路径 |
+| `split-worker` | PixivFlow 与 TelePost 的状态分别搬到两个卷 | 三份 Fly 配置（pixivflow / telepost / telepress）、一个外部时钟；执行端重建时确认下载缓存的相对路径 |
 | `remote-worker` | 只搬 executor 的状态目录 | 把 pixivflow service 移到第二台主机，改 `TELEPOST_API_BASE_URL`，加认证与私网 |
 
 反向迁移同样成立。完整的数据清单与非迁移项见 [migration.md](migration.md)。

@@ -22,7 +22,7 @@
 - 最在意 Fly.io 计算费用的人：不跑任务的时间不产生计算账单。
 - 最在意可靠性的人：`executor` 崩溃或 OOM 不会打到用户可见的投稿链路。
 - 希望凭据边界最干净的人：执行机器里没有任何 Telegram 凭据。
-- 已经有多台设备或愿意接受四个组件（三个 Fly 应用 + 一个时钟）的人。
+- 已经有多台设备或愿意接受三个组件（两个 Fly 应用 + 一个时钟）的人。
 
 如果你只有一台机器、或者不想维护外部时钟，看 [`single-host`](single-host.md)。
 
@@ -42,13 +42,9 @@ Fly Proxy（自动唤醒已停止的机器）
         ▼
 Fly App: pixivflow-scheduler        独立机器 + 独立卷，平时 stopped
   executor  ── durable slot ledger = 唯一的执行权威
-        │  富媒体小说经 /publish/rich-novel（Flycast）
+        │  既有 httpMultipart 投递 + 稳定幂等键
         ▼
-Fly App: telepress-publish          常驻、无持久卷
-  富媒体发布（md + images → Catbox → Telegraph → novel_preview_url）
-        │
-        ▼
-Fly App: telesubmit-multi-bot       常驻
+Fly App: telesubmit-multi-bot        常驻
   publisher + telegram-ingress
         │  人工批准后
         ▼
@@ -87,14 +83,11 @@ Telegram 频道
 | --- | --- | --- | --- |
 | `clock` | PRIMARY `cron-job.org` + SECONDARY `control-plane/`（Worker `pixivflow-control-plane`） | cron → schedule id 映射、一个触发令牌 | occurrence、槽位、凭据、审核、发布、Telegram |
 | `executor` | `fly/deploy.pixivflow.toml`（app `pixivflow-scheduler`） | 槽位账本、执行租约、下载缓存、投递 outbox、Pixiv 凭据 | **Telegram 令牌、频道、审核决定** |
-| `publish` | `fly/deploy.telepress.toml`（app `telepress-publish`） | 无持久状态（Catbox/Telegraph 读取配置凭据） | Telegram 令牌、审核决定、Pixiv 槽位 |
 | `publisher` + `telegram-ingress` | `fly/deploy.telepost.toml`（app `telesubmit-multi-bot`） | 用户会话、投稿幂等键、审核队列、发布记录、Telegram 令牌 | Pixiv 登录、下载、槽位调度 |
 
-`fly/deploy.pixivflow.toml`、`fly/deploy.telepost.toml` 与 `fly/deploy.telepress.toml`
-是本仓库**当前三份 Fly 拓扑来源**。`control-plane/test/deployment-contract.test.ts`
-会在出现第四份 Fly 配置、cron 与映射不一致、或卷/停机参数被改动时失败。历史上正是
-「多份都像权威的配置」把混部拓扑带了回来；TelePress 是第三份已合并的 Fly artifact，
-不是又一次例外。
+`fly/deploy.pixivflow.toml` 与 `fly/deploy.telepost.toml` 是本仓库**唯一的两份 Fly 拓扑来源**。
+`control-plane/test/deployment-contract.test.ts` 会在出现第三份 Fly 配置、cron 与映射不一致、
+或卷/停机参数被改动时失败。历史上正是「两份都像权威的配置」把混部拓扑带了回来。
 
 ---
 
@@ -105,17 +98,15 @@ Telegram 频道
 | `clock-edge` | 0（Cloudflare Workers，SECONDARY） | 免费额度内；无数据库绑定、无状态 |
 | `clock-primary` | 0（cron-job.org，PRIMARY） | 第二个独立 provider、独立故障域；只在控制台里配置，本仓库不注册它 |
 | `worker-machine` | 1 × 512 MiB | 运行时内存由 `NODE_OPTIONS=--max-old-space-size=384` 与 `download.concurrency=1` 约束 |
-| `publish-machine` | 1 × 512 MiB | TelePress 富媒体发布（常驻；无持久卷） |
 | `service-machine` | 1 × 512 MiB | 双 Bot；`SEARCH_ENABLED=false`、`DB_CACHE_KB=1024` |
 
-> 当前三份 Fly 配置（`pixivflow` / `telepost` / `telepress`）**没有声明 `[vm] memory_mb`**，
+> 当前 `fly/deploy.pixivflow.toml` 与 `fly/deploy.telepost.toml` **没有声明 `[vm] memory_mb`**，
 > 因此机器规格由 Fly 侧决定。文档与历史配置里的 512 MiB 是设计意图，不是配置文件里的硬约束；
 > 核对真实规格请用 `fly machine list`。资源档位见
 > [performance.md](../operations/performance.md)。
 
-两个有状态的卷都不能共享：`pixivflow` 与 `telepost` 各自 `fly volumes create`，
-`--ha=false` 是必需的（一台机器才能挂一个卷）。TelePress 是**无持久卷**的富媒体
-发布端，不需要 `fly volumes create`（Catbox/Telegraph 只有远端状态）。
+两个卷都不能共享：每个应用各自 `fly volumes create`，`--ha=false` 是必需的
+（一台机器才能挂一个卷）。
 
 ---
 
@@ -125,7 +116,6 @@ Telegram 频道
 | --- | --- | --- | --- |
 | `clock` | `always-on` | 不适用 | 不适用（无状态） |
 | `executor` | `wake-run-exit` | 触发请求经 Fly Proxy 自动启动已停止的机器 | **`executor` 自己的账本**（`exitWhenIdle`） |
-| `publish`（TelePress） | `always-on` | 从不休眠 | 从不停止 |
 | `publisher` | `always-on` | 从不休眠 | 从不停止 |
 | `telegram-ingress` | `always-on` | 从不休眠 | 从不停止 |
 
@@ -147,10 +137,8 @@ stopped（省钱，健康 idle）
 参数：`idleGraceMs = 900000`（10 分钟，合并相邻调度，同时排空刚跑完的投递重试）、
 `maxLifetimeMs = 10800000`（3 小时异常长跑兜底）。
 
-**`publish` 与 `publisher` 相反，它们从不休眠。** 冷启动对用户是可见的
-（私聊投稿像坏了），所以 `auto_stop_machines = false`、`min_machines_running = 1`，
-并保留长期健康检查。TelePress 富媒体发布端（`telepress-publish`）同样常驻：小说即点
-即读，不能被冷启动延迟打断。
+**`publisher` 相反，它从不休眠。** 冷启动对用户是可见的（私聊投稿像坏了），
+所以 `auto_stop_machines = false`、`min_machines_running = 1`，并保留长期健康检查。
 
 ### 三条禁止事项
 
@@ -172,10 +160,8 @@ stopped（省钱，健康 idle）
 | Pixiv 凭据、限流状态 | 同上（+ 平台 secret） | 需要重新授权 |
 | TelePost 每 Bot SQLite | `data` 卷 `/app/data/bot{N}/` | 投稿幂等与审核队列丢失 |
 | TelePost 运行策略覆盖 | `data/bot{N}/runtime-policy.json` | 回落到 `[env]` 部署默认值 |
-| TelePress 富媒体发布端 | 无持久卷（配置/凭据走 Fly secrets；Catbox/Telegraph 远端状态） | 无本地状态丢失；失败可重试 |
 
-**两个有状态的卷，一机一个；TelePress 无持久卷。** 物理卷在这里天然分离；
-这是主机级隔离最强的形态。注意跨 preset 的不变量
+**两个卷，一机一个。** 物理卷在这里天然分离；这是主机级隔离最强的形态。注意跨 preset 的不变量
 是**状态命名空间不重叠（SI-7）**，不是「物理卷绝不共享」——共置 preset 共享物理卷但子目录互不相交。
 
 > **路径规则（commit `71b4c7c`）：** 配置里 `PIXIV_DOWNLOADER_CONFIG` 必须是绝对路径
@@ -191,7 +177,6 @@ stopped（省钱，健康 idle）
 | 链路 | 传输 | 必须保持 |
 | --- | --- | --- |
 | 时钟 → `executor` | `public-https`（Fly Proxy，`auto_start_machines=true`） | 触发携带 bearer 令牌；TLS 在 Fly 代理终止 |
-| `executor` → `publish`（TelePress） | `flycast`（`http://telepress-publish.flycast`，见 `deploy.telepress.toml`） | `POST /publish/rich-novel`；`force_https = false`（Flycast 内网 HTTP） |
 | `executor` → `publisher` | `flycast`（`http://telesubmit-multi-bot.flycast`） | **URL 不带 `:8080`**；`force_https = false` |
 | Telegram → `publisher` | 公网 HTTPS webhook | `telegram-ingress` 是唯一 webhook owner |
 | `publisher` → 审核群 / 频道 | 公网 HTTPS | 由 TelePost 自己发起 |
@@ -217,19 +202,19 @@ stopped（省钱，健康 idle）
 - **凭据边界最干净。** 执行机器镜像里**没有**任何 Telegram 令牌与频道 ID
   （`control-plane/test/webhook-ownership.test.ts` 静态保证），因此它无法直发频道、
   无法绕过审核、也无法把投稿机器人的 webhook 指到自己身上。
-- **三个应用可以独立升级、独立扩容、独立回滚。**
+- **两个角色可以独立升级、独立扩容、独立回滚。**
 - **`publisher` 常驻**，投稿秒回，没有冷启动的用户可见延迟。
 
 ---
 
 ## 缺点
 
-- **组件更多。** 三个 Fly 应用 + 一个 Cloudflare Worker + 一个 cron-job.org 账号 + 两个卷（TelePress 无持久卷）。
+- **组件更多。** 两个 Fly 应用 + 一个 Cloudflare Worker + 一个 cron-job.org 账号 + 两个卷。
 - **多一个卷**，备份与恢复要覆盖两个位置。
 - **需要外部唤醒触发器。** 生产有两个独立故障域的时钟（PRIMARY cron-job.org / SECONDARY Cloudflare），
   单个 provider 静默失火不再等于漏跑；两个都失效时仍不补跑历史。
 - **部署与调试更复杂。** 「机器是 stopped 的」需要被理解为健康状态，而不是故障。
-- **平台耦合较深。** 当前的三份配置是 Fly 专属的（Flycast、Fly Proxy 唤醒语义、
+- **平台耦合较深。** 当前的两份配置是 Fly 专属的（Flycast、Fly Proxy 唤醒语义、
   `restart.policy` 命名）。
 
 ---
@@ -270,13 +255,11 @@ stopped（省钱，健康 idle）
 ## 部署步骤
 
 ```bash
-# 1) 配置 app 名（三份各自一个）
+# 1) 改两份配置里的 app 名
 #    fly/deploy.telepost.toml  → app
 #    fly/deploy.pixivflow.toml → app
-#    fly/deploy.telepress.toml → app
 fly config validate -c fly/deploy.telepost.toml
 fly config validate -c fly/deploy.pixivflow.toml
-fly config validate -c fly/deploy.telepress.toml
 
 # 2) 业务端（常驻）
 fly volumes create data -a <your-telepost-app> --size 1 --region iad
@@ -294,13 +277,6 @@ fly secrets set -a <your-pixivflow-app> \
   TELEPOST_BOT1_SUBMIT_TOKEN=... TELEPOST_BOT2_SUBMIT_TOKEN=... \
   SCHEDULER_TRIGGER_TOKEN=...
 # 执行端这里不该出现任何 Telegram 令牌。
-
-# 3b) 富媒体发布端（无持久卷；app = telepress-publish）
-fly deploy -c fly/deploy.telepress.toml --ha=false
-fly secrets set -a telepress-publish \
-  TELEGRAPH_ACCESS_TOKEN=... \
-  TELEPRESS_API_KEY=...
-# PixivFlow 的 richNovelPreview.headers 里用同一个 TELEPRESS_API_KEY 作为 Bearer。
 
 # 4) 时钟：两个独立 provider，作用于同一套 schedule
 #    4a) SECONDARY：Cloudflare Worker
@@ -348,7 +324,7 @@ cd control-plane && npx wrangler secret put SCHEDULER_TRIGGER_TOKEN && npx wrang
 
 | | `single-host` | `single-machine-worker-sleep` | `split-worker` | `remote-worker` |
 | --- | --- | --- | --- | --- |
-| 机器数 | 1 | 1 | 2 | 2（可跨平台） |
+| 机器数 | 1 | 1 | 3（executor / publish / publisher） | 2（可跨平台） |
 | `executor` 是否可停 | 否（常驻容器） | 是（进程） | 是（机器） | 视平台 |
 | 省内存 | 否 | **是** | 部分 | 部分 |
 | 省计算账单 | 否 | **否** | **是** | 是 |
