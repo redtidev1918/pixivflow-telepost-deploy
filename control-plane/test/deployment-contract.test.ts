@@ -107,7 +107,7 @@ describe('topology has a single source', () => {
 
   it('keeps split-worker as the only preset with Fly configs today', () => {
     const { expected } = declaredFlyConfigs();
-    expect([...expected].sort()).toEqual(['deploy.pixivflow.toml', 'deploy.telepost.toml']);
+    expect([...expected].sort()).toEqual(['deploy.pixivflow.toml', 'deploy.telepost.toml', 'deploy.telepress.toml']);
     const flyio = matrix.presets['single-machine-worker-sleep']?.platformStatus?.flyio;
     expect(flyio?.status, 'worker-sleep flyio is not implemented; do not claim otherwise').toBe('planned');
   });
