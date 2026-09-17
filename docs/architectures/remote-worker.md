@@ -202,7 +202,7 @@ PIXIV_REFRESH_TOKEN=...
 
 `fly/deploy.pixivflow.toml` 里的投递地址与触发地址都是可替换的：
 把 `TELEPOST_API_BASE_URL` 指向你自己的 business host，`PIXIVFLOW_TRIGGER_BASE_URL`
-（在 `control-plane/wrangler.toml`）指向这个 Fly 应用。两份 Fly 配置不再是唯一拓扑来源，
+（在 `control-plane/wrangler.toml`）指向这个 Fly 应用。三份 Fly 配置（pixivflow / telepost / telepress）不是唯一拓扑来源，
 本 preset 允许按需拆分。
 
 ### 方案三：systemd 两端

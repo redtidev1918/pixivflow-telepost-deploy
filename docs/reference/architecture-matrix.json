@@ -445,7 +445,7 @@
           },
           "fly-config": {
             "state": "missing",
-            "notes": "Fly 形态需要第三份 fly/*.toml，与「只有两份 Fly 配置」的契约冲突，待决定；compose 形态已可用"
+            "notes": "Fly 形态需要给 sleep preset 新增自己的 fly/*.toml；当前契约已承认 split-worker 的三份 Fly configs（pixivflow/telepost/telepress）"
           },
           "deployment-steps": {
             "state": "design-only",
