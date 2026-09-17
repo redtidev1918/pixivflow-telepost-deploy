@@ -12,7 +12,7 @@
 
 | 脚本 | 它证明了什么 | 需要的凭据 | 缺凭据时的行为 |
 |---|---|---|---|
-| `scripts/verify-production.sh` | 7 段串行核对：两个 Fly 应用存在；部署中的停机/唤醒参数（读 `fly config show`，不读仓库文件）；执行端机器状态 + `restart.policy`；**一次不带凭据的**未授权触发；业务端 `/health` 与 `/live` 返回 200；调用第 5、6、7 段 | 无（全程匿名）。webhook 归属与 Cloudflare 时钟段各自需要凭据 | 缺 `BOT*_TOKEN` → 第 5 段 `SKIP`；缺 Cloudflare 只读凭据 → 第 7 段 `[INFO]` 跳过。退出码 0 = 通过（`SKIP` 不算失败），1 = 至少一项不合格 |
+| `scripts/verify-production.sh` | 7 段串行核对：三个 Fly 应用存在（pixivflow-scheduler、telepress-publish、telesubmit-multi-bot）；部署中的停机/唤醒参数（读 `fly config show`，不读仓库文件）；执行端机器状态 + `restart.policy`；**一次不带凭据的**未授权触发；业务端 `/health` 与 `/live` 返回 200；调用第 5、6、7 段 | 无（全程匿名）。webhook 归属与 Cloudflare 时钟段各自需要凭据 | 缺 `BOT*_TOKEN` → 第 5 段 `SKIP`；缺 Cloudflare 只读凭据 → 第 7 段 `[INFO]` 跳过。退出码 0 = 通过（`SKIP` 不算失败），1 = 至少一项不合格 |
 | `scripts/smoke-telepost.sh` | 业务端常驻且可达（`/health`、`/live` → 200），且 `bot1`/`bot2` 的投稿接口在无令牌时被拒（401/403）。它刻意不提交任何投稿，所以不会污染真实审核队列 | 无 | 不需要凭据，因此没有 `SKIP` 分支 |
 | `scripts/smoke-pixivflow.sh` | 执行端机器存在且 `stopped` 是正常静止态；触发端点拒绝无凭据请求 | 无 | 非 401/403 且非 000/200 时打印 `SKIP`（例如 404 说明路径或 `schedule_id` 与运行配置漂移）。`schedule_id` 默认 `bot1-daily`，可用 `SCHEDULE_ID` 覆盖 |
 | `scripts/verify-webhooks.sh` | 每个 Bot 的 Telegram webhook 仍指向 TelePost（`TELEPOST_HOST`，默认 `telesubmit-multi-bot.fly.dev`）。归属是运行时的外部状态，静态检查回答不了 | `BOT1_TOKEN`、`BOT2_TOKEN`（导出环境变量优先，其次仓库根 `.env`） | 缺 token 或 token 形态不像 Telegram bot token → 每个 Bot 各打一行 `SKIP`；两者都缺时整项 `SKIP` 并以退出码 0 结束。token 经继承环境变量交给 `scripts/tg_webhook_check.py`，从不进入 `argv`、不打印 |

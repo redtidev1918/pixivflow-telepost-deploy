@@ -24,7 +24,7 @@
 | --- | --- | --- | --- | --- |
 | `single-host` | Stable | 已实现、CI 覆盖、未在生产验证 | 一台机器跑全部角色，两个容器共享一个 data 目录 | [single-host.md](single-host.md) |
 | `single-machine-worker-sleep` | Experimental | **组件已实现，preset 不可部署** | 一台机器：业务常驻，执行进程按需拉起、空闲即退出 | [single-machine-worker-sleep.md](single-machine-worker-sleep.md) |
-| `split-worker` | Stable | 已实现、已测试、**当前生产** | 执行端与业务端各自一台机器、各自一个卷 | [split-worker.md](split-worker.md) |
+| `split-worker` | Stable | 已实现、已测试、**当前生产** | 执行端、富媒体发布端、业务端各自一台机器；两个卷 + 无状态 TelePress | [split-worker.md](split-worker.md) |
 | `remote-worker` | Beta | 已实现、未经端到端测试 | 两个角色跨机器跨网络通信 | [remote-worker.md](remote-worker.md) |
 
 支持等级与实现状态是两个不同的东西，永远不要合并成一个词：
@@ -58,6 +58,8 @@
 
 **共置是物理事实，不是语义合并。** 即使 `single-host` 把两个角色放进同一台机器，
 `executor` 也不因此获得审核或发布权，`publisher` 也不因此获得 Pixiv 登录或槽位调度权。
+`split-worker` 生产拓扑还运行第三个**无状态 `publish` 平面**：`telepress-publish`
+（富媒体小说 md+images → Catbox → Telegraph），它与业务端一样常驻、不持有 Telegram 凭据。
 见 [roles.md](../concepts/roles.md)。
 
 ---
