@@ -106,7 +106,9 @@ primary_region = 'iad'
     # (重试·插画 / 放宽·插画). Requires 2.36.0 telepost.
     # 2.37.0 (2026-09-18): renders CandidateSupplyReport.inventory as
     # 待发池：N 条（预计可用到 YYYY-MM-DD）on empty-result messages.
-    TELEPOST_IMAGE = 'ghcr.io/redtidev1918/telepost:2.37.0'
+    # 2.38.0 (2026-09-18): preannouncement when 待发池 empty, independent
+    # 26h schedule watchdog, and read-only GET /api/v1/schedule/status.
+    TELEPOST_IMAGE = 'ghcr.io/redtidev1918/telepost:2.38.0'
 
 [[mounts]]
   source = 'data'
