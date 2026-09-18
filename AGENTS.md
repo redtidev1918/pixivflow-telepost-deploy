@@ -334,7 +334,7 @@ execution authority:        PixivFlow durable slot ledger（唯一）
 
 **当前发布 pin（代码=Release=Deploy=Runtime 复核基线）：**
 
-- PixivFlow scheduler：v2.35.0 / `209644ebd18558b780908e27ca1bffc126cbf7cc`
+- PixivFlow scheduler：v2.36.0 / `00a29ea4120537c61fa935f0b0aae10ee8a29e47`
 - TelePost：v2.43.0（`ghcr.io/redtidev1918/telepost:2.43.0`，MiniApp 用户/管理空间拆分 + 私聊真实媒体预览）
 - TelePress：v0.10.0（`telepress-publish` 单机已跑，v1 部署于发布后当天）
 
