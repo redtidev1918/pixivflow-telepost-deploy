@@ -104,7 +104,9 @@ primary_region = 'iad'
     # 2.36.0 (2026-09-18): candidate supply observability UX — renders the
     # CandidateSupplyReport funnel and labels recovery buttons per target
     # (重试·插画 / 放宽·插画). Requires 2.36.0 telepost.
-    TELEPOST_IMAGE = 'ghcr.io/redtidev1918/telepost:2.36.0'
+    # 2.37.0 (2026-09-18): renders CandidateSupplyReport.inventory as
+    # 待发池：N 条（预计可用到 YYYY-MM-DD）on empty-result messages.
+    TELEPOST_IMAGE = 'ghcr.io/redtidev1918/telepost:2.37.0'
 
 [[mounts]]
   source = 'data'

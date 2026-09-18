@@ -168,6 +168,22 @@
       "noMatchPolicy": {
         "lookbackDays": 3,
         "notify": false
+      },
+      "topicProfile": {
+        "primary": [
+          "ボテ腹"
+        ],
+        "related": [],
+        "strategy": {
+          "freshnessWeight": 0.4,
+          "popularityWeight": 0.3
+        },
+        "inventory": {
+          "enabled": true,
+          "maxAgeDays": 30,
+          "reserveSize": 20,
+          "fallback": true
+        }
       }
     },
     {
@@ -197,6 +213,22 @@
       "noMatchPolicy": {
         "lookbackDays": 3,
         "notify": false
+      },
+      "topicProfile": {
+        "primary": [
+          "ボテ腹"
+        ],
+        "related": [],
+        "strategy": {
+          "freshnessWeight": 0.4,
+          "popularityWeight": 0.3
+        },
+        "inventory": {
+          "enabled": true,
+          "maxAgeDays": 30,
+          "reserveSize": 20,
+          "fallback": true
+        }
       }
     },
     {
@@ -219,6 +251,22 @@
       "noMatchPolicy": {
         "lookbackDays": 3,
         "notify": false
+      },
+      "topicProfile": {
+        "primary": [
+          "丸呑み"
+        ],
+        "related": [],
+        "strategy": {
+          "freshnessWeight": 0.4,
+          "popularityWeight": 0.3
+        },
+        "inventory": {
+          "enabled": true,
+          "maxAgeDays": 30,
+          "reserveSize": 20,
+          "fallback": true
+        }
       }
     },
     {
@@ -248,6 +296,22 @@
       "noMatchPolicy": {
         "lookbackDays": 3,
         "notify": false
+      },
+      "topicProfile": {
+        "primary": [
+          "丸呑み"
+        ],
+        "related": [],
+        "strategy": {
+          "freshnessWeight": 0.4,
+          "popularityWeight": 0.3
+        },
+        "inventory": {
+          "enabled": true,
+          "maxAgeDays": 30,
+          "reserveSize": 20,
+          "fallback": true
+        }
       }
     }
   ],
