@@ -137,7 +137,7 @@ Content-Type: application/json
 **cron → schedule id 的映射是数据驱动的**，可支持任意数量、任意 cron 的 schedule，不在代码里
 写 morning/evening。
 
-- **Cloudflare Worker（生产 SECONDARY 时钟）**：`control-plane/`。Cron 用 UTC（北京 10:00/22:00 =
+- **Cloudflare Worker（生产 SECONDARY 时钟）**：`control-plane/`。Cron 用 UTC（北京 10:00 =
   UTC 02:00/14:00）。Worker 只做三件事：映射 cron → schedule id、带令牌 POST、记录结果。
   它**不计算 occurrence、不换算时区、不生成槽位标识、不写业务表、没有数据库绑定**。
   Secret：`SCHEDULER_TRIGGER_TOKEN`；`[vars]`：`PIXIVFLOW_TRIGGER_BASE_URL`。

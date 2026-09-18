@@ -279,8 +279,8 @@ PRIMARY 是一个**第三方 SaaS**，它的配置**不在这个仓库里**，�
 等价的 UTC 表达（`deploy manifest` / `cron-map.ts` 里读到的就是这两个）：
 
 ```text
-bot1-daily   0 2,14 * * *
-bot2-daily  10 2,14 * * *
+bot1-daily   0 2 * * *
+bot2-daily  10 2 * * *
 ```
 
 请求设置：
