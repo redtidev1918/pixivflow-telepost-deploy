@@ -252,7 +252,7 @@ for path in health live; do
   code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 20 "https://${telepost_app}.fly.dev/${path}" 2>/dev/null || echo 000)
   if [[ "$code" == "200" ]]; then ok "https://${telepost_app}.fly.dev/${path} → 200"; else fail "https://${telepost_app}.fly.dev/${path} → ${code}"; fi
 done
-code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 20 "https://${telepost_app}.fly.dev/api/v1/schedule/status" 2>/dev/null || echo 000)
+code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 20 "https://${telepost_app}.fly.dev/api/bot1/v1/schedule/status" 2>/dev/null || echo 000)
 if [[ "$code" == "200" ]]; then ok "https://${telepost_app}.fly.dev/api/v1/schedule/status → 200"; else fail "https://${telepost_app}.fly.dev/api/v1/schedule/status → ${code}"; fi
 
 echo "== 5/7 Telegram webhook 归属 =="
