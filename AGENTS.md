@@ -234,6 +234,10 @@ if SINGLE_HOST:   ...
 12. **不要放宽环境白名单**：传给 executor 子进程的环境是 deny-by-default 白名单
     （`PIXIV_*` / `SCHEDULER_*` / `*_SUBMIT_TOKEN` + 通用运行变量）。`supervisor/child.go` 对
     Telegram 凭据名有第二道拒付检查，改白名单必须同时改测试。
+13. **TelePress 故障注入测试必须线性还原**：任何以「临时失效 `TELEGRAPH_ACCESS_TOKEN`」驱动的失败
+    隔离 E2E，**结束前必须恢复有效令牌、复核 `getAccountInfo`、并做一次真实 happy-path 发布**，
+    绝不允许把占位/失效令牌留在生产。占位令牌「预览休眠、TXT 照常」是特性契约，不是排障结论——
+    历史事故即由此产生（见 `environment.md`「Telegraph access token 运维」）。
 
 ---
 
