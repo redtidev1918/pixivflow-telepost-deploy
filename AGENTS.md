@@ -327,10 +327,15 @@ execution authority:        PixivFlow durable slot ledger（唯一）
 
 - `bot1-daily` 每天 **10:00**（`0 10 * * *`）、`bot2-daily` 每天 **10:10**（`10 10 * * *`）Asia/Shanghai；
   不再有 22:00/22:10 晚间 occurrence。
-- PRIMARY cron-job.org：必须把 bot1-daily / bot2-daily 的**晚间 job 停用**（这是外部 SaaS，仓库无法代改）；
-  SECONDARY Cloudflare 已部署为单次（`2 2 * * *` / `12 2 * * *` UTC）。
+- 三层时钟（全部指向同一幂等 trigger，Slot Ledger 是唯一执行权威）：
+  - PRIMARY cron-job.org：10:00 / 10:10 Asia/Shanghai 各一次；**若某个 job 被误停/漏配，仓库无法代改**。
+  - SECONDARY Cloudflare Worker：`2 2 * * *` / `12 2 * * *` UTC（occurrence + 2min，已部署复核）。
+  - TERTIARY GitHub Actions watchdog：`.github/workflows/schedule-watchdog.yml`，`35 2 * * *` UTC
+    同时补发 bot1-daily / bot2-daily，避免主/次双 miss 时没有任何 fallback；使用仓库 secrets
+    `SCHEDULE_TRIGGER_URL` + `SCHEDULE_TRIGGER_TOKEN`，幂等收敛。
 - 合同一致：`pixivflow/config/production.json` 与 `control-plane/`（cron-map/wrangler）与
-  `redundant-clock.test.ts` + `deployment-contract.test.ts` 必须同步；改一个就得全改。
+  `redundant-clock.test.ts` + `deployment-contract.test.ts` + `.github/workflows/schedule-watchdog.yml`
+  必须同步；改一个就得全改。
 
 **当前发布 pin（代码=Release=Deploy=Runtime 复核基线）：**
 

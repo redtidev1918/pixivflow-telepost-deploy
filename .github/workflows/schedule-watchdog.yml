@@ -1,0 +1,44 @@
+name: schedule-watchdog
+
+# Tertiary external clock. PRIMARY is cron-job.org (fires at the occurrence);
+# SECONDARY is the Cloudflare Worker (`pixivflow-control-plane`, +2 min). This
+# watchdog fires at 02:35 UTC and re-triggers BOTH single-daily schedules.
+# Idempotent: if either earlier clock admitted the occurrence the slot ledger
+# answers already_completed / already_running; if BOTH missed it, this run
+# creates the slot. 02:35Z is after the 02:00Z / 02:10Z occurrences and the
+# +2 min secondary, before the 90-minute grace window expires.
+on:
+  schedule:
+    - cron: '35 2 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  trigger:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fire schedule trigger
+        env:
+          SCHEDULE_TRIGGER_TOKEN: ${{ secrets.SCHEDULE_TRIGGER_TOKEN }}
+          SCHEDULE_TRIGGER_URL: ${{ secrets.SCHEDULE_TRIGGER_URL }}
+        shell: bash
+        run: |
+          set -u
+          # trigger-schedule.sh deliberately refuses an env/argv token for local
+          # use; on a GitHub runner we write its secret into a 600 token file so
+          # the same script stays the single dispatch implementation.
+          umask 077
+          printf '%s' "$SCHEDULE_TRIGGER_TOKEN" > "$RUNNER_TEMP/scheduler-trigger-token"
+          export SCHEDULER_TRIGGER_TOKEN_FILE="$RUNNER_TEMP/scheduler-trigger-token"
+          export PIXIVFLOW_TRIGGER_BASE_URL="$SCHEDULE_TRIGGER_URL"
+          failed=0
+          for id in bot1-daily bot2-daily; do
+            if ! bash ./scripts/trigger-schedule.sh "$id"; then
+              echo "watchdog ${id} failed" >> "$GITHUB_STEP_SUMMARY"
+              failed=1
+            fi
+          done
+          exit "$failed"
