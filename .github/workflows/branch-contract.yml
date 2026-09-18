@@ -13,4 +13,4 @@ permissions:
   contents: read
 jobs:
   branch-contract:
-    uses: redtidev1918/releasegraph/.github/workflows/reusable-branch-contract.yml@0b0c28990abac59aa5ae1d2c50bf95ce06d26a8d # ReleaseGraph v1.4.11
+    uses: redtidev1918/releasegraph/.github/workflows/reusable-branch-contract.yml@15bf2671647952666101d02c80212274dadf1dbd # ReleaseGraph v1.5.1
