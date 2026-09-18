@@ -338,6 +338,15 @@ execution authority:        PixivFlow durable slot ledger（唯一）
 - TelePost：v2.43.0（`ghcr.io/redtidev1918/telepost:2.43.0`，MiniApp 用户/管理空间拆分 + 私聊真实媒体预览）
 - TelePress：v0.10.0（`telepress-publish` 单机已跑，v1 部署于发布后当天）
 
+**2026-09-19 运行期实测（已复核项）：**
+
+- Telegram webhook 归属：`telesubmit-multi-bot` 容器内用生产 env 的
+  `BOT1_TOKEN` / `BOT2_TOKEN` 逐一 `getWebhookInfo`，两个 bot 均指向
+  `telesubmit-multi-bot.fly.dev`；token 只经容器内继承环境读取，不落 argv / 日志。
+- TelePress rich-novel：`telepress-publish` 容器内经 `TELEPRESS_API_KEY`
+  调用 `POST /publish/rich-novel`（minimal md，无图）返回 HTTP 200 +
+  `https://telegra.ph/...`。无图路径已验证；带图资产路径仍属 NOT AUDITED（未做真实上传）。
+
 - **Cloudflare 不是执行权威，cron-job.org 也不是。** 两个时钟都只 POST 同一个受认证的幂等端点
   `POST /internal/schedules/{scheduleId}/run`；谁后到就在前一个创建的 slot 上收敛。
 - **冗余时钟 ≠ 第二个调度器。** 时钟不拥有执行状态，调度器拥有。仍然非法的是：第二个 **PRIMARY**
