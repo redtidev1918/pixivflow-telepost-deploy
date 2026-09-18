@@ -213,7 +213,7 @@ Fly.io production topology`），但它是「当前生产」，不是「唯一�
   生命周期、档位与开关的合法性，非法组合直接以规则 id 报错（见
   [部署清单](deployment-manifest.md)）。它**只**是编译器的输入——没有任何业务代码读它。
 
-- `architecture_docs_test.go` 校验：矩阵里的 preset 名在 `overview.md`、`AGENTS.md` 与各
+- `architecture_docs_test.go` 校验：矩阵里的 preset 名在 `overview.md`、本页与各
   preset 文档中一致；标记为 `stable` 的 preset 必有对应文档；文档引用的配置文件存在；
   枚举取值合法；不存在「唯一生产拓扑」的第二处声明；`split-worker` 安全契约未被破坏。
 - Agent 的读取顺序是：`AGENTS.md` → 本页 → 矩阵 → 具体 preset 文档。

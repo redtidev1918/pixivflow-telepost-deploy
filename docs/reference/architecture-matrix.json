@@ -1421,7 +1421,7 @@
       "id": "SI-6",
       "statement": "Business code must not branch on the deployment platform.",
       "enforcedBy": [
-        "AGENTS.md"
+        "docs/reference/deployment-manifest.md"
       ],
       "applies": [
         "all presets"

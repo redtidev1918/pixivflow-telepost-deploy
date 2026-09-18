@@ -29,8 +29,7 @@ jobs:
       - name: Test deploy CLI
         run: go test ./...
 
-  # The clock's guard tests. AGENTS.md §7 already lists this as required
-  # self-proof, but CI never ran it, so `no-business-state`, `webhook-ownership`,
+  # The clock's guard tests are required self-proof; CI never ran them, so `no-business-state`, `webhook-ownership`,
   # `deployment-contract` and `no-real-credentials` were enforced only when a
   # human happened to run them. A guard that does not run is not a guard.
   #

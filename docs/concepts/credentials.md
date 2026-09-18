@@ -27,7 +27,7 @@
 | `SI-3` | 没有人工审核决定，任何组件都不得发布到频道 | 全部 preset | `no-business-state.test.ts`、本页 |
 | `SI-4` | 同一 Pixiv 凭据最多存在一个活跃的生产执行 | 全部 preset | [scheduling.md](./scheduling.md)、本页 |
 | `SI-5` | 执行端的停机决定只属于它自己的账本，绝不属于平台探针 | `split-worker`、`single-machine-worker-sleep`、`remote-worker`（`wake-run-exit`） | `fly/deploy.pixivflow.toml`、[lifecycle.md](./lifecycle.md) |
-| `SI-6` | 业务代码不得按部署平台分支 | 全部 preset | `AGENTS.md` |
+| `SI-6` | 业务代码不得按部署平台分支 | 全部 preset | `docs/reference/deployment-manifest.md` |
 | `SI-7` | 不同角色的状态命名空间绝不重叠；共享物理卷只允许配互不相交的角色子目录 | 全部 preset | `docker-compose.yml` 挂载、[state.md](./state.md)、`architecture_docs_test.go` |
 
 `SI-1` 的关键不是「执行端目前恰好没带」，而是**结构上没有**：执行端配置里不存在

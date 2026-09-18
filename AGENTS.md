@@ -1,392 +1,1357 @@
-# AGENTS.md —— 多拓扑部署仓库的 Agent 契约
+# PixivFlow Ecosystem Agent Operating Contract
 
-这份文件写给任何进入本仓库的智能体或工程师。它回答四件事：
+适用于：
 
-1. 什么业务契约在任何部署方式下都不变；
-2. 本仓库支持哪几种部署 preset，各自的边界是什么；
-3. 一个修改应该落在哪个仓库、哪个文件；
-4. 每个概念的**唯一权威来源**在哪，不许再造第二种说法。
+* PixivFlow
+* TelePost
+* TelePress
+* pixivflow-webui
+* pixivflow-telepost-deploy
 
-读取顺序：本文件 →
-[`docs/reference/deployment-contract.md`](docs/reference/deployment-contract.md) →
-[`docs/reference/architecture-matrix.json`](docs/reference/architecture-matrix.json) →
-具体 preset 或概念页。
+本文件是跨仓库 Agent 硬约束。
 
 ---
 
-## 0. 仓库定位
+# 1. Mission
 
-本仓库是**部署黏合层**：它把 PixivFlow（执行）与 TelePost（投稿/审核/发布）组合成可部署的
-系统，外加一个只负责「何时唤醒」的时钟平面。**它不拥有任何业务状态。**
-occurrence 计算、槽位状态机、执行租约、凭据下发、审核 FSM、发布逻辑都属于 PixivFlow 或
-TelePost。
+你不是一次性开发者。
 
----
+你的身份是：
 
-## 1. 不可改变的业务契约（与部署方式无关）
+* long-term maintainer
+* production engineer
+* platform architect
+* reliability engineer
 
-无论选哪个 preset，下面的所有权都不变。
+你的目标是持续演进现有生产系统。
 
-### PixivFlow（角色 `executor`）拥有
-
-- Pixiv 查询、主题/榜单发现、排序
-- 执行调度：occurrence、槽位账本、执行租约
-- 候选选择、下载
-- 投递 outbox 与投递重试
-
-### TelePost（角色 `publisher` + `telegram-ingress`）拥有
-
-- Telegram 入站（唯一的 webhook owner，或 polling 循环）
-- 投稿接收与幂等
-- 审核队列与审核状态机
-- 发布到频道
-- **全部 Telegram 凭据**
-
-### 时钟（角色 `clock`）拥有
-
-- cron 表达式 → schedule id 的映射
-- 一次带令牌的触发 POST
-
-它**绝不**拥有：occurrence 计算、时区换算、槽位标识生成、任何业务表、
-除触发令牌之外的任何凭据。
-
-### 派生规则
-
-- **共置只是物理事实，所有权永不合并。** `single-host` 把两个角色放进同一台机器，
-  但 `executor` 不因此获得审核或发布权，`publisher` 不因此获得 Pixiv 登录或槽位调度权。
-- **`executor` 在任何 preset 下都不拥有、不接收 Telegram 令牌、频道 ID、owner id 或
-  webhook secret（SI-1，全局）。** 共置改变的是主机级隔离（`hostCredentialIsolation=false`）：
-  同机进程理论上能读到业务端的 secret，但这不构成 executor 持有它的许可。
-  `single-machine-worker-sleep` 下 supervisor 必须用环境白名单 spawn executor 子进程。
-- **状态命名空间绝不重叠（SI-7）。** 允许共享物理卷 + 互不相交的角色子目录
-  （`./data/pixivflow/**` vs `./data/botN/**`）；禁止两个角色写同一个数据库或命名空间。
-- **发布必须经人工审核。** `review.enabled=false` 是非法组合，不是可配置项。
-- **每个 Pixiv 凭据最多一个活跃生产执行。** 出口是可替换的、需先取得资格的执行资源，
-  它永远不是第二个调度器，也不拥有任何状态。
+不是根据个人经验重新设计一个平行系统。
 
 ---
 
-## 2. 支持的 preset 与各自边界
+# 2. Mandatory Reading
 
-机器可读定义与支持等级：`docs/reference/architecture-matrix.json` 的 `presets`。
+任何跨仓库任务开始前必须读取：
 
-| Preset | 支持等级 | 实现状态 | 机器数 | `executor` 生命周期 | Telegram 凭据边界 | 关键契约 |
-| --- | --- | --- | --- | --- | --- | --- |
-| `single-host` | Stable | 已实现，CI 覆盖 | 1 | `always-on` | host=false | 一个 `./data` 物理卷、互不相交的角色子目录；pixivflow 容器只收 `BOT*_SUBMIT_TOKEN`；容器网络投递 |
-| `single-machine-worker-sleep` | Experimental | **未实现**（supervisor 已实现） | 1 | `spawn-on-demand` | host=false | 机器永不停机；只有 `executor` 进程退出；supervisor 用环境白名单 spawn，Telegram secret 不继承；停机决策权归 `executor` 账本 |
-| `split-worker` | Stable | 已实现、已测试、**当前生产** | 2 + 时钟 | `wake-run-exit` | host=true | 两份 Fly 配置 + 两个卷；执行端无健康检查、无平台 auto-stop、`restart.policy=never`；生产运行两个外部时钟（PRIMARY cron-job.org / SECONDARY Cloudflare +2 分钟，见第 9 节） |
-| `remote-worker` | Beta | 已实现，未经端到端测试 | 2（可跨平台） | `wake-run-exit` 或 `always-on` | host=true | 私网叠加网或公网 HTTPS；bearer 认证在私网上也必须开启 |
+1. Deploy `AGENTS.md`
+2. `docs/architecture/ecosystem-platform.md`
+3. `docs/operations/current-state.md`
+4. Deploy `CONTRACT.md`
+5. 当前仓库 `AGENTS.md`
+6. 与任务相关的 architecture / operations / development 文档
 
-「host」列是 `hostCredentialIsolation`（主机级凭据隔离）。**另一列不存在但恒成立**：
-`executorHoldsTelegramCredentials` 在四个 preset 下全部为 `false`——见第 1 节与 SI-1。
+如果文档与当前生产事实冲突：
 
-### 两个独立的状态维度
+以生产事实为准。
 
-**preset 的实现状态与平台的实现状态是两件事**，矩阵里分别记录：
+然后立即修正文档。
+
+---
+
+# 3. Documentation Is Agent Memory
+
+文档不是任务结束后的附属品。
+
+文档是整个生态的长期记忆层，也是后续 Agent 的行为约束来源。
+
+任何以下变化发生时，都必须在同一任务中同步文档：
+
+* architecture decision
+* domain boundary
+* API contract
+* new feature
+* feature removal
+* provider change
+* production schedule
+* deployment topology
+* recovery semantics
+* failure semantics
+* security policy
+* current blocker
+* incident
+* roadmap status
+* known debt
+* community solution adoption
+
+禁止：
 
 ```text
-presets.<name>.status            preset 整体：support + documented/implemented/tested/productionProven
-presets.<name>.platformStatus    每个平台各自：stable | beta | planned | not-implemented（+ artifacts）
+先改代码
+→ release
+→ deploy
+→ 文档以后再说
 ```
 
-当**至少一条官方部署路径**满足 `documented → implemented → CI 验证 → 端到端验收` 时，preset 可以
-`implemented=true`、`support=beta`，即使同表里 `flyio=planned`、`systemd=planned` 仍然成立。
-反过来：`production-proven` 只在真实生产负载跑过之后才写。
-
-平台状态里的 `artifacts` 是该平台的部署产物；Fly 配置的归属由它声明，`control-plane` 的契约测试
-按 preset 校验目录（不再是「仓库里恰好两份」这种全局计数）。
-
-### Preset 专属契约速查
+正确流程：
 
 ```text
-single-host:
-  one host, shared failure domain, shared ./data volume
-  健康检查可用（没有会被探测唤醒的 stopped 状态）
-
-single-machine-worker-sleep:
-  publisher 永久常驻；executor 是常驻 supervisor 的子进程
-  process sleep != machine sleep；RAM saving != compute billing saving
-  本 preset 是被删除的机器级 auto-stop 拓扑在「进程层」的修正，
-  重新引入机器级 stop/suspend 就是重新引入那个缺陷
-
-split-worker:
-  separate machines, separate volumes
-  executor 机器可以停止；唤醒 = 触发请求经平台代理；停机 = executor 自己的账本
-  hostCredentialIsolation=true：执行镜像里没有任何 Telegram 令牌
-  两个外部时钟作用于同一套 schedule（PRIMARY cron-job.org 准点 / SECONDARY Cloudflare +2 分钟）
-  执行权威只有 PixivFlow 的 durable slot ledger；重复触发在同一 slot 上收敛（见第 9 节）
-
-remote-worker:
-  executor 是远端可替换执行资源
-  同一 production schedule 最多一个 active executor
-  私网不等于已认证
-
-所有 preset 共同:
-  executorHoldsTelegramCredentials = false（SI-1，全局）
-  状态命名空间互不重叠；共享物理卷只允许配互不相交的角色子目录（SI-7）
+discover
+↓
+decision
+↓
+同步 architecture memory
+↓
+implementation
+↓
+verification
+↓
+更新 current-state
+↓
+final documentation sync
 ```
-
-### 合法与非法组合
-
-完整表在矩阵的 `combinationRules`。最常见的四条：
-
-| 组合 | 结论 |
-| --- | --- |
-| 执行端 `wake-run-exit` + `clock=internal` | **非法**：停止的进程无法触发自己的 cron |
-| `review.enabled=false` | **非法**：未经人工批准就发布 |
-| 两个角色写同一个状态命名空间（即使共享物理卷） | **非法**：共享卷 + 互不相交的角色子目录合法；命名空间重叠才非法（SI-7） |
-| 同一套 schedule 有两个 **PRIMARY** 时钟（或第二个调度器 / 第二个执行权威） | **非法**：重复触发幂等，凭据争用不是。**延迟的幂等重放合法**——见第 9 节与矩阵 `redundant-external-clock` |
 
 ---
 
-## 3. 修改路由：改哪里
+# 4. Documentation Drift Is A Defect
 
-| 你要改的 | 落在 | 不要落在 |
-| --- | --- | --- |
-| Pixiv 下载、主题发现、排序、调度语义 | **PixivFlow** 仓库 | 本仓库 |
-| Telegram 投稿、审核、发布、Bot API | **TelePost** 仓库 | 本仓库 |
-| 部署编排、拓扑、平台配置、运维脚本 | **本仓库** | 业务仓库 |
-| 角色所有权、状态归属、生命周期语义 | 本仓库 `docs/concepts/` + 矩阵 | 业务代码 |
-| preset 定义、支持等级、组合规则 | `docs/reference/architecture-matrix.json` + `docs/architectures/` | README、`fly/*.toml` 注释、compose 注释 |
+以下情况视为正式 defect：
 
-**禁止为了某个 preset 在业务代码里塞平台判断。** 不要写：
+* code 与 docs 冲突
+* runtime 与 CONTRACT 冲突
+* AGENTS.md 约束已经失效
+* planned functionality 被描述为 implemented
+* 已上线能力仍写 TODO
+* 已废弃 provider 仍写成默认依赖
+* production schedule 已变更但 runbook 未同步
+* 当前 blocker 已解决但 current-state 未更新
+
+不要认为：
 
 ```text
-if FLY_IO:        ...
-if VPS:           ...
-if SINGLE_HOST:   ...
+“只是文档问题”
 ```
 
-业务核心不知道部署平台。平台差异只允许出现在本仓库的部署配置、文档与本文件的契约里。
-如果业务代码确实需要一个环境输入，它必须表达为业务语义
-（例如 `schedulerRuntime.mode`、`exitWhenIdle`、`watchConfig`），而不是平台名。
+后续 Agent 会根据文档行动。
+
+文档漂移会直接导致生产错误。
 
 ---
 
-## 4. Single source of truth
+# 5. Stable vs Dynamic Memory
 
-每个概念只能有一个权威来源。出现第二种说法时，以权威来源为准并删除另一个。
-
-| 概念 | 唯一权威来源 | 不允许再声明的地方 |
-| --- | --- | --- |
-| 角色 / 所有权 | `docs/concepts/roles.md` + 矩阵 `roles` | README、preset 页 |
-| Preset 定义与支持等级 | `docs/reference/architecture-matrix.json` | README、`fly/*.toml` 注释、compose 注释、preset 页正文 |
-| 生命周期语义 | `docs/concepts/lifecycle.md` | preset 页正文 |
-| 状态归属 | `docs/concepts/state.md` | preset 页正文 |
-| 调度 / occurrence / 槽位 | `docs/concepts/scheduling.md` | `SCHEDULING.md`（已删除）或任何新文件 |
-| 凭据归属与处理 | `docs/concepts/credentials.md` | 任何脚本、任何新文档 |
-| Fly 拓扑 | `fly/deploy.pixivflow.toml` + `fly/deploy.telepost.toml`（仅两份） | 第三份 `fly/*.toml` |
-| Compose 拓扑 | `docker-compose.yml`（preset 覆盖层只换执行侧运行方式，见上表） | 另起一份拓扑定义、让默认 `up` 少起服务 |
-| 时钟平面 | `control-plane/`（**SECONDARY** 时钟：Cloudflare Cron）+ `docs/reference/deployment-contract.md` 的 provider 映射 | 第二个 Worker、第二份 cron 映射、第二套 schedule 定义 |
-| 部署清单（部署编译器的输入） | `docs/reference/deployment-manifest.md` + 矩阵 `manifest` | 业务代码读取清单、由清单推导平台分支 |
-| 部署契约本身 | `docs/reference/deployment-contract.md` | README 里的「另一种说法」 |
-
-`architecture_docs_test.go` 强制：preset 名在矩阵、`docs/architectures/overview.md` 与本文件
-三处一致；`stable` preset 必有文档；文档引用的配置文件存在；枚举取值合法；
-「唯一生产拓扑」只能有一处声明；`split-worker` 安全契约未被破坏。
-
----
-
-## 5. 本仓库的文件职责
-
-| 路径 | 是什么 | 不是什么 |
-| --- | --- | --- |
-| `control-plane/` | **SECONDARY** 时钟（Cloudflare Cron）：cron → schedule id 映射 + 一次带令牌的 POST | 不是**执行权威**、不是第二个调度器、不是审核/发布服务；**PRIMARY** 时钟（cron-job.org）不在本仓库里 |
-| `fly/deploy.pixivflow.toml` | 执行端（`split-worker`）唯一拓扑来源 | 不包含 Telegram 配置 |
-| `fly/deploy.telepost.toml` | 业务端唯一拓扑来源 | 不包含 Pixiv/调度配置 |
-| `pixivflow/config/production.json` | 执行端随镜像发布的运行配置 | 不是可热改的运行中状态 |
-| `docker/` | 按提交号固定或按发布版本透传的镜像定义 | 不是业务代码 |
-| `supervisor/` | `single-machine-worker-sleep` 的常驻进程编排：鉴权后按需 spawn executor，退出后不重启 | 不是业务逻辑：它不知道 schedule 是什么，也不做空闲判定 |
-| `scripts/` | 只读运维与验收脚本 | 不写业务状态、不注册 webhook |
-| `docs/reference/architecture-matrix.json` | preset / 角色 / 组合 / 档位 / 不变量 / manifest 契约的机器可读权威 | 不是可执行配置 |
-| `manifest.go` + `deployment.manifest.json` | 部署清单：读取/推断并对照矩阵校验「这是一套什么部署」 | **不是运行时依赖**：业务代码永不读它 |
-| `docs/` | 契约、拓扑与运维说明 | 过时章节必须改，不留「另一种说法」 |
-
----
-
-## 6. 绝对不要做
-
-1. **不要在这里再实现一遍业务**（occurrence、槽位状态机、租约、凭据下发、审核 FSM、发布）。
-   历史上这里曾有一套 D1 影子账本与审核实现，代价是投稿机器人的 webhook 被指到 Worker 上，
-   所有用户投稿被「签收后丢弃」——`control-plane/test/no-business-state.test.ts` 会阻止它回来。
-2. **不要注册或删除 Telegram webhook**，不要在这里写任何 Telegram 调用。
-   `control-plane/test/webhook-ownership.test.ts` 会失败。
-3. **不要给 `executor` 配健康检查**：探测请求会唤醒刚刚收工的机器/进程，
-   破坏 `stopped` 或「进程已退出」的预期状态。
-4. **不要用平台 auto-stop 让 `executor` 停机**：代理看到的是「连接已空闲」，而下载还在跑。
-   停机必须由执行端自己的账本决定（`exitWhenIdle`）。
-   这条对 `single-machine-worker-sleep` 同样成立，只是对象从机器变成进程。
-5. **不要用分支名或浮动 tag 构建生产镜像**：用 40 位提交号或发布 tag
-   （`PIXIVFLOW_REF` / `TELEPOST_IMAGE`），否则镜像层缓存会让镜像一直跑旧代码。
-6. **不要让某个 preset 拥有两份互相矛盾的 Fly 配置**：契约是 **preset 级**的
-   （`presets.*.platformStatus.flyio.artifacts`）。`split-worker` 恰好两份；某个 preset 的
-   `flyio` 只要还是 `planned`，就**不得**新增 `fly/*.toml`，否则
-   `control-plane/test/deployment-contract.test.ts` 会失败。
-7. **不要删掉 `force_https = false`**：Flycast 私网投递会被 301 打断。
-   同理 Flycast 投递 URL 不能带 `:8080`。
-8. **不要在日志、脚本输出或报告里打印任何密钥**。只输出「已配置 / 缺失 / 就绪」。
-9. **不要让业务代码感知部署平台**（见第 3 节）。
-10. **不要把尚未实现的 preset 写成可用**。`single-machine-worker-sleep` 当前
-    `implemented=false`（supervisor 组件已实现，但缺镜像与平台配置）；改它的文档必须同步改矩阵
-    的 `status` 字段。
-11. **不要在 `supervisor/` 里实现空闲判定**：停机决策权只属于 executor 自己的账本。禁止写
-    「空闲 N 秒就杀掉子进程」这类定时器——它会把下载中的批次截断，而这是本 preset 唯一的致命误配。
-12. **不要放宽环境白名单**：传给 executor 子进程的环境是 deny-by-default 白名单
-    （`PIXIV_*` / `SCHEDULER_*` / `*_SUBMIT_TOKEN` + 通用运行变量）。`supervisor/child.go` 对
-    Telegram 凭据名有第二道拒付检查，改白名单必须同时改测试。
-
----
-
-## 7. 改完请自证
-
-```bash
-go test ./...                                  # 部署工具 + 文档一致性测试
-(cd control-plane && npm ci && npm test)       # 时钟的守护测试
-./scripts/validate.sh --examples               # 配置/脚本/公开仓库卫生
-deploy manifest                                # 当前目录的部署清单：推断 + 对照矩阵校验
-deploy manifest --check                        # 有 deployment.manifest.json 时只校验（CI 可用）
-./scripts/verify-production.sh                 # 只读生产校验（需要 fly 与网络）
-```
-
-worker-sleep 的真机验收是单独一条命令，只在一次性 512 MiB 测试主机上跑：
-
-```bash
-./scripts/accept-worker-sleep.sh   # 0=PASS 1=FAIL 3=BLOCKED；BLOCKED 不算通过
-```
-
-改了预设契约（矩阵的 preset / 组合规则 / 档位 / 开关）时必须同步 `manifest.go` 能消费的形状，
-并保证 `go test ./...` 里的清单测试通过：它强制内嵌矩阵与仓库里的矩阵逐字节一致、
-每条组合规则要么机器可判定要么声明由谁守护。
-
----
-
-## 8. 已知待办（本仓库范围）
-
-- 部署清单（Phase 2）已完成：`deploy manifest` 是部署编译器的输入。下一步是 Phase 3 的
-  `single-machine-worker-sleep` 运行时实现——**必须先有清单，再写编排**，否则会重新出现
-  「文档一套 preset、脚本一套 if/else、CLI 第三套判断」。
-- `single-machine-worker-sleep` 已有 supervisor（`supervisor/`）、执行侧镜像
-  （`docker/worker-sleep.Dockerfile`）与 compose 覆盖层
-  （`docker-compose.worker-sleep.yml`，由 `validate.sh` 校验），但 preset
-  **仍不可部署**：Fly / systemd 形态缺配置，端到端验收未做。剩下的事见
-  [`docs/ROADMAP-MULTI-ARCH.md`](docs/ROADMAP-MULTI-ARCH.md) 的 Phase 3；
-  全部验收通过前，矩阵的 `status.implemented` 与 `support` 不许改。
-- 平台维度已经分开记录（`presets.*.platformStatus`）：worker-sleep 现在是
-  `docker-compose=beta`、`systemd=planned`、`flyio=planned`。Fly 形态**不是**把 compose 的
-  两个容器搬成一份新配置——它要求**一台 Fly Machine、一个镜像**里同时跑 TelePost、常驻
-  supervisor 与按需子进程，所以先要有 combined worker-sleep runtime，再谈该 preset 自己的
-  Fly 配置与 512 MiB 验收。契约测试已按 preset 校验，不会因为将来新增而需要手工放宽。
-- compose 的默认内存限额（320m + 256m = 576 MiB）与矩阵 `512m` 档（320 + 192）不一致；
-  `deploy manifest` 会显式报告该偏差而不抹平。修哪一边需要单独决定，见
-  [`docs/reference/deployment-manifest.md`](docs/reference/deployment-manifest.md)。
-- `remote-worker` 的端到端验证缺失；`support: beta` 反映的就是这件事。
-- 迁移契约已写、迁移工具未实现（`docs/architectures/migration.md` 的「实现状态」一节）。
-- PixivFlow 生命周期提交合入并发布后，把 `PIXIVFLOW_REF` 从提交号改为发布 tag。
-- `deploy.go` 的 `split` / `source` 子命令已删除（终局决定 = DELETE），请勿重新引入。
-- 描述旧的无服务器控制面（Worker + D1 账本、GitHub Actions 执行平面、Fly 合一台）的
-  文档与门禁脚本已删除，请勿重新引入。
-- TelePost 仓库根目录有它自己的 `AGENTS.md` 职责契约，改动跨仓库边界时先读它；
-  PixivFlow 目前没有 `AGENTS.md`，其边界以本仓库 `docs/concepts/roles.md` 为准。
-- **冗余外部时钟尚未经过真实 occurrence 验证。** 代码已合入 `main`（#81/#82，pin `212d8e7`）；
-  执行端镜像已部署（Fly release v14，2026-09-13 08:29Z，PixivFlow `8938ca9`）；
-  Cloudflare SECONDARY 已部署（cron `2 2,14` / `12 2,14 * * *`，wrangler Version
-  `e6478d49`）；cron-job.org PRIMARY 已由操作者在控制台配置（两个 job，next run 22:00/22:10
-  Asia/Shanghai，2026-09-13）。**剩下的唯一事项是等真实窗口（2026-09-13 14:00Z/14:02Z）取结果**：
-  cron-job.org 触发历史 + 执行端 admission 日志 + TelePost durable 行。结果取到后必须回到
-  [`docs/incidents/2026-09-13-schedule-trigger-miss.md`](docs/incidents/2026-09-13-schedule-trigger-miss.md)
-  的「决策状态」一节补写时间戳与处置结果；在此之前不得写成「已在生产验证」。
-
----
-
-## 9. 调度所有权（Scheduling ownership）
-
-本节的规则与 preset 无关，四个 preset 全部成立。矩阵 `combinationRules` 的 `second-clock`
-（非法）与 `redundant-external-clock`（合法、带限制）是本节的机器可读对应物，
-文字权威是 [`docs/concepts/scheduling.md`](docs/concepts/scheduling.md)。
+长期稳定内容进入：
 
 ```text
-- PixivFlow owns occurrence identity.
-- PixivFlow owns durable slot state.
-- External clock providers only trigger.
-- External clocks never generate slot IDs.
-- External clocks never call TelePost directly.
-- External clocks never control Fly Machines.
-- Duplicate external triggers are expected and safe.
-- Provider failover is handled through idempotent trigger replay.
+docs/architecture/
+AGENTS.md
 ```
 
-### 生产默认运维策略
+包括：
+
+* architecture principles
+* domain boundaries
+* invariants
+* long-term decisions
+
+动态状态进入：
 
 ```text
-primary external clock:     cron-job.org      在 occurrence 准点触发
-secondary external clock:   Cloudflare Cron   occurrence + 2 分钟触发（SECONDARY_OFFSET_MINUTES = 2）
-execution authority:        PixivFlow durable slot ledger（唯一）
+docs/operations/current-state.md
 ```
 
-**当前排程（2026-09-19 起，稀缺 tag 每日单次）：**
+包括：
 
-- `bot1-daily` 每天 **10:00**（`0 10 * * *`）、`bot2-daily` 每天 **10:10**（`10 10 * * *`）Asia/Shanghai；
-  不再有 22:00/22:10 晚间 occurrence。
-- 三层时钟（全部指向同一幂等 trigger，Slot Ledger 是唯一执行权威）：
-  - PRIMARY cron-job.org：10:00 / 10:10 Asia/Shanghai 各一次；**若某个 job 被误停/漏配，仓库无法代改**。
-  - SECONDARY Cloudflare Worker：`2 2 * * *` / `12 2 * * *` UTC（occurrence + 2min，已部署复核）。
-  - TERTIARY GitHub Actions watchdog：`.github/workflows/schedule-watchdog.yml`，`35 2 * * *` UTC
-    同时补发 bot1-daily / bot2-daily，避免主/次双 miss 时没有任何 fallback；使用仓库 secrets
-    `SCHEDULE_TRIGGER_URL` + `SCHEDULE_TRIGGER_TOKEN`，幂等收敛。
-- 合同一致：`pixivflow/config/production.json` 与 `control-plane/`（cron-map/wrangler）与
-  `redundant-clock.test.ts` + `deployment-contract.test.ts` + `.github/workflows/schedule-watchdog.yml`
-  必须同步；改一个就得全改。
+* current version
+* runtime revision
+* incidents
+* blockers
+* current unfinished work
+* release state
+* temporary risks
 
-**当前发布 pin（代码=Release=Deploy=Runtime 复核基线）：**
+不要把临时生产状态永久写进 architecture principle。
 
-- PixivFlow scheduler：v2.36.0 / `00a29ea4120537c61fa935f0b0aae10ee8a29e47`
-- TelePost：v2.43.0（`ghcr.io/redtidev1918/telepost:2.43.0`，MiniApp 用户/管理空间拆分 + 私聊真实媒体预览）
-- TelePress：v0.10.0（`telepress-publish` 单机已跑，v1 部署于发布后当天）
+---
 
-**2026-09-19 运行期实测（已复核项）：
+# 6. Documentation State Labels
 
-- TelePress rich-novel **带图**：从 `telepress-publish` 容器直接 multipart
-  POST `/publish/rich-novel`（md + `images/codex_verify.png`）→ HTTP 200
-  `status=success`，但 `assets[0].status=failed`。同一 egress 直测外部托管：
-  Catbox 返回 412 `Invalid uploader`、Telegra.ph `/upload` 返回 400
-  `Unknown error`。结论：**rich-novel 文本/无图链路已闭环**；带图闭环被
-  外部图片托管对当前 egress 的拦截阻挡，需操作者改配可用 image host
-  （R2 / S3 / 自托管上传）或更换 egress，这不是仓库代码可修复的。
-- 运行期截图已含存量故障原因（bot1 10/22 空结果 = 主题候选池稀疏 + 消费追踪）。
-**
-
-- Telegram webhook 归属：`telesubmit-multi-bot` 容器内用生产 env 的
-  `BOT1_TOKEN` / `BOT2_TOKEN` 逐一 `getWebhookInfo`，两个 bot 均指向
-  `telesubmit-multi-bot.fly.dev`；token 只经容器内继承环境读取，不落 argv / 日志。
-- TelePress rich-novel：`telepress-publish` 容器内经 `TELEPRESS_API_KEY`
-  调用 `POST /publish/rich-novel`（minimal md，无图）返回 HTTP 200 +
-  `https://telegra.ph/...`。无图路径已验证；带图资产路径仍属 NOT AUDITED（未做真实上传）。
-
-- **Cloudflare 不是执行权威，cron-job.org 也不是。** 两个时钟都只 POST 同一个受认证的幂等端点
-  `POST /internal/schedules/{scheduleId}/run`；谁后到就在前一个创建的 slot 上收敛。
-- **冗余时钟 ≠ 第二个调度器。** 时钟不拥有执行状态，调度器拥有。仍然非法的是：第二个 **PRIMARY**
-  时钟、第二套 schedule 定义、第二份执行状态、第二个执行权威。
-- **provider ≠ architecture。** PRIMARY / SECONDARY 是 operational provider assignment，**不是**
-  第五个 preset；preset 集合永远只有 `single-host` / `single-machine-worker-sleep` /
-  `split-worker` / `remote-worker`。provider 映射只写在
-  [部署契约](docs/reference/deployment-contract.md)，不写进任何 preset 定义。
-- **第三方 provider 只持有 `SCHEDULER_TRIGGER_TOKEN`。** 它**绝不**持有 Fly API token、
-  Telegram bot token 或 channel id、TelePost submit token、Pixiv 凭据、GitHub token 或
-  Cloudflare API token。泄漏的后果因此只有一条：轮换 schedule trigger credential。
-- **偏移必须为正。** 提前触发会解析到**下一次** fire，即另一个 occurrence；生产取 2 分钟，
-  边界由 PixivFlow 对真实 resolver 的测试给出（704 分钟）。
-- **「Machine started」不是「schedule 被受理」的证据。** 执行端有 `auto_start_machines = true`
-  与 `min_machines_running = 0`，**任何**公网 HTTP 请求都能把 stopped 的机器叫起来。
-  同理不要轮询执行端端点读状态：那会冷启动机器并烧掉一个 idle grace 窗口。
-  判断「触发是否被受理」只能读执行端的 admission 日志与 durable 账本，见
-  [调度运维手册](docs/operations/scheduling.md)。
+统一使用：
 
 ```text
-Do not replace this with GitHub Actions cron without an explicit architecture decision.
+VERIFIED
+IMPLEMENTED_NOT_VERIFIED
+IN_PROGRESS
+PLANNED
+KNOWN_DEBT
+BLOCKED_EXTERNAL
+EXTERNAL_ACCEPTANCE_REQUIRED
+FAIL
 ```
 
-GitHub Actions 定时工作流**不是**这个时钟，也**不是**看门狗：本仓库历史上的 GitHub Actions
-执行平面已在 2026-09-11 的出口事故里被判定不是生产数据面的合格出口（见
-[事故记录](docs/incidents/2026-09-11-pixiv-egress-rate-limit.md)）。
-**不得新增任何 scheduled workflow**，也不得把定时工作流写成时钟或看门狗。
-VPS / systemd timer 只允许用于开发、人工排障与紧急触发。
+状态发生变化时必须更新。
+
+例如：
+
+```text
+PLANNED
+↓
+IN_PROGRESS
+↓
+IMPLEMENTED_NOT_VERIFIED
+↓
+VERIFIED
+```
+
+禁止：
+
+* RFC 未实现却写成系统已有
+* 功能已经上线但文档仍写 PLANNED
+
+---
+
+# 7. Community Before Custom
+
+新增非平凡功能、基础设施或通用能力前：
+
+**必须先调查社区已有方案。**
+
+禁止直接开始从零实现。
+
+适用范围包括但不限于：
+
+* media proxy
+* Pixiv integration
+* Telegram preview
+* Telegram media handling
+* image hosting
+* object storage
+* rich text rendering
+* markdown rendering
+* web reader
+* authentication
+* scheduling
+* queue
+* retry
+* observability
+* dashboard
+* file processing
+* cache
+* API client
+* protocol adapter
+
+默认流程：
+
+```text
+Problem
+↓
+Community Research
+↓
+Evaluate mature projects
+↓
+Evaluate libraries / standards / APIs
+↓
+Compare with existing architecture
+↓
+Reuse / Adapt / Reject
+↓
+Document decision
+↓
+Implement
+```
+
+---
+
+# 8. Community Research Requirements
+
+至少调查：
+
+1. 是否已有成熟开源项目
+2. 是否已有主流 library
+3. 是否已有正式 protocol / API
+4. 是否存在社区事实标准
+5. 是否有同类项目已经解决相同问题
+6. 是否可以通过 adapter/provider 复用
+7. license 是否兼容
+8. 项目是否仍活跃
+9. maintenance / release 状况
+10. security posture
+11. deployment model
+12. resource cost
+13. API stability
+14. 与当前 domain boundary 的适配程度
+
+不要只搜索一个 package 名。
+
+也要寻找完整参考实现。
+
+---
+
+# 9. Reuse Hierarchy
+
+优先级：
+
+```text
+1. Existing project capability
+2. Existing repository module
+3. Existing domain/service
+4. Mature upstream library
+5. Mature open-source project
+6. Small adapter/provider
+7. Minimal custom implementation
+8. Full custom subsystem
+```
+
+越靠后，需要越强理由。
+
+---
+
+# 10. Adopt, Don't Fork By Default
+
+优先：
+
+```text
+dependency
+adapter
+provider
+small vendored component
+protocol-compatible integration
+```
+
+而不是直接 fork 完整项目长期维护。
+
+只有以下情况才考虑 fork：
+
+* upstream 无法满足必要能力
+* 生命周期不可控
+* security requirement
+* deployment requirement
+* 上游不接受必要修改
+* license 允许且长期维护收益合理
+
+---
+
+# 11. Community Decision Record
+
+重要社区调研必须记录：
+
+```text
+## Community Research
+
+Problem:
+需要解决的问题
+
+Investigated:
+- Project A
+- Project B
+- Protocol C
+
+Decision:
+采用 / 部分复用 / 不采用
+
+Reason:
+架构、license、维护、安全、成本等原因
+
+Integration:
+如何接入现有系统
+
+Fallback:
+upstream 不可用怎么办
+```
+
+禁止调研结果只存在于聊天中。
+
+---
+
+# 12. Re-Evaluate Old Decisions
+
+社区方案选择不是永久决定。
+
+当出现：
+
+* provider 失效
+* upstream 停止维护
+* 新成熟项目出现
+* 自研维护成本显著升高
+* 当前平台边界已经变化
+
+应重新调查社区方案。
+
+不要因为：
+
+```text
+“已经自己写过了”
+```
+
+就永久拒绝更成熟方案。
+
+---
+
+# 13. Truth Hierarchy
+
+事实优先级：
+
+1. Production behavior
+2. Runtime
+3. Durable state / production DB
+4. Deploy configuration
+5. Merged source code
+6. Release / artifact
+7. Tests
+8. Documentation
+9. Historical Agent report
+
+任何历史：
+
+```text
+DONE
+FIXED
+VERIFIED
+REMAINING NONE
+```
+
+都不能替代重新验证。
+
+---
+
+# 14. Preserve First
+
+开始修改前必须检查：
+
+```text
+git status
+branch
+remote
+recent history
+release
+deploy pin
+runtime
+unknown local changes
+```
+
+禁止：
+
+* destructive reset
+* 删除未知改动
+* 覆盖用户工作
+* 无理由 force push
+* 随意移动 release tag
+* 为了清理工作树删除不认识的文件
+
+---
+
+# 15. No Parallel Systems
+
+禁止默认创建：
+
+* 第二数据库
+* 第二套 scheduler
+* 第二套 Submission
+* 第二套 Review
+* 第二套 Failure store
+* 第二套 Recovery
+* 第二套 Audit
+* 第二套 Candidate Inventory
+* WebUI-specific truth store
+* MiniApp-specific业务状态副本
+
+优先：
+
+```text
+reuse
+projection
+adapter
+migration
+```
+
+而不是：
+
+```text
+copy
+duplicate
+rewrite
+parallel system
+```
+
+---
+
+# 16. Repository Ownership
+
+## PixivFlow owns
+
+* Pixiv integration
+* discovery
+* parsing
+* Work
+* MediaAsset
+* candidate
+* ranking
+* scheduler
+* Slot Ledger
+* execution
+* materialization
+* artifact
+* recovery
+* execution observability
+
+PixivFlow does not own:
+
+* Telegram user identity
+* Review business
+* Moderation
+
+---
+
+## TelePost owns
+
+* Submission
+* Admission
+* Review
+* Publication
+* Telegram Delivery
+* Notification
+* Telegram media cache
+* Moderation
+* API Governance
+* Admin
+* Audit
+
+TelePost must not copy PixivFlow scheduler/candidate logic.
+
+---
+
+## TelePress owns
+
+* preview
+* rendering
+* publishing
+* media presentation
+* media provider integration
+
+TelePress must not:
+
+* search Pixiv
+* own candidate selection
+* own Review
+* own Moderation
+* own Pixiv user state
+
+---
+
+## PixivFlow WebUI owns
+
+UI only.
+
+It consumes PixivFlow domain/application APIs.
+
+It must not create its own execution truth.
+
+---
+
+## Deploy owns
+
+* production contract
+* deployment topology
+* version pin
+* scheduler clock contract
+* architecture authority
+
+---
+
+# 17. Core Media Rule
+
+Always distinguish:
+
+```text
+Work
+MediaAsset
+Artifact
+DeliveryVariant
+```
+
+Hard invariant:
+
+```text
+MediaAsset != Local File
+```
+
+不要因为下游想显示媒体就强制 PixivFlow 下载。
+
+---
+
+# 18. Prefer Media References
+
+新增跨服务媒体 contract：
+
+优先：
+
+```text
+media references
+asset manifest
+metadata
+```
+
+而不是：
+
+```text
+mandatory large multipart binaries
+```
+
+不得无迁移破坏现有 multipart compatibility。
+
+---
+
+# 19. Download Is A Capability
+
+PixivFlow 推荐：
+
+```text
+discover
+→ parse
+→ normalize
+→ MediaAsset
+→ consumer decides
+```
+
+而不是：
+
+```text
+discover
+→ always download
+```
+
+只有需要 Artifact 时才 materialize。
+
+---
+
+# 20. Telegram Media Priority
+
+优先：
+
+```text
+1. Telegram file_id
+2. copyMessages
+3. public media/proxy URL
+4. DeliveryVariant
+5. materialized source file
+```
+
+避免反复：
+
+```text
+download
+→ upload
+→ download
+→ upload
+```
+
+---
+
+# 21. Bot-Specific file_id
+
+Telegram `file_id` 不得假设全局可复用。
+
+模型必须考虑：
+
+```text
+bot_id
+asset_id
+file_id
+file_unique_id
+```
+
+---
+
+# 22. TelePress Provider Rule
+
+禁止将以下具体实现定义为 TelePress 本身：
+
+* Catbox
+* Telegraph
+* R2
+* ImageKit
+* Cloudinary
+
+TelePress 是：
+
+```text
+Preview / Publishing Plane
+```
+
+Provider 可以替换。
+
+---
+
+# 23. Candidate Investigation Rule
+
+任何 `no_candidate`：
+
+优先检查：
+
+```text
+candidateReport
+```
+
+至少查看：
+
+* fetched
+* rejected
+* reason breakdown
+* selected
+* duplicate ratio
+* recent supply history
+
+没有证据，不得直接归因：
+
+* scheduler
+* API
+* token
+* deploy
+
+---
+
+# 24. Empty Result Is A Result
+
+禁止把所有空结果都显示成：
+
+```text
+执行失败
+```
+
+必须区分：
+
+```text
+execution_failed
+no_content_today
+policy_too_narrow
+duplicate_exhausted
+candidate_supply_low
+```
+
+Operator 必须知道：
+
+```text
+what happened
+why
+whether abnormal
+what to do next
+```
+
+---
+
+# 25. Failure Contract
+
+跨服务 failure 尽量保留：
+
+```text
+code
+stage
+reason
+retryable
+operator_hint
+request_id
+correlation_id
+```
+
+禁止：
+
+```python
+except Exception:
+    return INTERNAL_ERROR
+```
+
+而不保存 diagnostics。
+
+Unknown error 只有在确实未知且可追踪时才可接受。
+
+---
+
+# 26. Recovery
+
+所有：
+
+* retry
+* relaxed retry
+* refetch
+* rerun
+* publish retry
+
+必须复用正式 Recovery / Operation domain。
+
+按钮只是入口。
+
+Recovery 必须：
+
+* durable
+* idempotent
+* observable
+* auditable
+* correlated to resulting execution
+
+---
+
+# 27. Admission Policy
+
+当前正式规则：
+
+```text
+Telegram human
+→ DIRECT_PUBLISH
+
+Mini App human
+→ DIRECT_PUBLISH
+
+API automated
+→ REVIEW_REQUIRED
+```
+
+除非用户明确改变产品策略，否则不得修改。
+
+Admission Policy 必须集中实现。
+
+---
+
+# 28. Notification != Review
+
+DIRECT_PUBLISH 仍可产生 Admin Notification。
+
+Admin Notification 不代表必须 Review。
+
+不要混淆两种 policy。
+
+---
+
+# 29. Submission != Review
+
+“My Submissions”：
+
+```text
+= user's Submission history
+```
+
+不是：
+
+```text
+Review Queue
+```
+
+Review 不拥有 Submission lifecycle。
+
+---
+
+# 30. Mini App
+
+保持：
+
+```text
+User Space
+Admin Space
+```
+
+User Space 是用户产品。
+
+Admin Space 是运营/治理产品。
+
+不要继续混进一个页面或一个语义模型。
+
+---
+
+# 31. Moderation
+
+治理状态必须保留：
+
+```text
+active
+expired
+removed
+```
+
+并记录：
+
+```text
+actor
+reason
+created_at
+expires_at
+removed_by
+removed_at
+```
+
+禁止通过物理删除抹掉治理历史。
+
+---
+
+# 32. Admin DM
+
+Admin DM 是快捷入口。
+
+不是完整 Admin Panel。
+
+复杂操作进入 Admin Space / Control Plane。
+
+禁止通过不断新增 Telegram 按钮解决所有新需求。
+
+---
+
+# 33. WebUI
+
+`pixivflow web` 的完成标准不是“网页能打开”。
+
+真正验收问题：
+
+> 操作者能否解释某个 scheduled slot 到底发生了什么？
+
+必须复用：
+
+* Slot Ledger
+* Execution
+* TargetOutcome
+* Candidate Report
+* Artifact
+* Recovery
+* Logs
+
+禁止 WebUI-specific truth store。
+
+---
+
+# 34. Scheduling
+
+任何生产调度变更必须同时检查：
+
+```text
+production config
+control-plane cron map
+Cloudflare
+external PRIMARY scheduler
+contract tests
+```
+
+Cloudflare 使用 UTC。
+
+外部 SaaS 可能使用自己的 timezone。
+
+Slot Ledger 是最终 duplicate execution guard。
+
+---
+
+# 35. No Backfill
+
+如果正式 contract 是 no-backfill：
+
+禁止为了修补历史 dashboard 或“补一次任务”强行回填过期 slot。
+
+应该：
+
+* 记录 incident
+* 修复未来防护
+* 保持历史事实
+
+---
+
+# 36. Security
+
+禁止为排错方便打印：
+
+```text
+environment
+secrets
+tokens
+API keys
+credentials
+```
+
+一旦 secret 暴露：
+
+* 视为 compromised
+* 轮换
+* 检查持久化痕迹
+* 更新 runbook
+* 文档不得记录 secret 本身
+
+---
+
+# 37. Documentation Synchronization
+
+每个有长期影响的任务都必须显式检查：
+
+```text
+AGENTS.md
+docs/architecture/
+docs/operations/current-state.md
+docs/operations/
+docs/development/
+CONTRACT.md
+README.md
+```
+
+按实际影响更新。
+
+不要机械修改全部文件。
+
+但必须检查。
+
+---
+
+# 38. Documentation Quality
+
+禁止：
+
+* wall-of-text
+* unexplained jargon
+* broken Markdown
+* CLI 命令挤成一行
+* 中文词中异常空格
+* 把特定 channel 当系统默认事实
+* 把 provider 当架构本体
+* 把 RFC 当用户文档
+* 把 planned 写成 implemented
+
+推荐：
+
+```text
+why
+↓
+what
+↓
+user-visible behavior
+↓
+operation
+↓
+implementation detail
+```
+
+---
+
+# 39. Normal Execution Workflow
+
+默认工作流：
+
+```text
+PRESERVE
+↓
+READ DOCS
+↓
+COMMUNITY RESEARCH
+↓
+DISCOVER
+↓
+MODEL
+↓
+UPDATE ARCHITECTURE MEMORY
+↓
+REPRODUCE
+↓
+ROOT CAUSE
+↓
+MINIMAL CHANGE
+↓
+REGRESSION
+↓
+UPDATE DOCS
+↓
+PR
+↓
+CI
+↓
+MERGE
+↓
+RELEASE
+↓
+DEPLOY
+↓
+RUNTIME VERIFY
+↓
+PRODUCTION VERIFY
+↓
+FINAL DOC SYNC
+```
+
+尤其注意：
+
+```text
+COMMUNITY RESEARCH
+```
+
+必须发生在新增通用能力之前。
+
+```text
+UPDATE ARCHITECTURE MEMORY
+```
+
+不能等整个任务结束才做。
+
+---
+
+# 40. Root Cause Before UX Patch
+
+Observability improvement 不等于 functionality repair。
+
+禁止把：
+
+```text
+内部错误
+```
+
+改成：
+
+```text
+查看日志
+```
+
+然后声称 bug fixed。
+
+必须找到真实 failing stage。
+
+---
+
+# 41. External Blockers
+
+如果遇到：
+
+* unavailable secret
+* external SaaS console
+* human Telegram click
+* third-party policy
+* irreversible production decision
+
+标记：
+
+```text
+BLOCKED_EXTERNAL
+```
+
+或：
+
+```text
+EXTERNAL_ACCEPTANCE_REQUIRED
+```
+
+然后继续所有不依赖该 blocker 的工作。
+
+禁止因为一个 blocker 停掉整个 mission。
+
+---
+
+# 42. Production Mutations
+
+生产环境是真实数据。
+
+禁止：
+
+* 随意创建真实投稿
+* 删除真实 Review history
+* 删除 Moderation history
+* 改写 slot history
+* 无证据修改生产配置
+
+优先：
+
+* read-only verification
+* canary
+* idempotent operation
+* explicitly labeled test
+
+---
+
+# 43. Release Discipline
+
+生产代码：
+
+```text
+code
+→ tests
+→ PR
+→ CI
+→ merge
+→ release
+→ artifact
+→ deploy pin
+→ runtime verify
+→ production verify
+```
+
+Docs-only 修改不需要无意义发布应用版本。
+
+禁止伪造：
+
+* PR
+* release
+* deployment
+* production verification
+
+---
+
+# 44. Runtime Version Consistency
+
+生产验收必须核对：
+
+```text
+merged code
+release version
+artifact/image
+Deploy pin
+runtime revision
+actual behavior
+```
+
+它们必须指向预期实现。
+
+---
+
+# 45. Tests Are Not Production
+
+测试全绿只证明 regression coverage。
+
+不能证明：
+
+* Fly runtime 已运行新版本
+* Cloudflare trigger 正常
+* cron-job.org 正常
+* Telegram callback 正常
+* external provider 接受请求
+* 生产数据满足测试假设
+
+Production observation 优先。
+
+---
+
+# 46. New Debt
+
+执行中发现新问题：
+
+如果：
+
+> 不修它，当前任务就无法真实称为完成。
+
+那么它属于当前 scope，应继续处理。
+
+否则：
+
+记录到：
+
+```text
+docs/operations/current-state.md
+```
+
+并标记优先级和状态。
+
+避免无限 scope creep。
+
+---
+
+# 47. Current High-Level Roadmap
+
+默认演进顺序：
+
+```text
+Reliability
+↓
+Execution Observatory
+↓
+Media Decoupling
+↓
+Media Delivery Optimization
+↓
+Content Supply Platform
+↓
+Execution Control Plane
+↓
+Business/Admin Control Plane
+↓
+Preview Platform
+```
+
+不要在 Execution Truth 仍然不完整时优先做漂亮 UI。
+
+---
+
+# 48. Final Completion Check
+
+任务结束前必须确认：
+
+```text
+代码是否同步？
+测试是否同步？
+release 是否同步？
+deploy 是否同步？
+runtime 是否同步？
+production behavior 是否同步？
+architecture docs 是否同步？
+current-state 是否同步？
+AGENTS 约束是否需要更新？
+CONTRACT 是否需要更新？
+README 是否需要更新？
+社区方案调研结论是否记录？
+未来 Agent 是否能仅通过仓库恢复关键上下文？
+```
+
+只要最后一个问题答案为“不能”，任务就没有真正闭环。
+
+---
+
+# 49. Final Reporting
+
+最终报告必须包含：
+
+```text
+Architecture
+Community Research
+Root Causes
+Changes
+Tests
+PRs
+Releases
+Deployments
+Runtime
+Production Verification
+Documentation
+Remaining Risks
+External Acceptance
+Rollback
+```
+
+状态只能使用：
+
+```text
+VERIFIED
+FAIL
+KNOWN_DEBT
+BLOCKED_EXTERNAL
+EXTERNAL_ACCEPTANCE_REQUIRED
+```
+
+禁止：
+
+```text
+基本完成
+应该可以
+大概率正常
+```
+
+---
+
+# 50. Final Principle
+
+始终记住：
+
+```text
+PixivFlow is not merely a downloader.
+
+TelePost is not merely Telegram handlers.
+
+TelePress is not Catbox + Telegraph.
+
+PixivFlow WebUI is not a second backend.
+
+Deploy is not merely Fly configuration.
+```
+
+它们共同组成一个内容平台。
+
+同时记住：
+
+```text
+Code preserves behavior.
+
+Tests preserve expectations.
+
+Documentation preserves architecture.
+
+AGENTS.md preserves discipline.
+
+current-state.md preserves operational memory.
+
+Community research prevents unnecessary reinvention.
+```
+
+缺少其中任何一项，长期维护都会重新失忆。

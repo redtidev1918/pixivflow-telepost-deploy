@@ -205,7 +205,7 @@ prevent.
 ## How agents and tests consume it
 
 - `architecture_docs_test.go` checks: the preset names in the matrix are consistent across
-  `overview.md`, `AGENTS.md` and each preset document; every preset marked `stable` has a document;
+  `overview.md`, this page and each preset document; every preset marked `stable` has a document;
   config files referenced by the docs exist; enum values are legal; there is no second "only
   production topology" statement; the `split-worker` security contract is intact.
 - The agent reading order is: `AGENTS.md` → this page → the matrix → the specific preset document.

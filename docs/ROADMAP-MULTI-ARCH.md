@@ -23,7 +23,7 @@
 | `remote-worker` | Beta | 是 | 否 | 否 | 配置可行，无端到端证据 |
 
 Phase 1 交付物：架构矩阵、四个 preset 文档、概念/平台/运维文档体系、迁移契约、
-`AGENTS.md` 多拓扑契约、`architecture_docs_test.go` 一致性测试、docsify 旧路径别名。
+`AGENTS.md`（跨仓 Agent 契约）、部署契约、`architecture_docs_test.go` 一致性测试、docsify 旧路径别名。
 **没有改动**：线上 split-worker 配置、两份 Fly 配置、`control-plane/`、四个只读脚本、
 任何 secret、任何生产机器。
 
@@ -228,4 +228,4 @@ Where are you deploying?
 | 自动在 preset 之间迁移的工具 | 迁移是低频人工操作，契约比工具更持久（见迁移契约的「实现状态」） |
 | 第五个「混合云」preset | 它是 `remote-worker` 的 placement 选择；多一个 preset 就多一组要验证的组合 |
 | 把 `review` 做成可关闭的开关 | 未经人工批准就发布超出产品契约 |
-| 在业务代码里加平台判断 | 见 AGENTS.md 第 3 节 |
+| 在业务代码里加平台判断 | 见部署契约的「平台分支」不变量（deployment-manifest） |
