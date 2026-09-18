@@ -101,11 +101,10 @@ primary_region = 'iad'
     # submissions always enter review; Mini App is gated by the independent
     # MINIAPP_REVIEW_REQUIRED switch; chat_direct stays DIRECT_PUBLISH by
     # default. Requires 2.35.0 telepost.
-    # 2.35.1 (2026-09-18): recovery button fix — requestId is now a hyphenated
-    # UUID (PixivFlow's validation contract) and recovery failures surface the
-    # real code/stage/hint plus server detail instead of a generic '操作失败，
-    # 请稍后重试'. Requires 2.35.1 telepost.
-    TELEPOST_IMAGE = 'ghcr.io/redtidev1918/telepost:2.35.1'
+    # 2.36.0 (2026-09-18): candidate supply observability UX — renders the
+    # CandidateSupplyReport funnel and labels recovery buttons per target
+    # (重试·插画 / 放宽·插画). Requires 2.36.0 telepost.
+    TELEPOST_IMAGE = 'ghcr.io/redtidev1918/telepost:2.36.0'
 
 [[mounts]]
   source = 'data'
