@@ -28,6 +28,9 @@ const (
 	telepostRepo  = "ghcr.io/redtidev1918/telepost"
 	pixivflowRepo = "ghcr.io/redtidev1918/pixivflow"
 	kitRepo       = "ghcr.io/redtidev1918/pixivflow-telepost-deploy"
+	// GitHub 短仓库用于把 「latest」解析成不可变发布 tag（配置里禁止 latest）。
+	telepostGHRepo  = "redtidev1918/TelePost"
+	pixivflowGHRepo = "redtidev1918/PixivFlow"
 
 	// 两个平面（plane）各自是独立的 app / machine / 配置文件，生命周期也不同。
 	planeTelepost  = "telepost"
@@ -901,6 +904,43 @@ func cmdLogs(platform, cfg string, n int) {
 // releaseTagRe 匹配发布 tag（如 2.19.0 / v2.19.0），用来决定是否顺带刷新显示版本。
 var releaseTagRe = regexp.MustCompile(`^v?\d+\.\d+\.\d+$`)
 
+// resolveReleaseTag 把命令参数里的 「latest」解析成 GitHub 最新发布 tag（去 v 前缀），
+// 其它参数原样返回。写进固定值必须是具体 tag——仓库契约禁止 latest/master/main。
+func resolveReleaseTag(ghRepo, target string) string {
+	if !strings.EqualFold(target, "latest") {
+		return target
+	}
+	api := "https://api.github.com/repos/" + ghRepo + "/releases/latest"
+	req, err := http.NewRequest(http.MethodGet, api, nil)
+	if err != nil {
+		die("无法解析 latest 版本: %v", err)
+	}
+	req.Header.Set("User-Agent", "pixivflow-telepost-deploy/"+appVersion)
+	if tok := os.Getenv("GITHUB_TOKEN"); tok != "" {
+		req.Header.Set("Authorization", "Bearer "+tok)
+	}
+	client := &http.Client{Timeout: 15 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		die("无法解析 latest 版本: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		die("无法解析 latest 版本: GET %s → %s", api, resp.Status)
+	}
+	var rel struct {
+		TagName string `json:"tag_name"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&rel); err != nil {
+		die("无法解析 latest 版本响应: %v", err)
+	}
+	tag := strings.TrimPrefix(strings.TrimSpace(rel.TagName), "v")
+	if !releaseTagRe.MatchString(tag) {
+		die("latest 返回非版本 tag: %s（期望形如 %s.%s.%s）", rel.TagName, "[0-9]", "[0-9]", "[0-9]")
+	}
+	return tag
+}
+
 func cmdUpgrade(platform, cfg, kind, target string, dryRun bool) {
 	if target == "" {
 		die("缺少版本参数（用法：deploy %s <版本|latest>）", kind)
@@ -925,6 +965,11 @@ func cmdUpgrade(platform, cfg, kind, target string, dryRun bool) {
 			cur = pfVersion(platform, cfg)
 		}
 	}
+	ghRepo := telepostGHRepo
+	if kind == "pf" {
+		ghRepo = pixivflowGHRepo
+	}
+	target = resolveReleaseTag(ghRepo, target)
 	if dryRun {
 		infof("[dry-run] 将 %s 从 %s 升级到 %s（不写配置）", kind, cur, target)
 		return

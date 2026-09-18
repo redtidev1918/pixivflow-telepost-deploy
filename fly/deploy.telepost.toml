@@ -120,7 +120,7 @@ primary_region = 'iad'
     # 2.42.0 (2026-09-19): private-chat preview sends the REAL selected media
     # once (photos as album, then video/animation/audio/document), separate from
     # the Mini App local preview; edits refresh only the control message.
-    TELEPOST_IMAGE = 'ghcr.io/redtidev1918/telepost:2.43.0'
+    TELEPOST_IMAGE = 'ghcr.io/redtidev1918/telepost:2.44.0'
 
 [[mounts]]
   source = 'data'
