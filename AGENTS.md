@@ -335,7 +335,7 @@ execution authority:        PixivFlow durable slot ledger（唯一）
 **当前发布 pin（代码=Release=Deploy=Runtime 复核基线）：**
 
 - PixivFlow scheduler：v2.34.0 / `578ff0efbc05f35b0a84dac987836ea1a85bd5fe`
-- TelePost：v2.41.0（`ghcr.io/redtidev1918/telepost:2.41.0`，native chat 私聊投稿 UX）
+- TelePost：v2.42.0（`ghcr.io/redtidev1918/telepost:2.42.0`，私聊真实媒体预览）
 - TelePress：v0.10.0（`telepress-publish` 单机已跑，v1 部署于发布后当天）
 
 - **Cloudflare 不是执行权威，cron-job.org 也不是。** 两个时钟都只 POST 同一个受认证的幂等端点
