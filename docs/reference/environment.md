@@ -150,7 +150,7 @@
   占位或已失效，**Telegraph 预览按失败隔离**——不发布预览、不生成坏链接，TXT document 照常发布
   （这是特性契约，不是故障）。因此「预览没出现」先区分：token 缺失/失效（预览休眠）还是内容超限
   （`NOVEL_PREVIEW_MAX_BYTES`）。
-- **故障注入铁律（AGENTS.md §6-13）**：以「临时失效令牌」跑失败隔离 E2E，结束前必须恢复有效令牌、
+- **故障注入铁律（AGENTS.md「Failure Contract / Recovery」）**：以「临时失效令牌」跑失败隔离 E2E，结束前必须恢复有效令牌、
   复核 `getAccountInfo`、并做一次真实 happy-path 发布；绝不允许占位/失效令牌留在生产。
 - **轮换**：`flyctl secrets set TELEGRAPH_ACCESS_TOKEN=<new>` → `flyctl secrets deploy
   -a telesubmit-multi-bot -c fly/deploy.telepost.toml` → 复核 `/health` 与一次真实发布。

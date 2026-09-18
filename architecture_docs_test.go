@@ -3,7 +3,7 @@ package main
 // architecture_docs_test.go — 文档一致性守护。
 //
 // 它强制三类约定不会漂移：
-//  1. preset 名称与支持等级在 机器矩阵 / 架构索引 / AGENTS.md 三处一致；
+//  1. preset 名称与支持等级在 机器矩阵 / 架构索引 / 部署契约 三处一致；
 //  2. 文档里引用的仓库文件真实存在，英文镜像与中文页一一对应；
 //  3. split-worker 的安全契约（执行端无 Telegram 凭据、TelePost 是唯一 webhook owner、
 //     执行端无健康检查、force_https=false）没有被文档或配置改掉。
@@ -174,7 +174,7 @@ func TestPresetsAreConsistentAcrossMatrixIndexAndAgents(t *testing.T) {
 	}
 
 	overview := mustRead(t, "docs/architectures/overview.md")
-	agents := mustRead(t, "AGENTS.md")
+	agents := mustRead(t, "docs/reference/deployment-contract.md")
 
 	for _, name := range names {
 		preset := m.Presets[name]
@@ -195,12 +195,12 @@ func TestPresetsAreConsistentAcrossMatrixIndexAndAgents(t *testing.T) {
 		if !contains(m.Enums.SupportLevel, preset.Status.Support) {
 			t.Errorf("preset %q: support %q is not a legal enum value %v", name, preset.Status.Support, m.Enums.SupportLevel)
 		}
-		// 名称必须出现在架构索引与 AGENTS.md。
+		// 名称必须出现在架构索引与部署契约。
 		if !strings.Contains(overview, "`"+name+"`") {
 			t.Errorf("docs/architectures/overview.md does not mention preset %q", name)
 		}
 		if !strings.Contains(agents, "`"+name+"`") {
-			t.Errorf("AGENTS.md does not mention preset %q", name)
+			t.Errorf("docs/reference/deployment-contract.md does not mention preset %q", name)
 		}
 		// 架构索引必须按名称链接到 preset 文档（以文件名出现）。
 		base := filepath.Base(preset.Doc)

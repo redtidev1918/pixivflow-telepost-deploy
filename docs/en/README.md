@@ -37,7 +37,7 @@ There is no `docs/en/concepts/` or `docs/en/operations/` tree — do not create 
 
 ## Architecture presets
 
-Four presets exist. Their names are identical in the matrix, in `AGENTS.md` and in every
+Four presets exist. Their names are identical in the matrix, in the deployment contract and in every
 architecture page; `architecture_docs_test.go` enforces that.
 
 | Preset | Support level | Implementation status | In one sentence | Docs |
