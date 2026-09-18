@@ -338,7 +338,17 @@ execution authority:        PixivFlow durable slot ledger（唯一）
 - TelePost：v2.43.0（`ghcr.io/redtidev1918/telepost:2.43.0`，MiniApp 用户/管理空间拆分 + 私聊真实媒体预览）
 - TelePress：v0.10.0（`telepress-publish` 单机已跑，v1 部署于发布后当天）
 
-**2026-09-19 运行期实测（已复核项）：**
+**2026-09-19 运行期实测（已复核项）：
+
+- TelePress rich-novel **带图**：从 `telepress-publish` 容器直接 multipart
+  POST `/publish/rich-novel`（md + `images/codex_verify.png`）→ HTTP 200
+  `status=success`，但 `assets[0].status=failed`。同一 egress 直测外部托管：
+  Catbox 返回 412 `Invalid uploader`、Telegra.ph `/upload` 返回 400
+  `Unknown error`。结论：**rich-novel 文本/无图链路已闭环**；带图闭环被
+  外部图片托管对当前 egress 的拦截阻挡，需操作者改配可用 image host
+  （R2 / S3 / 自托管上传）或更换 egress，这不是仓库代码可修复的。
+- 运行期截图已含存量故障原因（bot1 10/22 空结果 = 主题候选池稀疏 + 消费追踪）。
+**
 
 - Telegram webhook 归属：`telesubmit-multi-bot` 容器内用生产 env 的
   `BOT1_TOKEN` / `BOT2_TOKEN` 逐一 `getWebhookInfo`，两个 bot 均指向
