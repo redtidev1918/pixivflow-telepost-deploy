@@ -110,7 +110,9 @@ primary_region = 'iad'
     # 26h schedule watchdog, and read-only GET /api/v1/schedule/status.
     # 2.39.0 (2026-09-18): public multi-bot /status page (aggregated schedule
     # status) + schedule observability docs; watchdog/preannouncement unchanged.
-    TELEPOST_IMAGE = 'ghcr.io/redtidev1918/telepost:2.39.0'
+    # 2.39.1 (2026-09-18): schedule/status + watchdog use the LATEST terminal
+    # notification's status instead of MAX(status); watchdog logs alerts.
+    TELEPOST_IMAGE = 'ghcr.io/redtidev1918/telepost:2.39.1'
 
 [[mounts]]
   source = 'data'
