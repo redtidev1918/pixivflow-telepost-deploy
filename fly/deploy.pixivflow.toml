@@ -125,8 +125,11 @@ kill_timeout = 60
     # 13e234a6 = v2.29.0 (released 2026-09-18). candidate supply observability:
     # CandidateSupplyReport funnel + empty-result reason projection + target-labeled
     # recovery buttons; schema adds candidate_report to the slot ledger (back-fill-safe).
-    PIXIVFLOW_REF = '13e234a69cd25964ffd2ef141423d380f976b502'
-    PIXIVFLOW_VERSION = '2.29.0'
+    # 153116bd = v2.30.0 (released 2026-09-18). Phase 5 candidate inventory:
+    # TopicProfile config + durable 待发池; empty slots can fall back to oldest
+    # pending reserve when target.topicProfile.inventory.enabled (default off).
+    PIXIVFLOW_REF = '153116bd9b08ed156576a6e4e387f5f10250660d'
+    PIXIVFLOW_VERSION = '2.30.0'
 
 [[mounts]]
   source = 'pixivflow_data'
