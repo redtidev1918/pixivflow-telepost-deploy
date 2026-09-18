@@ -112,7 +112,8 @@ primary_region = 'iad'
     # status) + schedule observability docs; watchdog/preannouncement unchanged.
     # 2.39.1 (2026-09-18): schedule/status + watchdog use the LATEST terminal
     # notification's status instead of MAX(status); watchdog logs alerts.
-    TELEPOST_IMAGE = 'ghcr.io/redtidev1918/telepost:2.39.1'
+    # 2.40.0 (2026-09-18): /status + /pin_status Telegram commands (渠道置顶区).
+    TELEPOST_IMAGE = 'ghcr.io/redtidev1918/telepost:2.40.0'
 
 [[mounts]]
   source = 'data'
