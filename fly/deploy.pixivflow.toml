@@ -126,11 +126,11 @@ kill_timeout = 60
     # 13e234a6 = v2.29.0 (released 2026-09-18). candidate supply observability:
     # CandidateSupplyReport funnel + empty-result reason projection + target-labeled
     # recovery buttons; schema adds candidate_report to the slot ledger (back-fill-safe).
-    # 578ff0ef = v2.34.0 (released 2026-09-19). WebUI Control Center Phase 1:
-    # read-only GET /api/scheduler (slot projector over the existing Slot Ledger),
-    # plus WebUI auth/public-bind hardening from 2.31-2.33. No scheduling change.
-    PIXIVFLOW_REF = '578ff0efbc05f35b0a84dac987836ea1a85bd5fe'
-    PIXIVFLOW_VERSION = '2.34.0'
+    # 209644eb = v2.35.0 (released 2026-09-19). WebUI Control Center Phase 1 frontend:
+    # ships the read-only Scheduler control panel in the npm webui-frontend bundle;
+    # same GET /api/scheduler contract from 2.34. No scheduling change.
+    PIXIVFLOW_REF = '209644ebd18558b780908e27ca1bffc126cbf7cc'
+    PIXIVFLOW_VERSION = '2.35.0'
 
 [[mounts]]
   source = 'pixivflow_data'
