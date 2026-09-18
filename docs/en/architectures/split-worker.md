@@ -61,8 +61,8 @@ Production `split-worker` runs **two independent external clocks** over **the sa
 
 | | Provider | Fire time (Asia/Shanghai) | Expression (UTC) |
 | --- | --- | --- | --- |
-| **PRIMARY** | cron-job.org | at the occurrence: `bot1-daily` 10:00 / 22:00, `bot2-daily` 10:10 / 22:10 | `bot1` `0 2,14 * * *`; `bot2` `10 2,14 * * *` |
-| **SECONDARY** | Cloudflare Cron (`control-plane/`) | occurrence + 2 minutes | `bot1` `2 2,14 * * *`; `bot2` `12 2,14 * * *` |
+| **PRIMARY** | cron-job.org | at the occurrence: `bot1-daily` 10:00, `bot2-daily` 10:10 | `bot1` `0 2 * * *`; `bot2` `10 2 * * *` |
+| **SECONDARY** | Cloudflare Cron (`control-plane/`) | occurrence + 2 minutes | `bot1` `2 2 * * *`; `bot2` `12 2 * * *` |
 
 The machine-readable sources of both declarations are `control-plane/src/cron-map.ts`
 (`SECONDARY_OFFSET_MINUTES = 2`) and `control-plane/wrangler.toml`;
@@ -311,8 +311,8 @@ cd control-plane && npx wrangler secret put SCHEDULER_TRIGGER_TOKEN && npx wrang
 #        Create two cron jobs pointing at the same endpoint as 4a,
 #        with Authorization: Bearer <SCHEDULER_TRIGGER_TOKEN>
 #
-#          bot1-daily   0 2,14 * * *
-#          bot2-daily  10 2,14 * * *
+#          bot1-daily   0 2 * * *
+#          bot2-daily  10 2 * * *
 #
 #        The expressions come from the `PRIMARY_CRONS` export in
 #        control-plane/src/cron-map.ts, so the operator runbook and the contract

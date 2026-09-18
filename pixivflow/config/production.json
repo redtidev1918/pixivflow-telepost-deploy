@@ -26,9 +26,9 @@
   "schedules": [
     {
       "id": "bot1-daily",
-      "name": "Bot1 每日 10:00 & 22:00 ボテ腹 非AI插画 + 中文小说 (NSFW)",
+      "name": "Bot1 每日 10:00 ボテ腹 非AI插画 + 中文小说 (NSFW)",
       "enabled": true,
-      "cron": "0 10,22 * * *",
+      "cron": "0 10 * * *",
       "timezone": "Asia/Shanghai",
       "targetIds": [
         "bot1-illust-botefuku",
@@ -40,9 +40,9 @@
     },
     {
       "id": "bot2-daily",
-      "name": "Bot2 每日 10:10 & 22:10 丸呑み 非AI插画 + 中文小说 (NSFW)",
+      "name": "Bot2 每日 10:10 丸呑み 非AI插画 + 中文小说 (NSFW)",
       "enabled": true,
-      "cron": "10 10,22 * * *",
+      "cron": "10 10 * * *",
       "timezone": "Asia/Shanghai",
       "targetIds": [
         "bot2-illust-marunomi",

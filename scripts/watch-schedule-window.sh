@@ -20,7 +20,7 @@
 # the evidence, and it is recorded as such.
 #
 # Usage:
-#   ./scripts/watch-schedule-window.sh                     # default: next 22:00/22:10 CST window
+#   ./scripts/watch-schedule-window.sh                     # default: next 10:00/10:10 CST window
 #   ./scripts/watch-schedule-window.sh --deadline 14:30Z --out /tmp/window
 #   ./scripts/watch-schedule-window.sh --out ./evidence
 #
@@ -61,7 +61,7 @@ say() { printf '%s %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$*" | tee -a "$log_fi
 # --- the window -----------------------------------------------------------------
 #
 # Compute today's primary/secondary instants in UTC. The evening occurrence is
-# 22:00 / 22:10 Asia/Shanghai = 14:00Z / 14:10Z; the morning one is 10:00 / 10:10
+# 10:00 / 10:10 Asia/Shanghai = 02:00Z / 02:10Z (once per day)
 # CST = 02:00Z / 02:10Z.
 primary_epoch=$(python3 - "${primary_minute}" <<'PY'
 import datetime, sys
