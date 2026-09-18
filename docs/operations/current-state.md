@@ -38,7 +38,7 @@ Authority: Current production evidence overrides this file
 最近明确记录的生产 baseline：
 
 ```text
-PixivFlow: 2.34.0 / 578ff0ef
+PixivFlow: 2.37.0 / a17343519198d397636cc3192a426c4d3c292fcf
 TelePost: 2.45.1
 TelePress: 0.10.0
 ```
