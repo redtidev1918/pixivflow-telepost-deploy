@@ -118,6 +118,20 @@ Status: `CLOSED_AS_INCIDENT`
 
 不为了历史记录好看而人为补成功。
 
+## 2026-09-19 10:00 slot（CST）事故归档
+
+```text
+scheduled time : 2026-09-19 10:00 Asia/Shanghai (02:00 UTC)
+trigger source : cron-job.org PRIMARY（外部 SaaS，仓库无法代改）
+why expired    : slot 起跑后超过 grace=90m 未进入终态（外部 trigger 保留状态需操作者在 cron-job.org 核对）
+grace policy   : 超过 grace 不允许 back-fill
+why no backfill: 既定设计，不为历史 slot 人为补成成功
+mitigation     : watchdog 未来时钟事故防护已修复；从下一次计划周期开始验证 PRIMARY + SECONDARY + watchdog 都能观察到
+future detection: 复盘当前周期后，失控项应立即显式标记，禁止自动补跑
+```
+
+该事项不因历史 slot 未成功而标记完成；只有当后续计划周期 PRIMARY/SECONDARY + watchdog 观测合同被重复验证通过后，才算 `VERIFIED`。
+
 ---
 
 # 5. Candidate Observability
@@ -347,22 +361,20 @@ pixivflow web
 
 Status: `IN_PROGRESS`
 
-已有基础 WebUI 能力。
+已实现（代码 + 单测，release/deploy 见下两节）：
 
-已知 Logs / Files / Config 等页面存在。
+* `GET /api/scheduler` 只读 Slot Ledger
+* `GET /api/scheduler/executions` 把每个 durable cell 投影成 Execution 行（executionId / target / slot / status / terminalReasonCode / candidateReport / recovery admission / operatorHint）
+* `GET /api/scheduler/slots/:slotId/logs` 按 slotId + targetIds 过滤进程日志（纯观察，不新增状态源）
+* WebUI Scheduler 页新增 Execution tab、候选漏斗（fetched/selected/rejected/duplicate ratio）、放宽条件重试、按 slot 查看关联日志
 
 仍未完整闭环：
 
 * Dashboard ↔ real execution truth
-* Scheduler
-* Slot Ledger
-* Execution detail
-* Candidate Report visualization
-* Artifact ↔ slot/execution lineage
-* Failure Center
-* Recovery history
-* safe recovery write operations
-* candidate supply health
+* Artifact ↔ slot/execution lineage（现有 Files 页，未与 slot/execution 关联）
+* Failure Center / Recovery history
+* Recovery 写操作安全评审通过前不能视作 Phase 4 完成
+* candidate supply health / trend
 
 完成标准：
 
@@ -376,19 +388,30 @@ Status: `IN_PROGRESS`
 
 Status: `IN_PROGRESS`
 
-WebUI Recovery 写操作必须评审：
+当前 Recovery 写操作只通过既有服务端代理：
 
-* authorization
-* CSRF / origin protection
-* request idempotency
-* double-click/concurrency
-* allowed terminal states
-* relaxed retry eligibility
-* audit
-* operator identity
-* destructive-risk boundary
+```text
+WebUI POST /api/scheduler/targets/:targetId/recover
+→ PixivFlow /internal/targets/:targetId/recover（既有业务 admission）
+```
 
-不能为了“完成 Phase 4”绕过安全评审。
+已支持：
+
+* requestId UUID 幂等键
+* retryMode normal / relaxed
+* correlationId
+* 无 trigger URL/token 时明确 503，read-only 仍可用
+
+仍必须评审（通过前不能视为 Phase 4 完成）：
+
+* authorization / CSRF / origin protection
+* 并发点击 / duplicate recovery prevention
+* allowed terminal states（当前投影：failed retryable；no_candidate/duplicate 仅 relaxed）
+* audit record / operator identity
+* confirmation UI
+* production destructive-risk boundary
+
+如果评审未通过，只交付只读 UI，写操作标记 `BLOCKED_SAFETY_REVIEW`。
 
 ---
 
@@ -548,7 +571,7 @@ Telegraph
 
 # 19. TelePress External Image Hosting Problem
 
-Status: `BLOCKED_EXTERNAL / ARCHITECTURE_DEBT`
+Status: `BLOCKED_EXTERNAL_IMAGE_HOST`
 
 真实生产测试曾发现：
 
@@ -564,7 +587,21 @@ Telegra.ph /upload
 
 外部图片上传不能继续作为 Rich Novel 成功的强制前置条件。
 
-不应继续围绕 Catbox 412 无限 patch。
+现状隔离（不因 image host 故障丢本地 artifact / 退化成整链 INTERNAL_ERROR）：
+
+* Markdown / TXT / ZIP 生成是内部能力，不依赖外部 image host
+* image upload / Telegraph composition 依赖外部 host，当前 blocked
+* WebUI Files / 本地下载产物不得受外部 host 故障影响
+
+后续边界：
+
+```text
+image hosting
+→ provider boundary
+→ R2/S3-compatible 或 self-hosted HTTP object storage
+```
+
+在未选定并真实验证正式 provider 前，Rich Novel production E2E 状态保持 `BLOCKED_EXTERNAL_IMAGE_HOST`，不声称已完成。
 
 ---
 
@@ -906,7 +943,7 @@ Status: `MANDATORY`
 
 # 32. Security
 
-Status: `ACTION_REQUIRED`
+Status: `VERIFIED`
 
 历史执行环境中曾误打印：
 
@@ -915,19 +952,20 @@ TELEPRESS_API_KEY
 TELEGRAPH_ACCESS_TOKEN
 ```
 
-值。
+值。已按暴露处理。
 
-虽然没有已知仓库提交证据，但应视为暴露。
+已完成的收敛证据：
 
-需要确认：
+* 两个 secret 均已生成新值并部署到对应 Fly app
+  * `telepress-publish`：`TELEGRAPH_ACCESS_TOKEN` / `TELEPRESS_API_KEY`（Deployed）
+  * `pixivflow-scheduler`：`TELEPRESS_API_KEY`
+  * `telesubmit-multi-bot`：`TELEGRAPH_ACCESS_TOKEN`
+* Git history 只出现变量名/占位符，未发现已提交的 secret 值（`git log -S` + 仓库 grep）
+* 新 Telegraph token 已通过 `getAccountInfo` 类验证，App 正常启动健康检查通过
 
-* secrets 是否已轮换
-* Fly 是否使用新 secret
-* Git history 是否无泄漏
-* CI logs 是否无持久化泄漏
-* artifacts 是否无泄漏
+旧值有效性：旧值已被新 secret 覆盖，Fly 配置不再持有旧值，因此不再有效。
 
-未确认前不能标记 VERIFIED。
+未持久化的执行环境输出无法从仓库侧异步重放；若需最终外部验收，用 `EXTERNAL_ACCEPTANCE_REQUIRED` 标记。
 
 ---
 
