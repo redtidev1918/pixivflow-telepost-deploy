@@ -234,10 +234,6 @@ if SINGLE_HOST:   ...
 12. **不要放宽环境白名单**：传给 executor 子进程的环境是 deny-by-default 白名单
     （`PIXIV_*` / `SCHEDULER_*` / `*_SUBMIT_TOKEN` + 通用运行变量）。`supervisor/child.go` 对
     Telegram 凭据名有第二道拒付检查，改白名单必须同时改测试。
-13. **TelePress 故障注入测试必须线性还原**：任何以「临时失效 `TELEGRAPH_ACCESS_TOKEN`」驱动的失败
-    隔离 E2E，**结束前必须恢复有效令牌、复核 `getAccountInfo`、并做一次真实 happy-path 发布**，
-    绝不允许把占位/失效令牌留在生产。占位令牌「预览休眠、TXT 照常」是特性契约，不是排障结论——
-    历史事故即由此产生（见 `environment.md`「Telegraph access token 运维」）。
 
 ---
 
@@ -326,6 +322,21 @@ primary external clock:     cron-job.org      在 occurrence 准点触发
 secondary external clock:   Cloudflare Cron   occurrence + 2 分钟触发（SECONDARY_OFFSET_MINUTES = 2）
 execution authority:        PixivFlow durable slot ledger（唯一）
 ```
+
+**当前排程（2026-09-19 起，稀缺 tag 每日单次）：**
+
+- `bot1-daily` 每天 **10:00**（`0 10 * * *`）、`bot2-daily` 每天 **10:10**（`10 10 * * *`）Asia/Shanghai；
+  不再有 22:00/22:10 晚间 occurrence。
+- PRIMARY cron-job.org：必须把 bot1-daily / bot2-daily 的**晚间 job 停用**（这是外部 SaaS，仓库无法代改）；
+  SECONDARY Cloudflare 已部署为单次（`2 2 * * *` / `12 2 * * *` UTC）。
+- 合同一致：`pixivflow/config/production.json` 与 `control-plane/`（cron-map/wrangler）与
+  `redundant-clock.test.ts` + `deployment-contract.test.ts` 必须同步；改一个就得全改。
+
+**当前发布 pin（代码=Release=Deploy=Runtime 复核基线）：**
+
+- PixivFlow scheduler：v2.34.0 / `578ff0efbc05f35b0a84dac987836ea1a85bd5fe`
+- TelePost：v2.40.1（`ghcr.io/redtidev1918/telepost:2.40.1`）
+- TelePress：v0.10.0（`telepress-publish` 单机已跑，v1 部署于发布后当天）
 
 - **Cloudflare 不是执行权威，cron-job.org 也不是。** 两个时钟都只 POST 同一个受认证的幂等端点
   `POST /internal/schedules/{scheduleId}/run`；谁后到就在前一个创建的 slot 上收敛。
