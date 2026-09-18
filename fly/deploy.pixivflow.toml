@@ -122,8 +122,11 @@ kill_timeout = 60
     # Publish novel.md + images to TelePress /publish/rich-novel and inject the
     # returned Telegraph URL as `novel_preview_url` on the TelePost submission;
     # failures are non-fatal and logged as NOVEL_PUBLISH_FAILED (stage telepress_publish).
-    PIXIVFLOW_REF = 'baec8d0803d6b8d0d02ff94cd12276acf9b66adf'
-    PIXIVFLOW_VERSION = '2.28.0'
+    # 1f5f0c2 = v2.28.1 (released 2026-09-18). fix(candidate-skip-classification):
+    # language-filter/skipped/inconclusive candidate skips are a non-retryable
+    # CANDIDATE_SKIPPED, no longer mislogged as INTERNAL_ERROR.
+    PIXIVFLOW_REF = '1f5f0c240a38f45ab3de03650e61be475fe8ebfd'
+    PIXIVFLOW_VERSION = '2.28.1'
 
 [[mounts]]
   source = 'pixivflow_data'
