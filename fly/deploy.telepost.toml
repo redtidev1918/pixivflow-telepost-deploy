@@ -113,7 +113,9 @@ primary_region = 'iad'
     # 2.39.1 (2026-09-18): schedule/status + watchdog use the LATEST terminal
     # notification's status instead of MAX(status); watchdog logs alerts.
     # 2.40.0 (2026-09-18): /status + /pin_status Telegram commands (渠道置顶区).
-    TELEPOST_IMAGE = 'ghcr.io/redtidev1918/telepost:2.40.0'
+    # 2.40.1 (2026-09-18): manual recovery uses UUID requestId PixivFlow accepts
+    # and surfaces real failure reason instead of generic error.
+    TELEPOST_IMAGE = 'ghcr.io/redtidev1918/telepost:2.40.1'
 
 [[mounts]]
   source = 'data'
