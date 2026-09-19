@@ -1,7 +1,7 @@
 # PixivFlow Ecosystem Media Code Evolution Plan
 
 Status: ACTIVE
-Progress: Step 1 (manifest/proxy) DONE; Steps 2-7 IMPLEMENTED on PixivFlow master (08ec9d0, ec74b21, eea6f7e, 37bd9ca, ff736e9); Step 8 (TelePress MediaReference) DONE + VERIFIED (TelePress 0.12.1 runtime E2E returns assetId; PixivFlow 2.39.0 sends assetId/sourceUrl). Step 9 (on-demand preview via MediaReference manifest) RELEASED + DEPLOYED (PixivFlow v2.41.0/471ff53 live on pixivflow-scheduler; config materializationPolicy=on-demand in production.json) — 真实小说槽位 manifest-only 预览生产观测 EXTERNAL_ACCEPTANCE_REQUIRED. Step 10 (TelePost Delivery Asset Contract) IMPLEMENTED in TelePost main (PR #184, release 2.49.0) — 生产部署/runtime 观测待完成；PixivFlow 上游发送 media_assets 仍 PLANNED. Step 11+ PLANNED.
+Progress: Step 1 (manifest/proxy) DONE; Steps 2-7 IMPLEMENTED on PixivFlow master (08ec9d0, ec74b21, eea6f7e, 37bd9ca, ff736e9); Step 8 (TelePress MediaReference) DONE + VERIFIED (TelePress 0.12.1 runtime E2E returns assetId; PixivFlow 2.39.0 sends assetId/sourceUrl). Step 9 (on-demand preview via MediaReference manifest) RELEASED + DEPLOYED (PixivFlow v2.41.0/471ff53 live on pixivflow-scheduler; config materializationPolicy=on-demand in production.json) — 真实小说槽位 manifest-only 预览生产观测 EXTERNAL_ACCEPTANCE_REQUIRED. Step 10 (TelePost Delivery Asset Contract) RELEASED + DEPLOYED (TelePost 2.49.0 live on telesubmit-multi-bot; /health version=2.49.0; media_asset_refs VERIFIED on bot1/bot2 生产库). 真实 media_assets 生产 E2E EXTERNAL_ACCEPTANCE_REQUIRED; PixivFlow 上游发送 media_assets 仍 PLANNED. Step 11+ PLANNED.
 Scope: PixivFlow / TelePost / TelePress / Deploy
 Type: Code-level migration plan
 
@@ -851,7 +851,8 @@ interface DeliveryMedia {
 
 | 状态 | 说明 |
 |---|---|
-| IMPLEMENTED | TelePost main 已合并（PR #184），release/branch 已发布为 v2.49.0 |
+| VERIFIED（Release+Deploy） | TelePost main 已合并（PR #184），release 已发布 v2.49.0，Fly 已部署；`/health` version=2.49.0，`media_asset_refs` 表在 bot1/bot2 生产库 VERIFIED；单元/API 集成测试 926 passed |
+| EXTERNAL_ACCEPTANCE_REQUIRED | 用真实 `media_assets` payload（带有效 API token / 真实 PixivFlow 投稿）做生产 E2E，确认 201、DB 落库、`GET /api/v1/reviews/{id}` 读回 |
 | PLANNED | PixivFlow 上游按此契约实际发送 `media_assets`（常规插画/小说投递 JSON 或 multipart 路径） |
 | PLANNED | TelePost multipart 子段解析 `media_assets`（当前只做 JSON 路径） |
 
