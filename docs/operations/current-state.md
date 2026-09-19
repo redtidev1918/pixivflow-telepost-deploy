@@ -47,12 +47,15 @@ TelePress: 0.11.0
 Pixiv Media Proxy: pixiv-media-proxy.redtidev1918.workers.dev (v1)
 ```
 
-Pixiv Media Proxy:
-- `GET/HEAD` only, fixed upstream `i.pximg.net`, `/health` VERIFIED via workers.dev (proxied reachability).
-- TelePress 0.11.0 runtime E2E: `/publish/rich-novel` with manifest returned
-  `status=proxied` and rewrote `images/a.jpg` to
+Pixiv Media Proxy (worker version 3fd098a7):
+- `GET/HEAD` only, fixed upstream `i.pximg.net`, allowlisted client headers only
+  (no cookie/auth passthrough), upstream responses validated as `image/*`,
+  upstream 404/error mapped explicitly, `/health` VERIFIED via workers.dev.
+- TelePress 0.11.0 runtime E2E (post-hardening recheck): `/publish/rich-novel`
+  with manifest returned `status=proxied` and rewrote `images/a.jpg` to
   `https://pixiv-media-proxy.redtidev1918.workers.dev/pixiv/...`
-  (real production machine, real Telegraph page `https://telegra.ph/px-e2e-09-19`).
+  (real production machine, real Telegraph page
+  `https://telegra.ph/px-proxy-runtime-recheck-09-19` references the proxy URL).
 - Full real-novel end-to-end (novel image validity) still requires an external
   acceptance run with a live Pixiv novel and credentials: `EXTERNAL_ACCEPTANCE_REQUIRED`.
 ```
