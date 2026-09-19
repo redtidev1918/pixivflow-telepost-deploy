@@ -43,9 +43,9 @@ Media code evolution: PixivFlow `src/domain/media/MediaAsset.ts` landed on maste
 最近明确记录的生产 baseline：
 
 ```text
-PixivFlow: 2.38.0 / 66e1379b588c3a2bb635eba06370555a7e490492
+PixivFlow: 2.39.0 / abeccf50fd9bc3a3a4b1c6373536472e92f19b34
 TelePost: 2.45.2
-TelePress: 0.11.0
+TelePress: 0.12.0
 Pixiv Media Proxy: pixiv-media-proxy.redtidev1918.workers.dev (v1)
 ```
 
