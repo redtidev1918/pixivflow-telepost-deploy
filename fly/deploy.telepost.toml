@@ -122,7 +122,11 @@ primary_region = 'iad'
     # the Mini App local preview; edits refresh only the control message.
     # 2.45.2 (2026-09-19): Mini App navigation unified so reviewers/admins can
     # submit alongside review queue (fixes blank admin surface).
-    TELEPOST_IMAGE = 'ghcr.io/redtidev1918/telepost:2.48.0'
+    # 2.49.0 (2026-09-19): delivery asset contract (Step 10) — /api/v1/submissions
+    # accepts optional JSON media_assets {asset_id, kind, source_url, mime_type?},
+    # persists per review_chain_id in media_asset_refs, and GET /api/v1/reviews/{id}
+    # returns them. Backward compatible; local file_id path unchanged.
+    TELEPOST_IMAGE = 'ghcr.io/redtidev1918/telepost:2.49.0'
 
 [[mounts]]
   source = 'data'
