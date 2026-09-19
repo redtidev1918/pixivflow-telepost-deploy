@@ -9,6 +9,8 @@ Authority: Current production evidence overrides this file
 
 任何 Agent 开始工作前必须重新验证关键项，并在完成任务后同步本文件。
 
+下一步推进顺序见 [progressive-delivery-plan.md](./progressive-delivery-plan.md)。
+
 ---
 
 # 1. Status Vocabulary

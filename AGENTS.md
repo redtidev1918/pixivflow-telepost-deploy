@@ -36,9 +36,10 @@
 1. Deploy `AGENTS.md`
 2. `docs/architecture/ecosystem-platform.md`
 3. `docs/operations/current-state.md`
-4. Deploy `CONTRACT.md`
-5. 当前仓库 `AGENTS.md`
-6. 与任务相关的 architecture / operations / development 文档
+4. `docs/operations/progressive-delivery-plan.md`
+6. Deploy `CONTRACT.md`
+7. 当前仓库 `AGENTS.md`
+8. 与任务相关的 architecture / operations / development 文档
 
 如果文档与当前生产事实冲突：
 
