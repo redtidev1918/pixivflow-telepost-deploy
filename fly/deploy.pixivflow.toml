@@ -92,7 +92,8 @@ kill_timeout = 60
   # every trigger arrival (before auth), refusal, rejection and terminal rollup now
   # leaves one structured line, and `schedule.outcome` records a slot's business
   # verdict once, from durable state. This commit is deployed together with the
-  # occurrence move to 10:00/22:00 that it exists to make observable.
+  # occurrence move to 10:00/22:00 that it exists to make observable; the
+  # 2026-09-19 decision later removed the 22:00/22:10 evening occurrences (once per day).
   [build.args]
     # cdaedd0 = v2.20.2 (released 2026-09-14). Converges manual refetch from
     # durable slot state: refetch-outcome notifications go to refetchOutcomeUrl
