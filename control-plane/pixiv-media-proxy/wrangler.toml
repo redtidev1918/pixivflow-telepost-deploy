@@ -1,0 +1,6 @@
+# Pixiv media proxy. Fixed upstream i.pximg.net + Referer injection.
+# Deploy: cd control-plane/pixiv-media-proxy && wrangler deploy
+name = "pixiv-media-proxy"
+main = "src/index.ts"
+compatibility_date = "2025-09-01"
+workers_dev = true
