@@ -83,7 +83,9 @@ fly deploy -c fly/deploy.telepress.toml --ha=false
 `/app/data/production.json`（镜像内置版本化默认值由入口点首次启动时收集到卷，`watchConfig=true` 使
 编辑即热重载）；配置文件里的 `storage` 路径用**相对**路径（`./pixivflow.db`、`./downloads`）——配置
 文件位于卷根，所以它们解析回同一个卷。加载器会「自动修正」配置目录之外的绝对路径，替换成默认的
-`/app/downloads`（卷旁边的**临时**路径）。
+`/app/downloads`（卷旁边的**临时**路径）。**已有卷时重新部署不会覆盖运行副本**：镜像内置新的默认值
+只影响首次初始化的卷；之后的热更新应直接编辑 `/app/data/production.json`，或运维主动把它与镜像默认
+合并。
 
 ## Secrets
 
