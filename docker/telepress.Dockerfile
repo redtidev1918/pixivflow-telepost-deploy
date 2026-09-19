@@ -14,7 +14,7 @@ ENV PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1
 
 # Pin exactly the PyPI release this image is meant to run.
-RUN pip install --no-cache-dir "telepress[api]==0.12.0"
+RUN pip install --no-cache-dir "telepress[api]==0.12.1"
 
 EXPOSE 8000
 CMD ["telepress-server"]
