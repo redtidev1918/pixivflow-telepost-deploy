@@ -47,8 +47,9 @@ TelePost RBAC 演化模型（root/sudoers/Role Binding）见 [telepost-rbac-evol
 PixivFlow: 2.41.0 / 471ff53f25c9e23bc3df5333232746b697ea915a
   (hot-reload config: /app/data/production.json, watchConfig=true;
    download.materializationPolicy wired from config → on-demand novel previews active)
-TelePost: 2.48.0 / de8157a1ef34676b3603c4d8188878847cedea02
-  (miniapp soft-delete own submission history; /botconfig hot-reloads per-bot policy)
+TelePost: 2.49.0 / f18219fa8d4ca049b7b5cff1e8ec038241df45f3
+  (delivery asset contract Step 10: optional JSON media_assets on /api/v1/submissions
+   persisted per review_chain_id in media_asset_refs and returned by GET /api/v1/reviews/{id})
 TelePress: 0.12.1
 Pixiv Media Proxy: pixiv-media-proxy.redtidev1918.workers.dev (v1)
 ```

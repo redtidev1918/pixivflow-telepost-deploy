@@ -1,7 +1,7 @@
 # PixivFlow Ecosystem Media Code Evolution Plan
 
 Status: ACTIVE
-Progress: Step 1 (manifest/proxy) DONE; Steps 2-7 IMPLEMENTED on PixivFlow master (08ec9d0, ec74b21, eea6f7e, 37bd9ca, ff736e9); Step 8 (TelePress MediaReference) DONE + VERIFIED (TelePress 0.12.1 runtime E2E returns assetId; PixivFlow 2.39.0 sends assetId/sourceUrl). Step 9 (on-demand preview via MediaReference manifest) RELEASED + DEPLOYED (PixivFlow v2.41.0/471ff53 live on pixivflow-scheduler; config materializationPolicy=on-demand in production.json) — 真实小说槽位 manifest-only 预览生产观测 EXTERNAL_ACCEPTANCE_REQUIRED. Remaining steps PLANNED.
+Progress: Step 1 (manifest/proxy) DONE; Steps 2-7 IMPLEMENTED on PixivFlow master (08ec9d0, ec74b21, eea6f7e, 37bd9ca, ff736e9); Step 8 (TelePress MediaReference) DONE + VERIFIED (TelePress 0.12.1 runtime E2E returns assetId; PixivFlow 2.39.0 sends assetId/sourceUrl). Step 9 (on-demand preview via MediaReference manifest) RELEASED + DEPLOYED (PixivFlow v2.41.0/471ff53 live on pixivflow-scheduler; config materializationPolicy=on-demand in production.json) — 真实小说槽位 manifest-only 预览生产观测 EXTERNAL_ACCEPTANCE_REQUIRED. Step 10 (TelePost Delivery Asset Contract) IMPLEMENTED in TelePost main (PR #184, release 2.49.0) — 生产部署/runtime 观测待完成；PixivFlow 上游发送 media_assets 仍 PLANNED. Step 11+ PLANNED.
 Scope: PixivFlow / TelePost / TelePress / Deploy
 Type: Code-level migration plan
 
@@ -830,22 +830,30 @@ zip builder
 
 定义最小 delivery contract。
 
-例如：
-
 ```ts
 interface DeliveryMedia {
   assetId: string;
   kind: 'image';
-
   sourceUrl?: string;
-
-  artifact?: {
-    path: string;
-    mimeType?: string;
-    size?: number;
-  };
+  mimeType?: string;
 }
 ```
+
+现状（IMPLEMENTED on TelePost）：
+
+- `POST /api/v1/submissions` 的 JSON `file_id` 路径接受可选 `media_assets` 数组，
+  每项 `{asset_id, kind:'image', source_url, mime_type?}`；重复 `asset_id`、
+  未知 `kind`、非 `http(s)` URL 一律 400 `invalid_media_asset`。
+- refs 按 `review_chain_id` 落库到 SQLite `media_asset_refs`（替换语义，幂等）。
+- `GET /api/v1/reviews/{id}` 返回 `media_assets`。
+- 不传 `media_assets` 行为完全不变；本地 `file_id` 仍走原有
+  `media_json`/`documents_json`。
+
+| 状态 | 说明 |
+|---|---|
+| IMPLEMENTED | TelePost main 已合并（PR #184），release/branch 已发布为 v2.49.0 |
+| PLANNED | PixivFlow 上游按此契约实际发送 `media_assets`（常规插画/小说投递 JSON 或 multipart 路径） |
+| PLANNED | TelePost multipart 子段解析 `media_assets`（当前只做 JSON 路径） |
 
 ---
 
