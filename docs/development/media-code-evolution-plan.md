@@ -1,7 +1,7 @@
 # PixivFlow Ecosystem Media Code Evolution Plan
 
 Status: ACTIVE
-Progress: Step 1 (manifest/proxy) DONE; Steps 2-7 IMPLEMENTED on PixivFlow master (08ec9d0, ec74b21, eea6f7e, 37bd9ca, ff736e9); Step 8 (TelePress MediaReference) DONE + VERIFIED (TelePress 0.12.1 runtime E2E returns assetId; PixivFlow 2.39.0 sends assetId/sourceUrl). Step 9 (on-demand preview via MediaReference manifest) RELEASED + DEPLOYED (PixivFlow v2.41.0/471ff53 live on pixivflow-scheduler; config materializationPolicy=on-demand in production.json) — 真实小说槽位 manifest-only 预览生产观测 EXTERNAL_ACCEPTANCE_REQUIRED. Step 10 (TelePost Delivery Asset Contract) RELEASED + DEPLOYED (TelePost 2.49.0 live on telesubmit-multi-bot; /health version=2.49.0; media_asset_refs VERIFIED on bot1/bot2 生产库). 真实 media_assets 生产 E2E EXTERNAL_ACCEPTANCE_REQUIRED; PixivFlow 上游发送 media_assets 仍 PLANNED. Step 11 (DeliveryPlanner) RELEASED + DEPLOYED (TelePost 2.50.0 live; /health version=2.50.0; GET /api/bot1/v1/reviews/{id}/delivery-plan route VERIFIED 401-without-auth) — 发布链路采纳该 plan 仍 PLANNED. Step 11+ PLANNED.
+Progress: Step 1 (manifest/proxy) DONE; Steps 2-7 IMPLEMENTED on PixivFlow master (08ec9d0, ec74b21, eea6f7e, 37bd9ca, ff736e9); Step 8 (TelePress MediaReference) DONE + VERIFIED (TelePress 0.12.1 runtime E2E returns assetId; PixivFlow 2.39.0 sends assetId/sourceUrl). Step 9 (on-demand preview via MediaReference manifest) RELEASED + DEPLOYED (PixivFlow v2.41.0/471ff53 live on pixivflow-scheduler; config materializationPolicy=on-demand in production.json) — 真实小说槽位 manifest-only 预览生产观测 EXTERNAL_ACCEPTANCE_REQUIRED. Step 10 (TelePost Delivery Asset Contract) RELEASED + DEPLOYED (TelePost 2.49.0 live on telesubmit-multi-bot; /health version=2.49.0; media_asset_refs VERIFIED on bot1/bot2 生产库). 真实 media_assets 生产 E2E EXTERNAL_ACCEPTANCE_REQUIRED; PixivFlow 上游发送 media_assets 仍 PLANNED. Step 11 (DeliveryPlanner) RELEASED + DEPLOYED (TelePost 2.50.0 live; /health version=2.50.0; GET /api/bot1/v1/reviews/{id}/delivery-plan route VERIFIED 401-without-auth) — 发布链路采纳该 plan 仍 PLANNED. Step 12 (TelegramMediaCache) foundation on TelePost main — media_asset_refs extended with file_id/file_unique_id; no new table; Step 13 capture persistent. Step 11+ PLANNED.
 Scope: PixivFlow / TelePost / TelePress / Deploy
 Type: Code-level migration plan
 
@@ -923,6 +923,22 @@ telegram_media_cache
 ```
 
 新表而不调查已有状态归属。
+
+现状（foundation IMPLEMENTED）：
+
+- 不新建 `telegram_media_cache`；复用 `media_asset_refs` 同一行。
+- 表已加 `file_id` / `file_unique_id` 列（幂等 `ADD COLUMN`，兼容存量库）。
+- 新增 `mark_delivered_for_chain(chain_id, delivered)`：确认送达后按
+  `(review_chain_id, asset_id)` 写入 cache，未知 asset 不幻行。
+- `DeliveredMessage` / sender 已捕获 `file_unique_id`；`delivery_ledger.progress_json`
+  同步记录。
+- `GET /api/v1/reviews/{id}` 与 delivery-plan 会透出 `file_id` / `file_unique_id`；
+  planner 在 cache 已有 file_id 时直接 `telegram_file_id`（即使 media_json 为空）。
+
+| 状态 | 说明 |
+|---|---|
+| IMPLEMENTED | Step 12 数据形态 + 提取/落库能力（TelePost main，测试待 release） |
+| PLANNED | 在确认送达链路真正调用 `mark_delivered_for_chain`（当前无生产路径有 media_assets 送达） |
 
 ---
 
