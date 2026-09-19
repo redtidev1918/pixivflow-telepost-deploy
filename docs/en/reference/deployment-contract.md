@@ -74,8 +74,8 @@ A wake-run-exit executor MUST NOT depend on itself for cron scheduling.
 
 | | Provider | Fire time | Expression (UTC) | Is it the execution authority |
 | --- | --- | --- | --- | --- |
-| PRIMARY | cron-job.org | at the occurrence | `0 2,14 * * *` (`bot1-daily`), `10 2,14 * * *` (`bot2-daily`) | No |
-| SECONDARY | Cloudflare Cron (`control-plane/`) | occurrence + 2 minutes | `2 2,14 * * *` (`bot1-daily`), `12 2,14 * * *` (`bot2-daily`) | No |
+| PRIMARY | cron-job.org | at the occurrence | `0 2 * * *` (`bot1-daily`), `10 2 * * *` (`bot2-daily`) | No |
+| SECONDARY | Cloudflare Cron (`control-plane/`) | occurrence + 2 minutes | `2 2 * * *` (`bot1-daily`), `12 2 * * *` (`bot2-daily`) | No |
 | SSOT | PixivFlow durable slot ledger | — | — | **Yes, and it is the only one** |
 
 Both clocks POST **the same** endpoint, and whichever arrives second converges on the slot the first

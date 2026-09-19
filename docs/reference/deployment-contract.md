@@ -68,8 +68,8 @@ A wake-run-exit executor MUST NOT depend on itself for cron scheduling.
 
 | | provider | 触发时刻 | 触发表达式（UTC） | 是执行权威吗 |
 | --- | --- | --- | --- | --- |
-| PRIMARY | cron-job.org | occurrence 准点 | `0 2,14 * * *`（`bot1-daily`）、`10 2,14 * * *`（`bot2-daily`） | 否 |
-| SECONDARY | Cloudflare Cron（`control-plane/`） | occurrence + 2 分钟 | `2 2,14 * * *`（`bot1-daily`）、`12 2,14 * * *`（`bot2-daily`） | 否 |
+| PRIMARY | cron-job.org | occurrence 准点 | `0 2 * * *`（`bot1-daily`）、`10 2 * * *`（`bot2-daily`） | 否 |
+| SECONDARY | Cloudflare Cron（`control-plane/`） | occurrence + 2 分钟 | `2 2 * * *`（`bot1-daily`）、`12 2 * * *`（`bot2-daily`） | 否 |
 | SSOT | PixivFlow durable slot ledger | — | — | **是，且是唯一一个** |
 
 两个时钟 POST 的是**同一个**端点，谁后到就在前一个创建的 slot 上收敛。**冗余时钟 ≠ 第二个调度器**：
