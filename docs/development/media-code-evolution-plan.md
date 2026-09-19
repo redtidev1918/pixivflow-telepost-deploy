@@ -1,7 +1,7 @@
 # PixivFlow Ecosystem Media Code Evolution Plan
 
 Status: ACTIVE
-Progress: Step 1 (manifest/proxy) DONE; Steps 2-7 IMPLEMENTED on PixivFlow master (08ec9d0, ec74b21, eea6f7e, 37bd9ca, ff736e9); Step 8 (TelePress MediaReference) DONE + VERIFIED (TelePress 0.12.1 runtime E2E returns assetId; PixivFlow 2.39.0 sends assetId/sourceUrl). Step 9 (on-demand preview via MediaReference manifest) RELEASED + DEPLOYED (PixivFlow v2.41.0/471ff53 live on pixivflow-scheduler; config materializationPolicy=on-demand in production.json) — 真实小说槽位 manifest-only 预览生产观测 EXTERNAL_ACCEPTANCE_REQUIRED. Step 10 (TelePost Delivery Asset Contract) RELEASED + DEPLOYED (TelePost 2.49.0 live on telesubmit-multi-bot; /health version=2.49.0; media_asset_refs VERIFIED on bot1/bot2 生产库). 真实 media_assets 生产 E2E EXTERNAL_ACCEPTANCE_REQUIRED; PixivFlow 上游发送 media_assets 仍 PLANNED. Step 11+ PLANNED.
+Progress: Step 1 (manifest/proxy) DONE; Steps 2-7 IMPLEMENTED on PixivFlow master (08ec9d0, ec74b21, eea6f7e, 37bd9ca, ff736e9); Step 8 (TelePress MediaReference) DONE + VERIFIED (TelePress 0.12.1 runtime E2E returns assetId; PixivFlow 2.39.0 sends assetId/sourceUrl). Step 9 (on-demand preview via MediaReference manifest) RELEASED + DEPLOYED (PixivFlow v2.41.0/471ff53 live on pixivflow-scheduler; config materializationPolicy=on-demand in production.json) — 真实小说槽位 manifest-only 预览生产观测 EXTERNAL_ACCEPTANCE_REQUIRED. Step 10 (TelePost Delivery Asset Contract) RELEASED + DEPLOYED (TelePost 2.49.0 live on telesubmit-multi-bot; /health version=2.49.0; media_asset_refs VERIFIED on bot1/bot2 生产库). 真实 media_assets 生产 E2E EXTERNAL_ACCEPTANCE_REQUIRED; PixivFlow 上游发送 media_assets 仍 PLANNED. Step 11 (DeliveryPlanner) foundation IMPLEMENTED on TelePost main (telepost/application/delivery_planner.py + GET /api/v1/reviews/{id}/delivery-plan) — 发布链路采纳该 plan 仍 PLANNED. Step 11+ PLANNED.
 Scope: PixivFlow / TelePost / TelePress / Deploy
 Type: Code-level migration plan
 
@@ -874,25 +874,31 @@ DeliveryPlanner
 
 而不是把这些判断继续放 PixivFlow。
 
----
-
-## 15.1 Example
-
-```python
-class DeliveryPlan:
-    strategy: str
-    media: list[...]
-```
-
 策略：
 
 ```text
 telegram_file_id
-telegram_copy
 remote_url
-delivery_variant
-local_upload
+local_upload / delivery_variant（未来）
 ```
+
+现状（foundation IMPLEMENTED）：
+
+- 新增 `telepost/application/delivery_planner.py`：纯函数 `plan_review_media`，
+  输入审核稿本地 `media_json`/`documents_json` 与 `media_asset_refs`，输出
+  `MediaDeliveryPlan`（整体 strategy + 逐项 entry）。
+- 逐项策略：有本地 `file_id` → `telegram_file_id`（零重传）；否则 canonical
+  `source_url` → `remote_url`（Telegram 自取）。
+- 只读 API `GET /api/v1/reviews/{id}/delivery-plan`：审核/owner 权限可读，只返回
+  plan，不改投递状态。
+- 现有 `telepost/telegram/delivery/planner.py`（批次/专辑编排）继续承担“怎么发”，
+  Step 11 planner 承担“用什么源发”。
+
+| 状态 | 说明 |
+|---|---|
+| IMPLEMENTED | planner 模块 + 只读 API + 单元/集成测试（TelePost 934 passed） |
+| PLANNED | 把 plan 接入 ReviewService/PublicationService 的实际发布路径（当 review 只有 `media_assets` 而无 file_id 时按 `remote_url` 投递） |
+| PLANNED | `local_upload` / `delivery_variant` 策略建模（multipart 已走 LocalFile，不重复建模） |
 
 ---
 
