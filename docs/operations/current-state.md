@@ -504,18 +504,9 @@ Acknowledge / Ignore
 
 # 16. Media Architecture
 
-Status: `PLANNED`
+Status: `IN_PROGRESS`
 
-当前仍存在强耦合：
-
-```text
-发现作品
-→ 下载媒体
-→ 传本地文件
-→ 下游消费
-```
-
-目标：
+已开始从“发现→下载→本地文件→下游消费”的强耦合演化：
 
 ```text
 Work
@@ -524,15 +515,18 @@ Artifact
 DeliveryVariant
 ```
 
+已落地（PixivFlow 2.38-2.41）：
+
+* canonical MediaAsset / Artifact / ResolvedWork / MaterializationPolicy
+* cross-service rich-novel manifest（TelePress 用 remote MediaReference，不强制下载）
+* on-demand preview：`download.materializationPolicy` 已从配置接入 DownloadManager
+  （2.41.0），生产配置为 `on-demand`，ZIP/归档仍按需物化
+
 仍未正式完成：
 
-* canonical MediaAsset model
-* cross-service media manifest
-* lazy materialization
-* consumer-driven materialization
-* DeliveryVariant model
-
-这是后续核心架构工作。
+* DeliveryVariant 完整 consumer 模型
+* Telegram side media optimization（file_id 复用等）
+* 生产真实带图 novel 的 on-demand 端到端验收（等待下一次执行端真实运行）
 
 ---
 
@@ -694,7 +688,7 @@ Cloudflare Worker Free
 
 # 22. Rich Novel Preview
 
-Status: `IN_PROGRESS`
+Status: `IN_PROGRESS`（2.41.0 已启用 on-demand 配置；真实带图 novel 端到端验收待下次执行）
 
 最终不应强制：
 
