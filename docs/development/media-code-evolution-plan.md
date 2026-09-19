@@ -1,7 +1,7 @@
 # PixivFlow Ecosystem Media Code Evolution Plan
 
 Status: ACTIVE
-Progress: Step 1 (manifest/proxy) DONE; Steps 2-7 IMPLEMENTED on PixivFlow master (08ec9d0, ec74b21, eea6f7e, 37bd9ca, ff736e9); Step 8 (TelePress MediaReference) DONE + VERIFIED (TelePress 0.12.1 runtime E2E returns assetId; PixivFlow 2.39.0 sends assetId/sourceUrl). Remaining steps PLANNED.
+Progress: Step 1 (manifest/proxy) DONE; Steps 2-7 IMPLEMENTED on PixivFlow master (08ec9d0, ec74b21, eea6f7e, 37bd9ca, ff736e9); Step 8 (TelePress MediaReference) DONE + VERIFIED (TelePress 0.12.1 runtime E2E returns assetId; PixivFlow 2.39.0 sends assetId/sourceUrl). Step 9 (on-demand preview via MediaReference manifest) IMPLEMENTED (PixivFlow PR #154, master 3e2df03; 920 app tests green) — production runtime confirmation EXTERNAL_ACCEPTANCE_REQUIRED. Remaining steps PLANNED.
 Scope: PixivFlow / TelePost / TelePress / Deploy
 Type: Code-level migration plan
 
@@ -776,6 +776,17 @@ send MediaReference[]
 ```
 
 ---
+
+## Current status
+
+IMPLEMENTED — PixivFlow PR #154 (master `3e2df03`):
+
+- on-demand mode no longer requires local inline images; md sidecar uses `renderNovelMarkdownReference` with sourceId-based `images/<sourceId>.<ext>` refs.
+- metadata keeps pending assets (`status: pending`, no `localPath`); `TelePressRichNovel` reads them as a proxy manifest when the work has no downloaded originals.
+- preview publishing proceeds with manifest-only input (`imagePaths.length === 0, manifest.length > 0`).
+- ZIP / full archive still requires downloaded originals (unchanged).
+
+Runtime: EXTERNAL_ACCEPTANCE_REQUIRED — needs a real on-demand novel target production run to confirm proxy-manifest preview E2E.
 
 ## 13.1 Important
 
