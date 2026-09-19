@@ -57,8 +57,8 @@ Telegram 频道
 
 | | provider | 触发时刻（Asia/Shanghai） | 触发表达式（UTC） |
 | --- | --- | --- | --- |
-| **PRIMARY** | cron-job.org | occurrence 准点：`bot1-daily` 10:00 / 22:00，`bot2-daily` 10:10 / 22:10 | `bot1` `0 2,14 * * *`；`bot2` `10 2,14 * * *` |
-| **SECONDARY** | Cloudflare Cron（`control-plane/`） | occurrence + 2 分钟 | `bot1` `2 2,14 * * *`；`bot2` `12 2,14 * * *` |
+| **PRIMARY** | cron-job.org | occurrence 准点：`bot1-daily` 10:00，`bot2-daily` 10:10 | `bot1` `0 2 * * *`；`bot2` `10 2 * * *` |
+| **SECONDARY** | Cloudflare Cron（`control-plane/`） | occurrence + 2 分钟 | `bot1` `2 2 * * *`；`bot2` `12 2 * * *` |
 
 两处声明的机器可读来源是 `control-plane/src/cron-map.ts`（`SECONDARY_OFFSET_MINUTES = 2`）
 与 `control-plane/wrangler.toml`；`control-plane/test/redundant-clock.test.ts` 会因为
@@ -286,8 +286,8 @@ cd control-plane && npx wrangler secret put SCHEDULER_TRIGGER_TOKEN && npx wrang
 #        本仓库不注册它，也不持有它的凭据 —— 独立故障域正是要两个时钟的原因。
 #        建两个 cron job，URL 与 4a 是同一个端点，Authorization: Bearer <SCHEDULER_TRIGGER_TOKEN>
 #
-#          bot1-daily   0 2,14 * * *
-#          bot2-daily  10 2,14 * * *
+#          bot1-daily   0 2 * * *
+#          bot2-daily  10 2 * * *
 #
 #        表达式以 `PRIMARY_CRONS`（control-plane/src/cron-map.ts 导出）为准：
 #        operator runbook 与契约测试读同一份列表，而不是各自抄一遍。

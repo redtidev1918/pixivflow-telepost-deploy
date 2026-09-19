@@ -27,9 +27,9 @@
  * "the clock never fired". See docs/incidents/.
  *
  * Cloudflare cron expressions are UTC. The schedules themselves are declared in
- * Asia/Shanghai in `pixivflow/config/production.json` (bot1-daily at 10:00/22:00,
- * bot2-daily at 10:10/22:10), so each expression below is that schedule's local
- * time minus eight hours, plus the secondary offset.
+ * Asia/Shanghai in `pixivflow/config/production.json` (bot1-daily at 10:00,
+ * bot2-daily at 10:10, once per day), so each expression below is that
+ * schedule's local time minus eight hours, plus the secondary offset.
  *
  * `deployment-contract.test.ts` fails if these keys and the `[triggers] crons`
  * list in wrangler.toml drift apart; `redundant-clock.test.ts` fails if the
@@ -65,17 +65,17 @@ export interface CronBinding {
 export const SECONDARY_OFFSET_MINUTES = 2;
 
 export const CRON_MAP: Record<string, CronBinding> = {
-  '2 2,14 * * *': {
+  '2 2 * * *': {
     scheduleId: 'bot1-daily',
-    label: 'bot1-daily 10:00/22:00 Asia/Shanghai (secondary clock, +2 min)',
+    label: 'bot1-daily 10:00 Asia/Shanghai (secondary clock, +2 min)',
     clockRole: 'secondary',
-    primaryCron: '0 2,14 * * *',
+    primaryCron: '0 2 * * *',
   },
-  '12 2,14 * * *': {
+  '12 2 * * *': {
     scheduleId: 'bot2-daily',
-    label: 'bot2-daily 10:10/22:10 Asia/Shanghai (secondary clock, +2 min)',
+    label: 'bot2-daily 10:10 Asia/Shanghai (secondary clock, +2 min)',
     clockRole: 'secondary',
-    primaryCron: '10 2,14 * * *',
+    primaryCron: '10 2 * * *',
   },
 };
 

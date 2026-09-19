@@ -72,18 +72,16 @@ describe('redundant external clocks', () => {
     }
   });
 
-  it('fires the evening batch at 22:00 / 22:10 Asia/Shanghai, not 18:00 / 18:10', () => {
-    // The 2026-09-13 incident made the evening occurrence the one that matters
-    // most, and the business definition moved to 22:00/22:10. This is the
-    // assertion that would catch a silent slide back to the old schedule.
+  it('fires a single daily batch at 10:00 / 10:10 Asia/Shanghai (scarce-tag, once per day)', () => {
+    // 2026-09-19 decision: once per day for scarce tags (was 10:00 + 22:00).
+    // This asserts the executor schedule stays single-daily.
     const byId = new Map(executorSchedules().map((entry) => [entry.id, entry]));
-    expect(byId.get('bot1-daily')!.cron).toBe('0 10,22 * * *');
-    expect(byId.get('bot2-daily')!.cron).toBe('10 10,22 * * *');
+    expect(byId.get('bot1-daily')!.cron).toBe('0 10 * * *');
+    expect(byId.get('bot2-daily')!.cron).toBe('10 10 * * *');
 
-    // 22:00 / 22:10 Asia/Shanghai is 14:00Z / 14:10Z. The whole architecture
-    // exists to protect that occurrence, so it is asserted in UTC too.
-    expect(toUtc(byId.get('bot1-daily')!.cron, 8)).toBe('0 2,14 * * *');
-    expect(toUtc(byId.get('bot2-daily')!.cron, 8)).toBe('10 2,14 * * *');
+    // 10:00 / 10:10 Asia/Shanghai is 02:00Z / 02:10Z. Asserted in UTC too.
+    expect(toUtc(byId.get('bot1-daily')!.cron, 8)).toBe('0 2 * * *');
+    expect(toUtc(byId.get('bot2-daily')!.cron, 8)).toBe('10 2 * * *');
   });
 
   it('declares exactly one clock binding per schedule, and every one is secondary', () => {
@@ -132,7 +130,7 @@ describe('redundant external clocks', () => {
       expect(PRIMARY_CRONS, entry.id).toContain(primaryUtc);
       expect(bindingForSchedule(entry.id)?.primaryCron, entry.id).toBe(primaryUtc);
     }
-    expect(PRIMARY_CRONS.sort()).toEqual(['0 2,14 * * *', '10 2,14 * * *']);
+    expect(PRIMARY_CRONS.sort()).toEqual(['0 2 * * *', '10 2 * * *']);
   });
 
   it('wrangler.toml registers the secondary crons and only those', () => {
