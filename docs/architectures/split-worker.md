@@ -164,11 +164,11 @@ stopped（省钱，健康 idle）
 **两个卷，一机一个。** 物理卷在这里天然分离；这是主机级隔离最强的形态。注意跨 preset 的不变量
 是**状态命名空间不重叠（SI-7）**，不是「物理卷绝不共享」——共置 preset 共享物理卷但子目录互不相交。
 
-> **路径规则（commit `71b4c7c`）：** 配置里 `PIXIV_DOWNLOADER_CONFIG` 必须是绝对路径
-> （`/app/config/pixivflow.production.json`，随镜像发布），而配置里的**存储路径**必须保持
-> `./data/...`。加载器会把落在配置目录之外的绝对路径改写回默认的 `/app/downloads`——
-> 那在卷之外，机器一 stop 就没了。修复前 SQLite 只是因为默认名恰好也在 `./data/` 下才
-> 侥幸留在卷里。
+> **路径规则（hot-reload config）**：配置里 `PIXIV_DOWNLOADER_CONFIG` 指向卷上的运行副本
+> `/app/data/production.json`（版本化默认值由入口点首次启动时从镜像 `/app/config/...` 拷贝进卷）。
+> 配置里的**存储路径**必须保持相对（`./pixivflow.db`、`./downloads`），并且因为配置文件位于
+> 卷根 `/app/data`，这些相对路径解析回同一个卷。加载器会把落在配置目录之外的绝对路径改写回默认
+> 的 `/app/downloads`——那在卷之外，机器一 stop 就没了。
 
 ---
 

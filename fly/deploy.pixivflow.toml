@@ -137,23 +137,31 @@ kill_timeout = 60
     # + MaterializationPolicy (eager default); rich-novel manifest carries assetId/sourceUrl.
     # 8d72f5f5 = v2.40.0 (released 2026-09-19). On-demand novel preview: manifest-only
     # MediaReference (no local inline image download); ZIP/archive still materializes.
-    PIXIVFLOW_REF = '8d72f5f5761aedcd32109ecb30d79392086f7243'
-    PIXIVFLOW_VERSION = '2.40.0'
+    # 471ff53 = v2.41.0 (released 2026-09-19). Wire download.materializationPolicy from
+    # config into DownloadManager so production.json's on-demand is actually honored, and
+    # split-worker config moves to the volume copy (/app/data/production.json, watchConfig=true).
+    PIXIVFLOW_REF = '471ff53f25c9e23bc3df5333232746b697ea915a'
+    PIXIVFLOW_VERSION = '2.41.0'
 
 [[mounts]]
   source = 'pixivflow_data'
   destination = '/app/data'
 
 [env]
-  # The config *file* is addressed absolutely on purpose: it is baked into the image
-  # and must not depend on the process working directory.
+  # The config *file* is addressed absolutely on purpose and lives on the mounted
+  # volume (runtime-editable). The versioned default baked into the image is
+  # hydrated to /app/data/production.json by the entrypoint on first start.
+  # schedulerRuntime.watchConfig=true means the running process hot-reloads this
+  # file on edit, so operators can tune schedules/targets/delivery/download
+  # without rebuilding the image.
   #
-  # The storage paths *inside* that file are relative on purpose (./data/...) and must
-  # stay that way. PixivFlow's config loader "auto-fixes" absolute paths that fall
-  # outside the config's own directory and rewrites the file in place; the replacement
-  # is its default ./downloads, i.e. /app/downloads -- an EPHEMERAL path next to the
-  # volume, not on it.
-  PIXIV_DOWNLOADER_CONFIG = '/app/config/pixivflow.production.json'
+  # The storage paths *inside* that file stay relative (./pixivflow.db,
+  # ./downloads) and resolve against the config's own directory (/app/data), so
+  # they always land on the volume. PixivFlow's config loader "auto-fixes"
+  # absolute paths that fall outside the config's own directory and rewrites the
+  # file in place; the replacement is its default ./downloads, an EPHEMERAL path
+  # next to the volume, so absolute storage roots are forbidden here.
+  PIXIV_DOWNLOADER_CONFIG = '/app/data/production.json'
   PIXIV_DB_CACHE_KB = '4096'
   NODE_ENV = 'production'
   NODE_OPTIONS = '--max-old-space-size=384'

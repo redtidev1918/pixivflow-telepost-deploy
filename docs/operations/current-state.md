@@ -44,8 +44,11 @@ TelePost RBAC 演化模型（root/sudoers/Role Binding）见 [telepost-rbac-evol
 最近明确记录的生产 baseline：
 
 ```text
-PixivFlow: 2.39.0 / abeccf50fd9bc3a3a4b1c6373536472e92f19b34
-TelePost: 2.47.0
+PixivFlow: 2.41.0 / 471ff53f25c9e23bc3df5333232746b697ea915a
+  (hot-reload config: /app/data/production.json, watchConfig=true;
+   download.materializationPolicy wired from config → on-demand novel previews active)
+TelePost: 2.48.0 / de8157a1ef34676b3603c4d8188878847cedea02
+  (miniapp soft-delete own submission history; /botconfig hot-reloads per-bot policy)
 TelePress: 0.12.1
 Pixiv Media Proxy: pixiv-media-proxy.redtidev1918.workers.dev (v1)
 ```
@@ -787,7 +790,7 @@ Admin DM 当前已有部分 quick action 能力。
 
 # 26. Mini App
 
-Status: `PLANNED / PARTIAL`
+Status: `IN_PROGRESS`
 
 必须拆分：
 
@@ -807,6 +810,9 @@ User Space 目标：
 * 帮助
 * 设置
 * soft delete
+
+TelePost 2.48.0（2026-09-19）已上线「删除已发布投稿的历史」：软删除 `hidden_from_submitter`，
+频道消息不动，进行中投稿不可删除，`DELETE /api/v1/me/submissions/{id}` 仅清洗投稿人侧历史。
 
 “我的投稿”：
 

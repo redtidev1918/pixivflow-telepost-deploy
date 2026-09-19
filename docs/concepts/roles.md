@@ -54,7 +54,7 @@
 | 频道发布与频道凭据 | TelePost | 否 |
 | cron → scheduleId 映射、一次触发 POST | 本仓库 `control-plane/` | 是，且仅此一项 |
 | 部署拓扑（三份 Fly 配置：pixivflow / telepost / telepress）、卷与生命周期参数 | 本仓库 `fly/` | 是 |
-| 运行配置的随镜像发布（`pixivflow/config/production.json`） | 本仓库 | 是 |
+| 运行配置默认值（`pixivflow/config/production.json`）；split-worker 的卷上运行副本 | 本仓库 | 是 |
 | 只读运维与验收脚本 | 本仓库 `scripts/` | 是 |
 
 ## 共置只是物理事实，所有权永不合并
@@ -94,7 +94,7 @@
 | Pixiv 鉴权、限流、榜单/主题/候选排序 | **PixivFlow** 仓库 |
 | 投稿接口契约之外的入站行为、审核 FSM、发布、频道策略 | **TelePost** 仓库 |
 | Telegram 凭据、webhook 注册/删除、Bot 命令 | **TelePost** 仓库 |
-| 运行配置默认值（`schedulerRuntime`、`delivery` 模板等） | 本仓库只**固定**随镜像发布的 `pixivflow/config/production.json`；字段语义以 **PixivFlow** 的 `CONFIG.md` 为准 |
+| 运行配置默认值（`schedulerRuntime`、`delivery` 模板等） | 本仓库只**固定**随镜像发布的 `pixivflow/config/production.json`；split-worker 的运行副本在卷 `/app/data/production.json`（`watchConfig=true`），字段语义以 **PixivFlow** 的 `CONFIG.md` 为准 |
 
 本仓库没有第四条去处。任何「顺手在这里再实现一遍」的改动都会与上表冲突；
 `control-plane/test/no-business-state.test.ts`、`deployment-contract.test.ts`、

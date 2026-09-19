@@ -14,8 +14,8 @@
         "retryDelay": 2000
     },
     "storage": {
-        "databasePath": "./data/pixivflow.db",
-        "downloadDirectory": "./data/downloads",
+        "databasePath": "./pixivflow.db",
+        "downloadDirectory": "./downloads",
         "cacheRetentionDays": 7
     },
     "scheduler": {
@@ -56,7 +56,7 @@
     "schedulerRuntime": {
         "mode": "external",
         "catchUpMissedRuns": false,
-        "watchConfig": false,
+        "watchConfig": true,
         "reloadDebounceMs": 500,
         "queueLimit": 2,
         "trigger": {

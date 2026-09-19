@@ -65,22 +65,34 @@ COPY --from=build /tmp/PIXIVFLOW_COMMIT /app/PIXIVFLOW_COMMIT
 # delivery into TelePost's submission API. It holds no Telegram token and no
 # channel id, so an execution machine cannot post to a channel at all.
 #
-# Its storage paths stay RELATIVE (./data/...), never absolute: the config loader
-# auto-"fixes" absolute paths that fall outside the config directory (/app/config) and
-# rewrites the file in place. Relative paths resolve against the project root /app, so
-# ./data/... lands on the mounted volume /app/data -- and off-volume paths such as
-# /app/downloads never appear.
+# Two copies exist on purpose:
+#   /app/config/pixivflow.production.json  - versioned default baked into the image
+#   /app/data/production.json              - runtime-editable copy on the volume
+# The entrypoint hydrates the volume copy on first start. The scheduler hot-reloads
+# it (schedulerRuntime.watchConfig=true), so an operator edits the volume copy and
+# the running process picks it up without rebuilding the image.
+#
+# The config lives in the volume root (/app/data), and its storage paths stay
+# RELATIVE (./pixivflow.db, ./downloads) so they resolve back into that same
+# volume. PixivFlow's config loader auto-"fixes" absolute paths that fall outside
+# the config's own directory and rewrites the file in place, so absolute volume
+# roots must be avoided (it would rewrite them to an ephemeral /app/downloads).
 COPY pixivflow/config/production.json /app/config/pixivflow.production.json
+COPY docker/pixivflow-scheduler-entrypoint.sh /usr/local/bin/pixivflow-scheduler-entrypoint.sh
+RUN chmod 0755 /usr/local/bin/pixivflow-scheduler-entrypoint.sh
 
 ENV NODE_ENV=production
+# The process reads the runtime config from the mounted volume. The Dockerfile
+# default matches fly/deploy.pixivflow.toml [env] so the scheduler can never start
+# against the baked-in default while claiming to hot-reload.
+ENV PIXIV_DOWNLOADER_CONFIG=/app/data/production.json
 # What the process reports about itself at startup: the version label plus the
 # commit it was actually built from. verify-production.sh compares this against
 # the expected ref, so an image that silently lags is caught by an operator rather
 # than by a half-finished batch.
 ENV PIXIVFLOW_REVISION=${PIXIVFLOW_VERSION}+${PIXIVFLOW_REF}
 EXPOSE 8090
-# `scheduler` mounts the authenticated trigger server and the durable slot runner.
-# The echo is not decoration: verify-images.sh reads PIXIVFLOW_REVISION out of the
-# machine's own startup log to prove the running image is the pinned one. Without it the
-# provenance check silently degrades into "no version line in the logs" and gets skipped.
-CMD ["sh", "-c", "echo \"PIXIVFLOW_REVISION=${PIXIVFLOW_REVISION:-unknown}\"; exec node dist/index.js scheduler"]
+# The entrypoint prints PIXIVFLOW_REVISION then execs `node dist/index.js
+# scheduler`. The echo is not decoration: verify-images.sh reads PIXIVFLOW_REVISION
+# out of the machine's own startup log to prove the running image is the pinned one.
+CMD ["/usr/local/bin/pixivflow-scheduler-entrypoint.sh"]

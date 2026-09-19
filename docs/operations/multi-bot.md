@@ -130,8 +130,9 @@ sudo systemctl restart telepost
 3. 把新 target 加进某个 schedule 的 `targetIds`，或新建一个 schedule。
 
 配置的生效方式**随 preset 不同**：`single-host` / `remote-worker` 下热重载（改文件即可）；
-`split-worker` 下执行端配置随镜像发布（`watchConfig=false`），必须重新构建并部署执行端。
-见 [upgrades.md](upgrades.md)。
+`split-worker` 下执行端配置运行副本在卷上
+（`/app/data/production.json`，`watchConfig=true`），编辑即可热重载；镜像内置默认值变更仍需发布新
+镜像。见 [upgrades.md](upgrades.md)。
 
 ---
 

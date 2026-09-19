@@ -64,7 +64,7 @@ executor lifecycle = wake-run-exit 且 clock = internal
 "schedulerRuntime": {
   "mode": "external",
   "catchUpMissedRuns": false,
-  "watchConfig": false,
+  "watchConfig": true,
   "trigger": { "port": 8090, "graceMinutes": 720 },
   "exitWhenIdle": true,
   "idleGraceMs": 900000,
@@ -76,16 +76,17 @@ executor lifecycle = wake-run-exit 且 clock = internal
 | --- | --- | --- |
 | `mode` | `internal` 进程内 cron；`external` 只在受认证触发时跑 | `external` |
 | `catchUpMissedRuns` | 启动时是否补跑漏掉的时间点 | `false`（绝不回补） |
-| `watchConfig` | 是否运行中热重载配置 | `false`（配置随镜像发布） |
+| `watchConfig` | 是否运行中热重载配置 | `true`（卷上运行副本，编辑即热重载） |
 | `trigger.port` | 触发 HTTP 服务端口 | `8090`（`internal_port` 与之匹配） |
 | `trigger.graceMinutes` | 超过预定时间多久仍允许 resume | `720`（12 小时） |
 | `exitWhenIdle` | 空闲即退出（仅 external 生效） | `true` |
 | `idleGraceMs` | 空闲判定成立后等多久再退出（合并窗口） | `900000`（10 分钟） |
 | `maxLifetimeMs` | 异常长跑的硬上限兜底 | `10800000`（3 小时） |
 
-`watchConfig` 随预设不同：`split-worker` 是 `false`（改配置 = 重建镜像），自托管路径（
-`single-host` / `remote-worker` 的 Compose / systemd）是 `true`（原子替换热重载）。详见
-[upgrades.md](../operations/upgrades.md)。
+`watchConfig` 随部署方式不同：`split-worker` 把运行副本放在卷上
+（`/app/data/production.json`，`watchConfig=true`，编辑即热重载 schedules/targets/delivery/download），
+自托管路径（`single-host` / `remote-worker` 的 Compose / systemd）同样是 `true`（原子替换热重载）。
+详见 [upgrades.md](../operations/upgrades.md)。
 
 ## Slot 模型
 

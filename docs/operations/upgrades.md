@@ -49,15 +49,16 @@ fly logs -a pixivflow-scheduler --no-tail | grep -o 'PIXIVFLOW_REVISION[^ ]*' | 
 
 | 预设 / 平台 | 配置位置 | `watchConfig` | 改配置等于做什么 |
 |---|---|---|---|
-| `split-worker`（Fly 生产执行端） | 镜像内 `/app/config/pixivflow.production.json`，由 `pixivflow/config/production.json` 烘进镜像 | `false` | 改仓库文件 → 重新构建 → 重新部署执行端。运行中没有热重载 |
+| `split-worker`（Fly 生产执行端） | 卷上 `/app/data/production.json`（镜像内置版本化默认值由入口点首次启动收集到卷） | `true` | 直接编辑卷上的运行副本即可热重载 `schedules`/`targets`/`delivery`/`download`；`pixiv`/`network`/`storage` 仍要重启 |
 | `single-host`、`remote-worker`（Compose / systemd 自托管） | 卷上的 `data/pixivflow/config.json` | `true` | 直接原子替换该文件即可热重载。校验通过后一次替换 Cron、targets 与 delivery；无效配置保留旧快照 |
 | 全部预设的 TelePost | 环境变量 + 每 Bot 的 `runtime-policy.json` | — | 环境变量改动需要重启单元；`/botconfig` 写入的策略原子保存并只重载该 Bot（见下） |
 
 两条必须记住的差异：
 
-- 在 `split-worker` 上改 `pixivflow/config/production.json` 而不重建镜像，线上不会有任何变化。
-- 改动配置的 `pixiv`、`network` 或 `storage` 段（Compose/systemd 路径）需要手工重启执行单元：
-  监听器只热替换 `schedules`、`targets` 与 `delivery`。
+- `split-worker` 的运行副本在卷上（`/app/data/production.json`），改镜像内置默认值仍需要发布新镜像；
+  编辑卷上运行副本则可热重载，无需重建。
+- 即使 `watchConfig=true`，改动配置的 `pixiv`、`network` 或 `storage` 段仍需要手工重启执行单元：
+  监听器只热替换 `schedules`、`targets`、`delivery` 与 `download`。
 
 真实 Pixiv 与投稿 Token 用 `${TELEPOST_BOTN_SUBMIT_TOKEN}` 这类占位符写在 JSON 里，由远端
 `.env` 注入。凭据值不写进配置文件，也不出现在任何输出里，规则见 [凭据契约](../concepts/credentials.md)。
@@ -157,7 +158,8 @@ docker compose up -d --no-deps --force-recreate stack
 
 1. 读 CHANGELOG，确认新版本是否改变配置 schema 或环境变量语义。
 2. 本地录下当前固定值：`./deploy version --plane all`。
-3. 在 `split-worker` 上改配置：改 `pixivflow/config/production.json`，与镜像引用一起提交。
+3. 在 `split-worker` 上改配置默认值：改 `pixivflow/config/production.json`，与镜像引用一起提交
+   （线上运行副本在卷 `/app/data/production.json`，`watchConfig=true` 可热重载）。
 4. 自证：`go test ./...`、`(cd control-plane && npm ci && npm test)`、
    `./scripts/validate.sh --examples`。
 5. 升级：`./deploy tp <版本|latest> --platform <fly|compose|systemd>`（先加 `--dry-run`）。

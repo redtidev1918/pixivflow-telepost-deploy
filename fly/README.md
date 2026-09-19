@@ -82,8 +82,9 @@ API 保持 `/api/v1/`，因此无 CORS、无 Cookie 语义问题。完整说明�
 
 ## 更新配置
 
-- PixivFlow 的运行配置随镜像发布（`pixivflow/config/production.json`，`watchConfig=false`）：
-  改配置 = 改提交/版本 + 重新部署执行端。
+- PixivFlow 的运行配置默认值随镜像发布（`pixivflow/config/production.json`）；入口点首次启动时
+  把它拷到卷上的运行副本 `/app/data/production.json`（`watchConfig=true`）。需要热更新时直接编辑
+  卷上副本，运行中的调度器会原子热重载；镜像内置默认值变更仍需发布新镜像。
 - TelePost 的部署默认值来自 `[env]`；OWNER 可在 Telegram 用 `/botconfig` 覆盖单个 Bot，
   只重载对应 Bot。
 - 批量策略：`../scripts/apply_telepost_policy.sh`（会重启机器，不动卷）。
