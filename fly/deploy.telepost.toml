@@ -130,7 +130,10 @@ primary_region = 'iad'
     # how to deliver review media; read-only GET /api/v1/reviews/{id}/delivery-plan
     # returns per-asset strategy (telegram_file_id / remote_url / mixed) without
     # changing publication behavior until an adapter commits to the plan.
-    TELEPOST_IMAGE = 'ghcr.io/redtidev1918/telepost:2.50.0'
+    # 2.51.0 (2026-09-20): Step 12 TelegramMediaCache — media_asset_refs now
+    # carries file_id/file_unique_id (no new table); sender captures
+    # file_unique_id into progress_json; planner reuses cached file_id.
+    TELEPOST_IMAGE = 'ghcr.io/redtidev1918/telepost:2.51.0'
 
 [[mounts]]
   source = 'data'
