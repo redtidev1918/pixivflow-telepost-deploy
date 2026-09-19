@@ -14,6 +14,9 @@ https://<worker>/pixiv/<path>   ->   https://i.pximg.net/<path>
 - Only `GET` / `HEAD`.
 - Only `https://i.pximg.net` is ever reached (path stuck under `/pixiv/`).
 - Fixed `Referer: https://www.pixiv.net/` is injected by this Worker.
+- Client cookies / authorization / arbitrary headers are never forwarded.
+- Only image responses (`Content-Type: image/*`) are returned; upstream
+  errors map to 502 (404 stays 404).
 - Successful responses are edge-cached (`cf.cacheEverything`, TTL 86400s).
 - `/health` returns `{"ok": true, "service": "pixiv-media-proxy"}`.
 
