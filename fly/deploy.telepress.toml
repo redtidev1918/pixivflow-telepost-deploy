@@ -23,6 +23,9 @@ kill_timeout = 60
 # reads env config; secrets are provided via `fly secrets`, never committed.
 [env]
   TELEPRESS_IMAGE_HOST_TYPE = 'catbox'
+  # Fixed-upstream Pixiv media proxy (Cloudflare Worker proxying i.pximg.net).
+  # Optional public value, not a credential; see control-plane/pixiv-media-proxy.
+  TELEPRESS_PIXIV_PROXY_BASE = 'https://pixiv-media-proxy.redtidev1918.workers.dev'
 
 [http_service]
   internal_port = 8000

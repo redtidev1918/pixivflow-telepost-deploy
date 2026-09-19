@@ -40,9 +40,10 @@ Authority: Current production evidence overrides this file
 最近明确记录的生产 baseline：
 
 ```text
-PixivFlow: 2.37.0 / a17343519198d397636cc3192a426c4d3c292fcf
+PixivFlow: 2.38.0 / 66e1379b588c3a2bb635eba06370555a7e490492
 TelePost: 2.45.2
-TelePress: 0.10.0
+TelePress: 0.11.0
+Pixiv Media Proxy: pixiv-media-proxy.redtidev1918.workers.dev (v1)
 ```
 
 这是 handoff 信息。

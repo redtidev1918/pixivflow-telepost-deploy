@@ -130,9 +130,11 @@ kill_timeout = 60
     # Recovery retry actions (server proxy + single frontend retry button on
     # terminal failed/no_candidate/duplicate cells) + novel rich-text type drift
     # fix (pixiv-client dist.d.ts lags package source; local structural types).
-    # No scheduling change.
-    PIXIVFLOW_REF = 'a17343519198d397636cc3192a426c4d3c292fcf'
-    PIXIVFLOW_VERSION = '2.37.0'
+    # 66e1379b = v2.38.0 (released 2026-09-19). Send novel metadata url+localPath
+    # as rich-novel manifest so TelePress can rewrite Pixiv CDN sources to the
+    # fixed-upstream media proxy; local images still shipped for fallback.
+    PIXIVFLOW_REF = '66e1379b588c3a2bb635eba06370555a7e490492'
+    PIXIVFLOW_VERSION = '2.38.0'
 
 [[mounts]]
   source = 'pixivflow_data'
