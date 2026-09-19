@@ -80,11 +80,12 @@ runtime (`PIXIVFLOW_REVISION=${PIXIVFLOW_VERSION}+${PIXIVFLOW_REF}`), so pinning
 `PIXIVFLOW_REF` outright. Changing `PIXIVFLOW_REF` deploys an unreleased commit to the executor
 (`docker/pixivflow-scheduler.Dockerfile` clones and builds that commit).
 
-Path rules (`fly/deploy.pixivflow.toml`): `PIXIV_DOWNLOADER_CONFIG` uses an **absolute** path
-(baked into the image, independent of the working directory); `storage` paths inside the config
-file use **relative** paths (`./data/...`) — PixivFlow's loader "auto-corrects" absolute paths
-outside the config directory by substituting the default `/app/downloads` (a **temporary** path next
-to the volume).
+Path rules (`fly/deploy.pixivflow.toml`): `PIXIV_DOWNLOADER_CONFIG` is an **absolute** path to the
+runtime copy on the volume (`/app/data/production.json`; hydrated from the image default on first
+start, `watchConfig=true`); `storage` paths inside the config use **relative** paths
+(`./pixivflow.db`, `./downloads`) and resolve back into the same volume. PixivFlow's loader
+"auto-corrects" absolute paths outside the config directory by substituting the default
+`/app/downloads` (a **temporary** path next to the volume).
 
 ## Secrets
 

@@ -79,10 +79,11 @@ fly deploy -c fly/deploy.telepress.toml --ha=false
 无法回答。`scripts/verify-images.sh` 会直接拒绝非提交号的 `PIXIVFLOW_REF`。改 `PIXIVFLOW_REF`
 即可把未发布提交部署到执行端（`docker/pixivflow-scheduler.Dockerfile` 按该提交号克隆编译）。
 
-路径规则（`fly/deploy.pixivflow.toml`）：`PIXIV_DOWNLOADER_CONFIG` 用**绝对**路径（烘焙进镜像，
-不依赖工作目录）；配置文件里的 `storage` 路径用**相对**路径（`./data/...`）——PixivFlow 的
-加载器会「自动修正」配置目录之外的绝对路径，替换成默认的 `/app/downloads`（卷旁边的**临时**
-路径）。
+路径规则（`fly/deploy.pixivflow.toml`）：`PIXIV_DOWNLOADER_CONFIG` 用**绝对**路径指向卷上的运行副本
+`/app/data/production.json`（镜像内置版本化默认值由入口点首次启动时收集到卷，`watchConfig=true` 使
+编辑即热重载）；配置文件里的 `storage` 路径用**相对**路径（`./pixivflow.db`、`./downloads`）——配置
+文件位于卷根，所以它们解析回同一个卷。加载器会「自动修正」配置目录之外的绝对路径，替换成默认的
+`/app/downloads`（卷旁边的**临时**路径）。
 
 ## Secrets
 

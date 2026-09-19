@@ -180,12 +180,12 @@ runs).
 invariant is **non-overlapping state namespaces (SI-7)**, not "physical volumes are never shared":
 co-located presets share one physical volume with disjoint subdirectories.
 
-> **Path rule (commit `71b4c7c`):** in the configuration, `PIXIV_DOWNLOADER_CONFIG` must be an
-> absolute path (`/app/config/pixivflow.production.json`, shipped with the image), while the
-> **storage paths inside** the configuration must stay `./data/...`. The loader rewrites absolute
-> paths that fall outside the configuration directory back to its default `/app/downloads` — which
-> is outside the volume, and disappears the moment the machine stops. Before the fix, SQLite only
-> stayed on the volume by luck, because its default name happens to sit under `./data/` too.
+> **Path rule (hot-reload config):** `PIXIV_DOWNLOADER_CONFIG` points at the runtime copy on the
+> volume (`/app/data/production.json`; the versioned default is copied from the image on first
+> start). The **storage paths inside** the configuration must stay relative (`./pixivflow.db`,
+> `./downloads`) and, because the config lives in the volume root, they resolve back into the same
+> volume. The loader rewrites absolute paths that fall outside the configuration directory back to
+> its default `/app/downloads` — outside the volume and lost when the machine stops.
 
 ---
 

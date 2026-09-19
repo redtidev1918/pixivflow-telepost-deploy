@@ -102,7 +102,7 @@
 
 | 变量 | 默认 | 说明 |
 | --- | --- | --- |
-| `PIXIV_DOWNLOADER_CONFIG` | `/app/data/pixivflow/config.json` | 运行配置路径 |
+| `PIXIV_DOWNLOADER_CONFIG` | `/app/data/production.json`（split-worker）；`/app/data/pixivflow/config.json`（自托管） | 运行配置路径 |
 | `PIXIV_REFRESH_TOKEN` | 空 | Pixiv 刷新令牌 |
 | `TELEPOST_API_BASE_URL` | `http://telepost:8080` | 投递基址 |
 | `TELEPOST_BOT{N}_SUBMIT_TOKEN` | 空 | 与业务端同值 |
