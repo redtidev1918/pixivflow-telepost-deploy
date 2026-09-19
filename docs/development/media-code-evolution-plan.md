@@ -1558,6 +1558,10 @@ README
 
 # 36. Community Research Rule
 
+已落地调研结论见 [community-reference-position.md](../architecture/community-reference-position.md)。
+
+
+
 每新增通用技术层前必须重新调查社区方案。
 
 例如：

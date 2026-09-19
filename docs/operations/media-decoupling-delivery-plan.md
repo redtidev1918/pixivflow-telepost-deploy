@@ -4,6 +4,7 @@ Status: ACTIVE
 Scope: PixivFlow / TelePress / TelePost / Deploy
 Goal: 从 Pixiv 图片反代问题逐步演进到完整媒体解耦架构
 代码级迁移顺序见 [media-code-evolution-plan.md](../development/media-code-evolution-plan.md)。
+社区模式/成熟度参考见 [community-reference-position.md](../architecture/community-reference-position.md)。
 
 ---
 
