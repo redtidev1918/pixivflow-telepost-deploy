@@ -53,7 +53,8 @@ TelePost: 2.50.0 / 2c2cd547aaa440949ba3eb40b6686079b9305f9a
    Step 11 DeliveryPlanner foundation: TelePost decides media source strategy via
    read-only GET /api/v1/reviews/{id}/delivery-plan)
   (2.50.0 deployed: /health version=2.50.0; media_asset_refs table VERIFIED on bot1/bot2
-   production DB; production E2E with a real media_assets payload remains EXTERNAL_ACCEPTANCE_REQUIRED;
+   production DB; GET /api/bot1/v1/reviews/{id}/delivery-plan route VERIFIED 401-without-auth;
+   production E2E with a real media_assets payload remains EXTERNAL_ACCEPTANCE_REQUIRED;
    publication adoption of the Step 11 plan PLANNED)
 TelePress: 0.12.1
 Pixiv Media Proxy: pixiv-media-proxy.redtidev1918.workers.dev (v1)
