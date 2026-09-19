@@ -115,7 +115,9 @@ primary_region = 'iad'
     # 2.40.0 (2026-09-18): /status + /pin_status Telegram commands (渠道置顶区).
     # 2.40.1 (2026-09-18): manual recovery uses UUID requestId PixivFlow accepts
     # and surfaces real failure reason instead of generic error.
-    TELEPOST_IMAGE = 'ghcr.io/redtidev1918/telepost:2.40.1'
+    # 2.41.0 (2026-09-19): refined native-chat submission UX (stepped prompts,
+    # upload progress, document-filename preview, clear next-step notices).
+    TELEPOST_IMAGE = 'ghcr.io/redtidev1918/telepost:2.41.0'
 
 [[mounts]]
   source = 'data'
