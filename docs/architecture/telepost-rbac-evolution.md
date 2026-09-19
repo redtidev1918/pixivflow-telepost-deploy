@@ -1,6 +1,6 @@
 # TelePost RBAC Evolution Plan
 
-Status: PLANNED
+Status: IMPLEMENTED (env baseline + SQLite Role Bindings; Admin API live)
 Scope: TelePost
 Type: Architecture evolution / RBAC model
 
@@ -170,7 +170,7 @@ Permission
 Audit
 ```
 
-实现时机：Admin Control Plane 阶段一起正式化，不单独赶在眼前。
+已随 Admin Control Plane 落地（TelePost PR #179 已合并）：`role_bindings` SQLite 表 + `GET/POST/DELETE /api/v1/admin/roles`，`OWNER_ID` 仍是 break-glass root，`ADMIN_IDS` 保持 env 基线。
 
 ---
 
@@ -188,5 +188,6 @@ if user_id == OWNER_ID
 
 # 8. Status
 
-- 当前模型：VERIFIED（生产现状）
-- Role Binding / Permission 模型：PLANNED（Admin Control Plane 一起做）
+- env 基线（OWNER_ID/ADMIN_IDS）：VERIFIED（生产现状）
+- Role Binding 模型：IMPLEMENTED（TelePost 合并后生效；DB 表 + admin API + 实时角色派生；测试 919 passed）
+- Permission 模型：PLANNED（Reviewer/Admin 集中权限函数已存在，完整 permission 资产化随后续 Admin Control Plane 迭代）
