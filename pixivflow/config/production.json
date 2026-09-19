@@ -1,319 +1,320 @@
 {
-  "logLevel": "info",
-  "pixiv": {
-    "clientId": "${PIXIV_CLIENT_ID}",
-    "clientSecret": "${PIXIV_CLIENT_SECRET}",
-    "deviceToken": "${PIXIV_DEVICE_TOKEN}",
-    "refreshToken": "${PIXIV_REFRESH_TOKEN}",
-    "userAgent": "PixivAndroidApp/5.0.234 (Android 11; Pixel 6)",
-    "accountId": "default"
-  },
-  "network": {
-    "timeoutMs": 30000,
-    "retries": 3,
-    "retryDelay": 2000
-  },
-  "storage": {
-    "databasePath": "./data/pixivflow.db",
-    "downloadDirectory": "./data/downloads",
-    "cacheRetentionDays": 7
-  },
-  "scheduler": {
-    "enabled": false,
-    "cron": "0 3 * * *",
-    "timezone": "Asia/Shanghai"
-  },
-  "schedules": [
-    {
-      "id": "bot1-daily",
-      "name": "Bot1 每日 10:00 ボテ腹 非AI插画 + 中文小说 (NSFW)",
-      "enabled": true,
-      "cron": "0 10 * * *",
-      "timezone": "Asia/Shanghai",
-      "targetIds": [
-        "bot1-illust-botefuku",
-        "bot1-novel-botefuku"
-      ],
-      "timeout": 1800000,
-      "maxConsecutiveFailures": 5,
-      "failureRetryDelay": 30000
+    "logLevel": "info",
+    "pixiv": {
+        "clientId": "${PIXIV_CLIENT_ID}",
+        "clientSecret": "${PIXIV_CLIENT_SECRET}",
+        "deviceToken": "${PIXIV_DEVICE_TOKEN}",
+        "refreshToken": "${PIXIV_REFRESH_TOKEN}",
+        "userAgent": "PixivAndroidApp/5.0.234 (Android 11; Pixel 6)",
+        "accountId": "default"
     },
-    {
-      "id": "bot2-daily",
-      "name": "Bot2 每日 10:10 丸呑み 非AI插画 + 中文小说 (NSFW)",
-      "enabled": true,
-      "cron": "10 10 * * *",
-      "timezone": "Asia/Shanghai",
-      "targetIds": [
-        "bot2-illust-marunomi",
-        "bot2-novel-marunomi"
-      ],
-      "timeout": 1800000,
-      "maxConsecutiveFailures": 5,
-      "failureRetryDelay": 30000
-    }
-  ],
-  "schedulerRuntime": {
-    "mode": "external",
-    "catchUpMissedRuns": false,
-    "watchConfig": false,
-    "reloadDebounceMs": 500,
-    "queueLimit": 2,
-    "trigger": {
-      "port": 8090,
-      "host": "0.0.0.0",
-      "graceMinutes": 720
+    "network": {
+        "timeoutMs": 30000,
+        "retries": 3,
+        "retryDelay": 2000
     },
-    "exitWhenIdle": true,
-    "idleGraceMs": 900000,
-    "maxLifetimeMs": 10800000,
-    "resourceGovernance": {
-      "pixivAccounts": {
-        "default": {
-          "maxConcurrency": 1
-        }
-      }
-    }
-  },
-  "download": {
-    "concurrency": 1,
-    "requestDelay": 1000,
-    "dynamicConcurrency": false,
-    "minConcurrency": 1,
-    "maxRetries": 3,
-    "retryDelay": 3000,
-    "timeout": 90000,
-    "maxFallbackStages": 3
-  },
-  "delivery": {
-    "targets": {
-      "bot1-submit": {
-        "type": "httpMultipart",
-        "url": "${TELEPOST_API_BASE_URL}/api/bot1/v1/submissions",
-        "readinessUrl": "${TELEPOST_API_BASE_URL}/api/bot1/v1/health",
-        "refetchOutcomeUrl": "${TELEPOST_API_BASE_URL}/api/bot1/v1/refetch/outcomes",
-        "headers": {
-          "Authorization": "Bearer ${TELEPOST_BOT1_SUBMIT_TOKEN}"
-        },
-        "fileField": "files",
-        "previewFileField": "previews",
-        "fields": {
-          "tags": "{{workTags}},{{topicTag}}",
-          "title": "{{title}}",
-          "note": "📅 {{rankingDate}} · ⭐ {{bookmarkCount}} · 👁 {{viewCount}}\n🏷 {{topicTag}} · Pixiv 分级：{{xRestrictLabel}}",
-          "link": "{{link}}",
-          "spoiler": "{{spoiler}}",
-          "idempotency_key": "{{idempotencyKey}}",
-          "target_id": "{{targetId}}",
-          "work_type": "{{type}}",
-          "pixiv_id": "{{pixivId}}",
-          "source_label": "PixivFlow · {{slotName}}",
-          "source_ref": "{{executionId}}",
-          "scheduled_at": "{{occurrenceAt}}",
-          "refetch_request_id": "{{refetchRequestId}}"
-        },
-        "maxAttempts": 3,
-        "retryDelayMs": 3000,
-        "scheduleOutcomeUrl": "${TELEPOST_API_BASE_URL}/api/bot1/v1/schedule/outcomes"
-      },
-      "bot2-submit": {
-        "type": "httpMultipart",
-        "url": "${TELEPOST_API_BASE_URL}/api/bot2/v1/submissions",
-        "readinessUrl": "${TELEPOST_API_BASE_URL}/api/bot2/v1/health",
-        "refetchOutcomeUrl": "${TELEPOST_API_BASE_URL}/api/bot2/v1/refetch/outcomes",
-        "headers": {
-          "Authorization": "Bearer ${TELEPOST_BOT2_SUBMIT_TOKEN}"
-        },
-        "fileField": "files",
-        "previewFileField": "previews",
-        "fields": {
-          "tags": "{{workTags}},{{topicTag}}",
-          "title": "{{title}}",
-          "note": "📅 {{rankingDate}} · ⭐ {{bookmarkCount}} · 👁 {{viewCount}}\n🏷 {{topicTag}} · Pixiv 分级：{{xRestrictLabel}}",
-          "link": "{{link}}",
-          "spoiler": "{{spoiler}}",
-          "idempotency_key": "{{idempotencyKey}}",
-          "target_id": "{{targetId}}",
-          "work_type": "{{type}}",
-          "pixiv_id": "{{pixivId}}",
-          "source_label": "PixivFlow · {{slotName}}",
-          "source_ref": "{{executionId}}",
-          "scheduled_at": "{{occurrenceAt}}",
-          "refetch_request_id": "{{refetchRequestId}}"
-        },
-        "maxAttempts": 3,
-        "retryDelayMs": 3000,
-        "scheduleOutcomeUrl": "${TELEPOST_API_BASE_URL}/api/bot2/v1/schedule/outcomes"
-      }
-    }
-  },
-  "targets": [
-    {
-      "id": "bot1-illust-botefuku",
-      "type": "illustration",
-      "mode": "topic",
-      "limit": 1,
-      "storageMode": "cache",
-      "delivery": {
-        "target": "bot1-submit"
-      },
-      "topic": "ボテ腹",
-      "date": "YESTERDAY",
-      "topicDiscovery": {
-        "includeR18": true
-      },
-      "excludeAI": true,
-      "aiMetadataCheck": true,
-      "maxPageCount": 30,
-      "noMatchPolicy": {
-        "lookbackDays": 3,
-        "notify": false
-      },
-      "topicProfile": {
-        "primary": [
-          "ボテ腹"
-        ],
-        "related": [],
-        "strategy": {
-          "freshnessWeight": 0.4,
-          "popularityWeight": 0.3
-        },
-        "inventory": {
-          "enabled": true,
-          "maxAgeDays": 30,
-          "reserveSize": 20,
-          "fallback": true
-        }
-      }
+    "storage": {
+        "databasePath": "./data/pixivflow.db",
+        "downloadDirectory": "./data/downloads",
+        "cacheRetentionDays": 7
     },
-    {
-      "id": "bot1-novel-botefuku",
-      "type": "novel",
-      "mode": "topic",
-      "limit": 1,
-      "storageMode": "cache",
-      "delivery": {
-        "target": "bot1-submit",
-        "richNovelPreview": {
-          "url": "http://telepress-publish.flycast/publish/rich-novel",
-          "headers": {
-            "Authorization": "Bearer ${TELEPRESS_API_KEY}"
-          },
-          "field": "novel_preview_url"
-        }
-      },
-      "topic": "ボテ腹",
-      "date": "YESTERDAY",
-      "topicDiscovery": {
-        "includeR18": true
-      },
-      "languageFilter": "chinese",
-      "languageCandidateLimit": 20,
-      "strictLanguageFilter": true,
-      "noMatchPolicy": {
-        "lookbackDays": 3,
-        "notify": false
-      },
-      "topicProfile": {
-        "primary": [
-          "ボテ腹"
-        ],
-        "related": [],
-        "strategy": {
-          "freshnessWeight": 0.4,
-          "popularityWeight": 0.3
-        },
-        "inventory": {
-          "enabled": true,
-          "maxAgeDays": 30,
-          "reserveSize": 20,
-          "fallback": true
-        }
-      }
+    "scheduler": {
+        "enabled": false,
+        "cron": "0 3 * * *",
+        "timezone": "Asia/Shanghai"
     },
-    {
-      "id": "bot2-illust-marunomi",
-      "type": "illustration",
-      "mode": "topic",
-      "limit": 1,
-      "storageMode": "cache",
-      "delivery": {
-        "target": "bot2-submit"
-      },
-      "topic": "丸呑み",
-      "date": "YESTERDAY",
-      "topicDiscovery": {
-        "includeR18": true
-      },
-      "excludeAI": true,
-      "aiMetadataCheck": true,
-      "maxPageCount": 30,
-      "noMatchPolicy": {
-        "lookbackDays": 3,
-        "notify": false
-      },
-      "topicProfile": {
-        "primary": [
-          "丸呑み"
-        ],
-        "related": [],
-        "strategy": {
-          "freshnessWeight": 0.4,
-          "popularityWeight": 0.3
+    "schedules": [
+        {
+            "id": "bot1-daily",
+            "name": "Bot1 每日 10:00 ボテ腹 非AI插画 + 中文小说 (NSFW)",
+            "enabled": true,
+            "cron": "0 10 * * *",
+            "timezone": "Asia/Shanghai",
+            "targetIds": [
+                "bot1-illust-botefuku",
+                "bot1-novel-botefuku"
+            ],
+            "timeout": 1800000,
+            "maxConsecutiveFailures": 5,
+            "failureRetryDelay": 30000
         },
-        "inventory": {
-          "enabled": true,
-          "maxAgeDays": 30,
-          "reserveSize": 20,
-          "fallback": true
+        {
+            "id": "bot2-daily",
+            "name": "Bot2 每日 10:10 丸呑み 非AI插画 + 中文小说 (NSFW)",
+            "enabled": true,
+            "cron": "10 10 * * *",
+            "timezone": "Asia/Shanghai",
+            "targetIds": [
+                "bot2-illust-marunomi",
+                "bot2-novel-marunomi"
+            ],
+            "timeout": 1800000,
+            "maxConsecutiveFailures": 5,
+            "failureRetryDelay": 30000
         }
-      }
+    ],
+    "schedulerRuntime": {
+        "mode": "external",
+        "catchUpMissedRuns": false,
+        "watchConfig": false,
+        "reloadDebounceMs": 500,
+        "queueLimit": 2,
+        "trigger": {
+            "port": 8090,
+            "host": "0.0.0.0",
+            "graceMinutes": 720
+        },
+        "exitWhenIdle": true,
+        "idleGraceMs": 900000,
+        "maxLifetimeMs": 10800000,
+        "resourceGovernance": {
+            "pixivAccounts": {
+                "default": {
+                    "maxConcurrency": 1
+                }
+            }
+        }
     },
-    {
-      "id": "bot2-novel-marunomi",
-      "type": "novel",
-      "mode": "topic",
-      "limit": 1,
-      "storageMode": "cache",
-      "delivery": {
-        "target": "bot2-submit",
-        "richNovelPreview": {
-          "url": "http://telepress-publish.flycast/publish/rich-novel",
-          "headers": {
-            "Authorization": "Bearer ${TELEPRESS_API_KEY}"
-          },
-          "field": "novel_preview_url"
+    "download": {
+        "concurrency": 1,
+        "requestDelay": 1000,
+        "dynamicConcurrency": false,
+        "minConcurrency": 1,
+        "maxRetries": 3,
+        "retryDelay": 3000,
+        "timeout": 90000,
+        "maxFallbackStages": 3,
+        "materializationPolicy": "on-demand"
+    },
+    "delivery": {
+        "targets": {
+            "bot1-submit": {
+                "type": "httpMultipart",
+                "url": "${TELEPOST_API_BASE_URL}/api/bot1/v1/submissions",
+                "readinessUrl": "${TELEPOST_API_BASE_URL}/api/bot1/v1/health",
+                "refetchOutcomeUrl": "${TELEPOST_API_BASE_URL}/api/bot1/v1/refetch/outcomes",
+                "headers": {
+                    "Authorization": "Bearer ${TELEPOST_BOT1_SUBMIT_TOKEN}"
+                },
+                "fileField": "files",
+                "previewFileField": "previews",
+                "fields": {
+                    "tags": "{{workTags}},{{topicTag}}",
+                    "title": "{{title}}",
+                    "note": "📅 {{rankingDate}} · ⭐ {{bookmarkCount}} · 👁 {{viewCount}}\n🏷 {{topicTag}} · Pixiv 分级：{{xRestrictLabel}}",
+                    "link": "{{link}}",
+                    "spoiler": "{{spoiler}}",
+                    "idempotency_key": "{{idempotencyKey}}",
+                    "target_id": "{{targetId}}",
+                    "work_type": "{{type}}",
+                    "pixiv_id": "{{pixivId}}",
+                    "source_label": "PixivFlow · {{slotName}}",
+                    "source_ref": "{{executionId}}",
+                    "scheduled_at": "{{occurrenceAt}}",
+                    "refetch_request_id": "{{refetchRequestId}}"
+                },
+                "maxAttempts": 3,
+                "retryDelayMs": 3000,
+                "scheduleOutcomeUrl": "${TELEPOST_API_BASE_URL}/api/bot1/v1/schedule/outcomes"
+            },
+            "bot2-submit": {
+                "type": "httpMultipart",
+                "url": "${TELEPOST_API_BASE_URL}/api/bot2/v1/submissions",
+                "readinessUrl": "${TELEPOST_API_BASE_URL}/api/bot2/v1/health",
+                "refetchOutcomeUrl": "${TELEPOST_API_BASE_URL}/api/bot2/v1/refetch/outcomes",
+                "headers": {
+                    "Authorization": "Bearer ${TELEPOST_BOT2_SUBMIT_TOKEN}"
+                },
+                "fileField": "files",
+                "previewFileField": "previews",
+                "fields": {
+                    "tags": "{{workTags}},{{topicTag}}",
+                    "title": "{{title}}",
+                    "note": "📅 {{rankingDate}} · ⭐ {{bookmarkCount}} · 👁 {{viewCount}}\n🏷 {{topicTag}} · Pixiv 分级：{{xRestrictLabel}}",
+                    "link": "{{link}}",
+                    "spoiler": "{{spoiler}}",
+                    "idempotency_key": "{{idempotencyKey}}",
+                    "target_id": "{{targetId}}",
+                    "work_type": "{{type}}",
+                    "pixiv_id": "{{pixivId}}",
+                    "source_label": "PixivFlow · {{slotName}}",
+                    "source_ref": "{{executionId}}",
+                    "scheduled_at": "{{occurrenceAt}}",
+                    "refetch_request_id": "{{refetchRequestId}}"
+                },
+                "maxAttempts": 3,
+                "retryDelayMs": 3000,
+                "scheduleOutcomeUrl": "${TELEPOST_API_BASE_URL}/api/bot2/v1/schedule/outcomes"
+            }
         }
-      },
-      "topic": "丸呑み",
-      "date": "YESTERDAY",
-      "topicDiscovery": {
-        "includeR18": true
-      },
-      "languageFilter": "chinese",
-      "languageCandidateLimit": 20,
-      "strictLanguageFilter": true,
-      "noMatchPolicy": {
-        "lookbackDays": 3,
-        "notify": false
-      },
-      "topicProfile": {
-        "primary": [
-          "丸呑み"
-        ],
-        "related": [],
-        "strategy": {
-          "freshnessWeight": 0.4,
-          "popularityWeight": 0.3
+    },
+    "targets": [
+        {
+            "id": "bot1-illust-botefuku",
+            "type": "illustration",
+            "mode": "topic",
+            "limit": 1,
+            "storageMode": "cache",
+            "delivery": {
+                "target": "bot1-submit"
+            },
+            "topic": "ボテ腹",
+            "date": "YESTERDAY",
+            "topicDiscovery": {
+                "includeR18": true
+            },
+            "excludeAI": true,
+            "aiMetadataCheck": true,
+            "maxPageCount": 30,
+            "noMatchPolicy": {
+                "lookbackDays": 3,
+                "notify": false
+            },
+            "topicProfile": {
+                "primary": [
+                    "ボテ腹"
+                ],
+                "related": [],
+                "strategy": {
+                    "freshnessWeight": 0.4,
+                    "popularityWeight": 0.3
+                },
+                "inventory": {
+                    "enabled": true,
+                    "maxAgeDays": 30,
+                    "reserveSize": 20,
+                    "fallback": true
+                }
+            }
         },
-        "inventory": {
-          "enabled": true,
-          "maxAgeDays": 30,
-          "reserveSize": 20,
-          "fallback": true
+        {
+            "id": "bot1-novel-botefuku",
+            "type": "novel",
+            "mode": "topic",
+            "limit": 1,
+            "storageMode": "cache",
+            "delivery": {
+                "target": "bot1-submit",
+                "richNovelPreview": {
+                    "url": "http://telepress-publish.flycast/publish/rich-novel",
+                    "headers": {
+                        "Authorization": "Bearer ${TELEPRESS_API_KEY}"
+                    },
+                    "field": "novel_preview_url"
+                }
+            },
+            "topic": "ボテ腹",
+            "date": "YESTERDAY",
+            "topicDiscovery": {
+                "includeR18": true
+            },
+            "languageFilter": "chinese",
+            "languageCandidateLimit": 20,
+            "strictLanguageFilter": true,
+            "noMatchPolicy": {
+                "lookbackDays": 3,
+                "notify": false
+            },
+            "topicProfile": {
+                "primary": [
+                    "ボテ腹"
+                ],
+                "related": [],
+                "strategy": {
+                    "freshnessWeight": 0.4,
+                    "popularityWeight": 0.3
+                },
+                "inventory": {
+                    "enabled": true,
+                    "maxAgeDays": 30,
+                    "reserveSize": 20,
+                    "fallback": true
+                }
+            }
+        },
+        {
+            "id": "bot2-illust-marunomi",
+            "type": "illustration",
+            "mode": "topic",
+            "limit": 1,
+            "storageMode": "cache",
+            "delivery": {
+                "target": "bot2-submit"
+            },
+            "topic": "丸呑み",
+            "date": "YESTERDAY",
+            "topicDiscovery": {
+                "includeR18": true
+            },
+            "excludeAI": true,
+            "aiMetadataCheck": true,
+            "maxPageCount": 30,
+            "noMatchPolicy": {
+                "lookbackDays": 3,
+                "notify": false
+            },
+            "topicProfile": {
+                "primary": [
+                    "丸呑み"
+                ],
+                "related": [],
+                "strategy": {
+                    "freshnessWeight": 0.4,
+                    "popularityWeight": 0.3
+                },
+                "inventory": {
+                    "enabled": true,
+                    "maxAgeDays": 30,
+                    "reserveSize": 20,
+                    "fallback": true
+                }
+            }
+        },
+        {
+            "id": "bot2-novel-marunomi",
+            "type": "novel",
+            "mode": "topic",
+            "limit": 1,
+            "storageMode": "cache",
+            "delivery": {
+                "target": "bot2-submit",
+                "richNovelPreview": {
+                    "url": "http://telepress-publish.flycast/publish/rich-novel",
+                    "headers": {
+                        "Authorization": "Bearer ${TELEPRESS_API_KEY}"
+                    },
+                    "field": "novel_preview_url"
+                }
+            },
+            "topic": "丸呑み",
+            "date": "YESTERDAY",
+            "topicDiscovery": {
+                "includeR18": true
+            },
+            "languageFilter": "chinese",
+            "languageCandidateLimit": 20,
+            "strictLanguageFilter": true,
+            "noMatchPolicy": {
+                "lookbackDays": 3,
+                "notify": false
+            },
+            "topicProfile": {
+                "primary": [
+                    "丸呑み"
+                ],
+                "related": [],
+                "strategy": {
+                    "freshnessWeight": 0.4,
+                    "popularityWeight": 0.3
+                },
+                "inventory": {
+                    "enabled": true,
+                    "maxAgeDays": 30,
+                    "reserveSize": 20,
+                    "fallback": true
+                }
+            }
         }
-      }
-    }
-  ],
-  "initialDelay": 0
+    ],
+    "initialDelay": 0
 }
