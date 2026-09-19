@@ -45,7 +45,7 @@ Media code evolution: PixivFlow `src/domain/media/MediaAsset.ts` landed on maste
 ```text
 PixivFlow: 2.39.0 / abeccf50fd9bc3a3a4b1c6373536472e92f19b34
 TelePost: 2.45.2
-TelePress: 0.12.0
+TelePress: 0.12.1
 Pixiv Media Proxy: pixiv-media-proxy.redtidev1918.workers.dev (v1)
 ```
 
