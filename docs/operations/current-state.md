@@ -47,15 +47,17 @@ TelePost RBAC 演化模型（root/sudoers/Role Binding）见 [telepost-rbac-evol
 PixivFlow: 2.41.0 / 471ff53f25c9e23bc3df5333232746b697ea915a
   (hot-reload config: /app/data/production.json, watchConfig=true;
    download.materializationPolicy wired from config → on-demand novel previews active)
-TelePost: 2.50.0 / 2c2cd547aaa440949ba3eb40b6686079b9305f9a
+TelePost: 2.51.0 / 697e9f91fd3524d2cff45dc5f5cd5c94206b762c
   (delivery asset contract Step 10: optional JSON media_assets on /api/v1/submissions
    persisted per review_chain_id in media_asset_refs and returned by GET /api/v1/reviews/{id};
    Step 11 DeliveryPlanner foundation: TelePost decides media source strategy via
-   read-only GET /api/v1/reviews/{id}/delivery-plan)
-  (2.50.0 deployed: /health version=2.50.0; media_asset_refs table VERIFIED on bot1/bot2
+   read-only GET /api/v1/reviews/{id}/delivery-plan;
+   Step 12 TelegramMediaCache: media_asset_refs now carries file_id/file_unique_id,
+   sender captures file_unique_id, planner reuses cached file_id)
+  (2.51.0 deployed: /health version=2.51.0; media_asset_refs table VERIFIED on bot1/bot2
    production DB; GET /api/bot1/v1/reviews/{id}/delivery-plan route VERIFIED 401-without-auth;
    production E2E with a real media_assets payload remains EXTERNAL_ACCEPTANCE_REQUIRED;
-   publication adoption of the Step 11 plan PLANNED)
+   delivery-chain capture of mark_delivered_for_chain PLANNED)
 TelePress: 0.12.1
 Pixiv Media Proxy: pixiv-media-proxy.redtidev1918.workers.dev (v1)
 ```
