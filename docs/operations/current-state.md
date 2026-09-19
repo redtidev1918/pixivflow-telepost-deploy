@@ -50,6 +50,8 @@ PixivFlow: 2.41.0 / 471ff53f25c9e23bc3df5333232746b697ea915a
 TelePost: 2.49.0 / f18219fa8d4ca049b7b5cff1e8ec038241df45f3
   (delivery asset contract Step 10: optional JSON media_assets on /api/v1/submissions
    persisted per review_chain_id in media_asset_refs and returned by GET /api/v1/reviews/{id})
+  (deployed: /health version=2.49.0; media_asset_refs table VERIFIED on bot1/bot2 production DB;
+   production E2E with a real media_assets payload remains EXTERNAL_ACCEPTANCE_REQUIRED)
 TelePress: 0.12.1
 Pixiv Media Proxy: pixiv-media-proxy.redtidev1918.workers.dev (v1)
 ```
