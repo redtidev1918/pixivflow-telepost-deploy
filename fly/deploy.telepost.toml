@@ -122,7 +122,7 @@ primary_region = 'iad'
     # the Mini App local preview; edits refresh only the control message.
     # 2.45.2 (2026-09-19): Mini App navigation unified so reviewers/admins can
     # submit alongside review queue (fixes blank admin surface).
-    TELEPOST_IMAGE = 'ghcr.io/redtidev1918/telepost:2.46.0'
+    TELEPOST_IMAGE = 'ghcr.io/redtidev1918/telepost:2.47.0'
 
 [[mounts]]
   source = 'data'

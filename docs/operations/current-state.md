@@ -45,7 +45,7 @@ TelePost RBAC 演化模型（root/sudoers/Role Binding）见 [telepost-rbac-evol
 
 ```text
 PixivFlow: 2.39.0 / abeccf50fd9bc3a3a4b1c6373536472e92f19b34
-TelePost: 2.45.2
+TelePost: 2.47.0
 TelePress: 0.12.1
 Pixiv Media Proxy: pixiv-media-proxy.redtidev1918.workers.dev (v1)
 ```
