@@ -133,8 +133,10 @@ kill_timeout = 60
     # 66e1379b = v2.38.0 (released 2026-09-19). Send novel metadata url+localPath
     # as rich-novel manifest so TelePress can rewrite Pixiv CDN sources to the
     # fixed-upstream media proxy; local images still shipped for fallback.
-    PIXIVFLOW_REF = '66e1379b588c3a2bb635eba06370555a7e490492'
-    PIXIVFLOW_VERSION = '2.38.0'
+    # abeccf50 = v2.39.0 (released 2026-09-19). MediaAsset/Artifact/ResolvedWork
+    # + MaterializationPolicy (eager default); rich-novel manifest carries assetId/sourceUrl.
+    PIXIVFLOW_REF = 'abeccf50fd9bc3a3a4b1c6373536472e92f19b34'
+    PIXIVFLOW_VERSION = '2.39.0'
 
 [[mounts]]
   source = 'pixivflow_data'
