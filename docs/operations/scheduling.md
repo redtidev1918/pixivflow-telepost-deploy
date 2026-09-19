@@ -169,14 +169,14 @@ min_machines_running = 0
 | `executor_failed` | 该 cell 执行失败（选品 / 下载 / 执行） |
 | `delivery_failed` | 该 cell 执行成功但投递失败 |
 
-### 「22:00 没有投稿」必须被读成一句确定的话
+### 「10:00 / 10:10 没有投稿」必须被读成一句确定的话
 
 这两种情况在**观感上完全一样**，在**运维上完全相反**：
 
 | 你看到 | 正确读法 | 结论 |
 | --- | --- | --- |
-| `schedule.outcome` 存在，`status=success/partial`，`cells.illustration=no_match`，`cells.novel=no_match` | 「22:00 completed，illustration=no_match，novel=no_match」 | **调度成功**：系统按计划运行了，业务上确实没有合格作品。这是**已证明的调度成功**。 |
-| **没有** `schedule.outcome`，**也没有** slot，时钟侧也没有 fire | 「22:00 完全没有 slot」 | **TRIGGER FAILURE**：触发面断了。这不是「没有东西可投」。 |
+| `schedule.outcome` 存在，`status=success/partial`，`cells.illustration=no_match`，`cells.novel=no_match` | 「10:00 / 10:10 completed，illustration=no_match，novel=no_match」 | **调度成功**：系统按计划运行了，业务上确实没有合格作品。这是**已证明的调度成功**。 |
+| **没有** `schedule.outcome`，**也没有** slot，时钟侧也没有 fire | 「10:00 / 10:10 完全没有 slot」 | **TRIGGER FAILURE**：触发面断了。这不是「没有东西可投」。 |
 
 > **把第一种读成第二种（或反过来）是本次架构变更要消灭的那一类误判。**
 > 第一种要去看 Pixiv 侧为什么没候选；第二种要去看时钟与 admission —— 两条完全不同的修复路径。
@@ -269,12 +269,13 @@ PRIMARY 是一个**第三方 SaaS**，它的配置**不在这个仓库里**，�
 控制台里的每一个值都必须与仓库里的声明一致；不一致时以
 `control-plane/src/cron-map.ts` 的 `primaryCron` 字段为准（`redundant-clock.test.ts` 会失败）。
 
-一个 schedule 一个 job，共两个。每个 job 每天触发**两次**（上午 + 晚间）。
+一个 schedule 一个 job，共两个。2026-09-19 起稀缺 tag 每天触发**一次**（10:00 / 10:10 Asia/Shanghai），
+不再有晚间 job；cron-job.org 控制台必须把旧的 22:00/22:10 晚间 job 停用或删除。
 
 | Job | 计划（Asia/Shanghai） | URL |
 | --- | --- | --- |
-| `pixivflow-primary-bot1-daily` | 每天 `10:00` 与 `22:00` | `https://pixivflow-scheduler.fly.dev/internal/schedules/bot1-daily/run` |
-| `pixivflow-primary-bot2-daily` | 每天 `10:10` 与 `22:10` | `https://pixivflow-scheduler.fly.dev/internal/schedules/bot2-daily/run` |
+| `pixivflow-primary-bot1-daily` | 每天 `10:00`（单次） | `https://pixivflow-scheduler.fly.dev/internal/schedules/bot1-daily/run` |
+| `pixivflow-primary-bot2-daily` | 每天 `10:10`（单次） | `https://pixivflow-scheduler.fly.dev/internal/schedules/bot2-daily/run` |
 
 等价的 UTC 表达（`deploy manifest` / `cron-map.ts` 里读到的就是这两个）：
 
@@ -282,6 +283,9 @@ PRIMARY 是一个**第三方 SaaS**，它的配置**不在这个仓库里**，�
 bot1-daily   0 2 * * *
 bot2-daily  10 2 * * *
 ```
+
+Cloudflare SECONDARY 是每个 occurrence +2 分钟，见 `control-plane/src/cron-map.ts`
+（`2 2 * * *` / `12 2 * * *` UTC = 02:02Z / 02:12Z）。
 
 请求设置：
 

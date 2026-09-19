@@ -36,7 +36,7 @@ cd "$repo_dir" || exit 2
 app=${PIXIVFLOW_FLY_APP:-pixivflow-scheduler}
 out_dir=${PIXIVFLOW_WATCH_OUT:-/tmp/schedule-window}
 deadline_arg=""
-primary_minute="00"      # PRIMARY clock minute in UTC for the evening occurrence (22:00 CST)
+primary_minute="00"      # PRIMARY clock minute for the daily occurrence (10:00 CST)
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -60,17 +60,16 @@ say() { printf '%s %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$*" | tee -a "$log_fi
 
 # --- the window -----------------------------------------------------------------
 #
-# Compute today's primary/secondary instants in UTC. The evening occurrence is
-# 10:00 / 10:10 Asia/Shanghai = 02:00Z / 02:10Z (once per day)
-# CST = 02:00Z / 02:10Z.
+# Compute today's primary/secondary instants in UTC. The daily occurrence is
+# 10:00 / 10:10 Asia/Shanghai = 02:00Z / 02:10Z (once per day, 2026-09-19+).
 primary_epoch=$(python3 - "${primary_minute}" <<'PY'
 import datetime, sys
 minute = int(sys.argv[1])
 tz = datetime.timezone(datetime.timedelta(hours=8))
 now = datetime.datetime.now(tz)
 candidates = [
-    now.replace(hour=22, minute=minute, second=0, microsecond=0),
-    now.replace(hour=22, minute=minute, second=0, microsecond=0) + datetime.timedelta(days=1),
+    now.replace(hour=10, minute=minute, second=0, microsecond=0),
+    now.replace(hour=10, minute=minute, second=0, microsecond=0) + datetime.timedelta(days=1),
 ]
 chosen = next(c for c in candidates if c > now)
 print(int(chosen.timestamp()))
