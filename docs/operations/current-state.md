@@ -12,7 +12,8 @@ Authority: Current production evidence overrides this file
 下一步推进顺序见 [progressive-delivery-plan.md](./progressive-delivery-plan.md)。
 媒体解耦专项路线见 [media-decoupling-delivery-plan.md](./media-decoupling-delivery-plan.md)。
 Media code evolution: PixivFlow `src/domain/media/MediaAsset.ts` landed on master (PR #147); legacy download path unchanged. `Artifact` + `DownloadedArtifact.mediaAssets[]/artifacts[]` landed on master (PR #149); `files[]` remains compatibility projection. `MediaMaterializer` boundary (wrapping existing download/save) landed on master (PR #150). `ResolvedWork`/resolve-first split landed on master (PR #151). `MaterializationPolicy` (eager default / on-demand supported) landed on master (PR #152).
-代码级迁移计划（MediaAsset）见 [media-code-evolution-plan.md](../development/media-code-evolution-plan.md)。
+
+TelePost RBAC 演化模型（root/sudoers/Role Binding）见 [telepost-rbac-evolution.md](../architecture/telepost-rbac-evolution.md)。代码级迁移计划（MediaAsset）见 [media-code-evolution-plan.md](../development/media-code-evolution-plan.md)。
 
 ---
 
