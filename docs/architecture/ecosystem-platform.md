@@ -1284,7 +1284,7 @@ docs/architecture/
     领域模型 / 边界 / RFC / invariants
 
 docs/operations/
-    当前状态 / 部署 / 故障 / runbook
+    当前状态 / 部署 / 故障 / runbook / 渐进交付路线
 
 docs/development/
     内部实现机制
@@ -1315,6 +1315,12 @@ AGENTS.md
 
 ```text
 docs/operations/current-state.md
+```
+
+下一步推进顺序进入：
+
+```text
+docs/operations/progressive-delivery-plan.md
 ```
 
 不能只存在于：
