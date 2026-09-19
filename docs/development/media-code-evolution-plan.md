@@ -1,7 +1,7 @@
 # PixivFlow Ecosystem Media Code Evolution Plan
 
 Status: ACTIVE
-Progress: Step 1 (manifest/proxy) DONE; Steps 2/3/4 (MediaAsset, Artifact, DownloadedArtifact), Step 5 (MediaMaterializer), Step 6 (ResolvedWork resolve/materialize split) IMPLEMENTED on PixivFlow master (08ec9d0, ec74b21, eea6f7e, 37bd9ca). Remaining steps PLANNED.
+Progress: Step 1 (manifest/proxy) DONE; Steps 2-6 (MediaAsset, Artifact, DownloadedArtifact, MediaMaterializer, ResolvedWork) + Step 7 (MaterializationPolicy, eager default) IMPLEMENTED on PixivFlow master (08ec9d0, ec74b21, eea6f7e, 37bd9ca, ff736e9). Remaining steps PLANNED.
 Scope: PixivFlow / TelePost / TelePress / Deploy
 Type: Code-level migration plan
 
