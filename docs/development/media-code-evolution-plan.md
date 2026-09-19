@@ -1,7 +1,7 @@
 # PixivFlow Ecosystem Media Code Evolution Plan
 
 Status: ACTIVE
-Progress: Step 1 (manifest/proxy) DONE; Step 2 (MediaAsset) + Step 3/4 (Artifact type + DownloadedArtifact additive fields) IMPLEMENTED on PixivFlow master (08ec9d0, ec74b21). Remaining steps PLANNED.
+Progress: Step 1 (manifest/proxy) DONE; Step 2 (MediaAsset), Step 3/4 (Artifact + DownloadedArtifact additive fields), Step 5 (MediaMaterializer boundary) IMPLEMENTED on PixivFlow master (08ec9d0, ec74b21, eea6f7e). Remaining steps PLANNED.
 Scope: PixivFlow / TelePost / TelePress / Deploy
 Type: Code-level migration plan
 
