@@ -133,7 +133,13 @@ primary_region = 'iad'
     # 2.51.0 (2026-09-20): Step 12 TelegramMediaCache — media_asset_refs now
     # carries file_id/file_unique_id (no new table); sender captures
     # file_unique_id into progress_json; planner reuses cached file_id.
-    TELEPOST_IMAGE = 'ghcr.io/redtidev1918/telepost:2.51.0'
+    # 2.52.0 (2026-09-20): Step 12/13 delivery chain — publish_from_file_ids
+    # adopts DeliveryPlanner and records confirmed Telegram file_id/file_unique_id
+    # back into media_asset_refs (mark_delivered_for_chain).
+    # 2.53.0 (2026-09-20): reaction-based heat — subscribes
+    # message_reaction_count, persists per-message reaction totals, recomputes
+    # published_posts.reactions/heat_score; UI labels views/forwards unavailable.
+    TELEPOST_IMAGE = 'ghcr.io/redtidev1918/telepost:2.53.0'
 
 [[mounts]]
   source = 'data'
