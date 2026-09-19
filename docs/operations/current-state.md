@@ -41,7 +41,7 @@ Authority: Current production evidence overrides this file
 
 ```text
 PixivFlow: 2.37.0 / a17343519198d397636cc3192a426c4d3c292fcf
-TelePost: 2.45.1
+TelePost: 2.45.2
 TelePress: 0.10.0
 ```
 
