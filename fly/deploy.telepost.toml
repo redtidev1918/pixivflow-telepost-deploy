@@ -126,7 +126,11 @@ primary_region = 'iad'
     # accepts optional JSON media_assets {asset_id, kind, source_url, mime_type?},
     # persists per review_chain_id in media_asset_refs, and GET /api/v1/reviews/{id}
     # returns them. Backward compatible; local file_id path unchanged.
-    TELEPOST_IMAGE = 'ghcr.io/redtidev1918/telepost:2.49.0'
+    # 2.50.0 (2026-09-19): Step 11 DeliveryPlanner foundation — TelePost decides
+    # how to deliver review media; read-only GET /api/v1/reviews/{id}/delivery-plan
+    # returns per-asset strategy (telegram_file_id / remote_url / mixed) without
+    # changing publication behavior until an adapter commits to the plan.
+    TELEPOST_IMAGE = 'ghcr.io/redtidev1918/telepost:2.50.0'
 
 [[mounts]]
   source = 'data'
