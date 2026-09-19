@@ -43,10 +43,14 @@ export default {
     const target = `${UPSTREAM_BASE}/${suffix}${url.search}`;
     // Client-supplied Referer/OAuth/cookies are irrelevant for a fixed public
     // image upstream; force our own Referer and drop session-bearing headers.
-    const headers = new Headers(request.headers);
+    // Only forward a minimal set of client headers; never relay cookie /
+    // authorization / arbitrary client headers to Pixiv's CDN.
+    const headers = new Headers();
     headers.set('Referer', PIXIV_REFERER);
-    headers.delete('cookie');
-    headers.delete('authorization');
+    for (const name of ['Accept', 'Accept-Encoding', 'Range', 'If-Range', 'If-Modified-Since', 'If-None-Match']) {
+      const value = request.headers.get(name);
+      if (value) headers.set(name, value);
+    }
 
     const fetchImpl: typeof fetch = env.PIXIV_PROXY_FETCH ?? fetch;
     const upstream = await fetchImpl(target, {
@@ -54,6 +58,15 @@ export default {
       headers,
       cf: { cacheTtl: 86400, cacheEverything: true },
     });
+
+    if (upstream.status >= 400) {
+      return json({ error: 'upstream_error', status: upstream.status }, upstream.status === 404 ? 404 : 502);
+    }
+
+    const contentType = upstream.headers.get('content-type') ?? '';
+    if (!contentType.startsWith('image/')) {
+      return json({ error: 'upstream_not_image' }, 502);
+    }
 
     const resHeaders = new Headers(upstream.headers);
     resHeaders.set('Cache-Control', 'public, max-age=86400');
