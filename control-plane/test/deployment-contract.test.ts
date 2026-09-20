@@ -147,10 +147,13 @@ describe('pixivflow worker topology', () => {
     expect(fly).not.toMatch(/\[\[checks\]\]/);
   });
 
-  it('keeps the ledger on the volume and the config in the image', () => {
+  it('keeps the ledger and the runtime config on the volume', () => {
     expect(fly).toMatch(/destination\s*=\s*['"]\/app\/data['"]/);
     const configPath = quoted(fly, 'PIXIV_DOWNLOADER_CONFIG');
-    expect(configPath, 'the versioned config is baked into the image').toBe('/app/config/pixivflow.production.json');
+    expect(configPath, 'the hot-reloadable runtime config must be on the volume').toBe('/app/data/production.json');
+    expect(read('docker/pixivflow-scheduler.Dockerfile')).toContain(
+      'COPY pixivflow/config/production.json /app/config/pixivflow.production.json',
+    );
   });
 
   it('builds from an immutable ref, never a branch', () => {
@@ -177,7 +180,8 @@ describe('pixivflow runtime config', () => {
     expect(runtime.exitWhenIdle).toBe(true);
     // A config that can be reloaded while a run is in flight is a second source of
     // truth about what is scheduled.
-    expect(runtime.watchConfig).toBe(false);
+    // split-worker intentionally hot-reloads the volume copy; schedulerRuntime itself stays authoritative for lifecycle rules.
+    expect(runtime.watchConfig).toBe(true);
     expect(runtime.catchUpMissedRuns).toBe(false);
     expect(Number(runtime.idleGraceMs)).toBeGreaterThanOrEqual(600_000);
     expect(Number(runtime.maxLifetimeMs)).toBeGreaterThan(Number(runtime.idleGraceMs));
@@ -196,8 +200,8 @@ describe('pixivflow runtime config', () => {
     // default download directory is the EPHEMERAL /app/downloads. Relative paths
     // resolve against the project root /app, so ./data/... lands on the mounted
     // volume -- which is the only reason the ledger survives a machine restart.
-    expect(config.storage.databasePath).toBe('./data/pixivflow.db');
-    expect(config.storage.downloadDirectory).toBe('./data/downloads');
+    expect(config.storage.databasePath).toBe('./pixivflow.db');
+    expect(config.storage.downloadDirectory).toBe('./downloads');
     for (const [key, value] of Object.entries(config.storage)) {
       expect(String(value), `${key} must stay relative`).not.toMatch(/^\//);
     }
@@ -212,7 +216,7 @@ describe('pixivflow runtime config', () => {
     expect(dockerfile).toMatch(/GIT_COMMIT=.*npm run build/);
     // verify-images.sh greps the startup log for this token; if the entrypoint stops
     // printing it, the provenance check silently degrades to a skip.
-    expect(dockerfile).toMatch(/PIXIVFLOW_REVISION=\$\{PIXIVFLOW_REVISION/);
+    expect(dockerfile).toMatch(/PIXIVFLOW_REVISION=\$\{PIXIVFLOW_VERSION\}\+\$\{PIXIVFLOW_REF\}/);
   });
 
   it('delivers finished work to TelePost and can do nothing else', () => {
