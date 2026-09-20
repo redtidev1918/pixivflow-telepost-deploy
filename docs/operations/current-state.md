@@ -71,8 +71,9 @@ TelePost: 2.55.2
    caption, restores the default command menu, and adds bulk soft-delete of
    owned terminal history; 2.55.2 fixes the default menu-button API call so
    the command menu is actually restored)
-  (2.55.2 pinned in fly/deploy.telepost.toml; deploy pending until runtime
-   verification reports version=2.55.2, commit=73af312)
+  (2.55.2 pinned in fly/deploy.telepost.toml; VERIFIED: /health reports
+   version=2.55.2, commit=73af312; get_chat_menu_button for both bots is
+   MenuButtonCommands, not Mini App)
    media_asset_refs VERIFIED on bot1/bot2 production DB;
    message_reaction_count allowed_update VERIFIED via webhook info;
    production E2E with a real media_assets payload remains EXTERNAL_ACCEPTANCE_REQUIRED)
