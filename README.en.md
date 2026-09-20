@@ -286,3 +286,12 @@ Operators should only process content they have the right to download, store, an
 comply with platform terms, copyright requirements, and local law. The project neither sets
 channel content policy on an operator's behalf nor provides any guarantee of evading platform
 restrictions or regulation.
+
+## Acknowledgements
+
+This deployment toolkit builds on two upstream projects:
+[PixivFlow](https://github.com/redtidev1918/PixivFlow) (fetching, selection, downloads, delivery) and
+[TelePost](https://github.com/redtidev1918/TelePost) (submissions, review, channel publishing) —
+each usable on its own; this repository only wires them into a deployable, operable system.
+The runtime plane relies on [Docker Compose](https://docs.docker.com/compose/) and
+[Fly.io](https://fly.io); scheduling and egress trade-offs are covered in the docs site's platform pages.
