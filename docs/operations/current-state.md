@@ -44,13 +44,16 @@ TelePost RBAC 演化模型（root/sudoers/Role Binding）见 [telepost-rbac-evol
 最近明确记录的生产 baseline：
 
 ```text
-PixivFlow: 2.42.0 / f30c74d027bac5a992e60e5f6f41c70264b1929b — VERIFIED
-  (deploy pin = release commit; runtime log shows
-   `PIXIVFLOW_REVISION=2.42.0+f30c74d...`; public `/health` returned
-   `version=2.42.0`, `commit=f30c74d027ba`)
+PixivFlow: 2.43.0 / c27c924cf92df303b46f10d0a2552fc488f4da43 — VERIFIED
+  (deploy pin = release commit; public `/health` returned
+   `version=2.43.0`, `commit=c27c924cf92d`)
+  (2.43.0 builds canonical illustration `MediaAsset[]` from pages and passes
+   it through DeliveryService → OutboxWorker → multipart `media_assets` to
+   TelePost; local files remain the default delivery media, so this is an
+   additive Delivery Asset Contract step, not on-demand illustration delivery)
   (hot-reload config: /app/data/production.json, watchConfig=true;
    download.materializationPolicy wired from config → on-demand novel previews active)
-TelePost: 2.54.2
+TelePost: 2.55.0
   (Step 10 delivery asset contract: optional JSON media_assets on /api/v1/submissions
    persisted per review_chain_id in media_asset_refs;
    Step 11 DeliveryPlanner: read-only GET /api/v1/reviews/{id}/delivery-plan;
@@ -61,9 +64,11 @@ TelePost: 2.54.2
    reaction-based heat: subscribes message_reaction_count, persists per-message
    counts, recomputes published_posts.reactions/heat_score; views/forwards
    hidden from user-facing stats;
-   2.54.2 fixes reaction-count callback arity and keeps channel errors silent)
-  (2.54.2 pinned in fly/deploy.telepost.toml; deployed: /health version=2.54.2,
-   commit=a54b892; no new reaction-handler errors after deploy)
+   2.54.2 fixes reaction-count callback arity and keeps channel errors silent;
+   2.55.0 accepts the same optional media_assets Delivery Asset Contract on
+   multipart submissions and persists it through the review path)
+  (2.55.0 pinned in fly/deploy.telepost.toml; deployed: /health version=2.55.0,
+   commit=aac6aa2; machine checks passing)
    media_asset_refs VERIFIED on bot1/bot2 production DB;
    message_reaction_count allowed_update VERIFIED via webhook info;
    production E2E with a real media_assets payload remains EXTERNAL_ACCEPTANCE_REQUIRED)
