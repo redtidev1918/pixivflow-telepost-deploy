@@ -155,7 +155,13 @@ primary_region = 'iad'
     # ?start=miniapp fallback, and private preview link-preview suppression.
     # 2.55.4 (2026-09-20): restores the reply keyboard after /cancel and uses
     # the explicit LinkPreviewOptions API on both preview paths.
-    TELEPOST_IMAGE = 'ghcr.io/redtidev1918/telepost:2.55.4'
+    # 2.56.0 (2026-09-21): Mini App becomes the private-chat menu button when
+    # configured; slash commands remain available. Reaction webhook ingestion
+    # logs and /health metrics separate “no reactions” from “update missing”.
+    # 2.56.1 (2026-09-21): public router /health aggregates child
+    # reaction_ingest_by_bot, making reaction pipeline visibility externally
+    # observable.
+    TELEPOST_IMAGE = 'ghcr.io/redtidev1918/telepost:2.56.1'
 
 [[mounts]]
   source = 'data'
