@@ -143,7 +143,9 @@ primary_region = 'iad'
     # does not provide them) + Step 14 second-delivery file_id reuse test.
     # 2.54.1 (2026-09-20): sanitize note HTML at insert and preserve submitter
     # media order through delivery; preview now matches publication order.
-    TELEPOST_IMAGE = 'ghcr.io/redtidev1918/telepost:2.54.1'
+    # 2.54.2 (2026-09-20): fix reaction-count callback arity and suppress
+    # user-facing error replies from channel contexts.
+    TELEPOST_IMAGE = 'ghcr.io/redtidev1918/telepost:2.54.2'
 
 [[mounts]]
   source = 'data'
