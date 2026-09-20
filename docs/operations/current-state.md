@@ -64,7 +64,7 @@ TelePost: 2.54.2
    media_asset_refs VERIFIED on bot1/bot2 production DB;
    message_reaction_count allowed_update VERIFIED via webhook info;
    production E2E with a real media_assets payload remains EXTERNAL_ACCEPTANCE_REQUIRED)
-TelePress: 0.12.1
+TelePress: 0.14.1 (deploy pin updated; runtime verification pending)
 Pixiv Media Proxy: pixiv-media-proxy.redtidev1918.workers.dev (v2, generic allowlist)
 ```
 
