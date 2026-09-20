@@ -79,7 +79,11 @@ Pixiv Media Proxy (worker version 3fd098a7):
   `0.14.1`; image digest `sha256:addc0c6c11b2cd8af05a31b9563b4e565db166650934b1158cff789888cb6690`;
   machine healthy and `/` returns `status=ok`. Production config uses `TELEPRESS_MEDIA_PROXY_BASE`
   and `TELEPRESS_MEDIA_PROXY_HOSTS=i.pximg.net`.
-- A real-novel rich-novel publish through the generic route remains `EXTERNAL_ACCEPTANCE_REQUIRED`.
+- Rich Novel generic-route production E2E: TelePress 0.14.1 `/publish/rich-novel` returned 200 with three
+  real Pixiv novel-cover assets all `status=proxied`; Telegraph page referenced `/media/i.pximg.net/...`;
+  a referenced image returned `200 image/jpeg` (599252 bytes).
+- A scheduled PixivFlow slot producing manifest-only novel assets end-to-end remains
+  `EXTERNAL_ACCEPTANCE_REQUIRED`.
 - TelePress production config uses `TELEPRESS_MEDIA_PROXY_BASE` and
   `TELEPRESS_MEDIA_PROXY_HOSTS=i.pximg.net`; legacy `/pixiv/...` remains compatible.
 - TelePress 0.11.0 runtime E2E (post-hardening recheck): `/publish/rich-novel`
