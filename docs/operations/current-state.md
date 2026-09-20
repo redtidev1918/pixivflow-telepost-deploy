@@ -53,7 +53,7 @@ PixivFlow: 2.43.0 / c27c924cf92df303b46f10d0a2552fc488f4da43 — VERIFIED
    additive Delivery Asset Contract step, not on-demand illustration delivery)
   (hot-reload config: /app/data/production.json, watchConfig=true;
    download.materializationPolicy wired from config → on-demand novel previews active)
-TelePost: 2.55.3
+TelePost: 2.55.4
   (Step 10 delivery asset contract: optional JSON media_assets on /api/v1/submissions
    persisted per review_chain_id in media_asset_refs;
    Step 11 DeliveryPlanner: read-only GET /api/v1/reviews/{id}/delivery-plan;
@@ -73,9 +73,11 @@ TelePost: 2.55.3
    the command menu is actually restored; 2.55.3 keeps the command menu and
    restores Mini App access via a persistent keyboard button, uses
    ?start=miniapp as a one-tap channel footer fallback, and suppresses
-   private preview link previews)
-  (2.55.3 pinned in fly/deploy.telepost.toml; VERIFIED: /health reports
-   version=2.55.3, commit=885648a; both chat menu buttons remain commands and
+   private preview link previews; 2.55.4 uses the explicit
+   LinkPreviewOptions API on both preview paths and restores the main
+   reply keyboard after /cancel)
+  (2.55.4 pinned in fly/deploy.telepost.toml; VERIFIED: /health reports
+   version=2.55.4, commit=8c4e67a; both chat menu buttons remain commands and
    a Bot1 private Web App keyboard was accepted by Telegram. User clicks of
    the keyboard/channel footer remain EXTERNAL_ACCEPTANCE_REQUIRED)
    media_asset_refs VERIFIED on bot1/bot2 production DB;
@@ -1149,3 +1151,60 @@ BLOCKED_EXTERNAL
 EXTERNAL_ACCEPTANCE_REQUIRED
 FAIL
 ```
+
+
+# 35. 2026-09-20 UX Follow-Up
+
+## IMPLEMENTED / VERIFIED
+
+TelePost 2.55.4 released (`v2.55.4`, commit `8c4e67a`) and deployed to
+`telesubmit-multi-bot` machine version `202`:
+
+```bash
+fly deploy -c fly/deploy.telepost.toml --ha=false --strategy rolling
+curl https://telesubmit-multi-bot.fly.dev/health
+```
+
+Runtime evidence:
+
+```text
+health.version = 2.55.4
+health.commit  = 8c4e67a
+machine.state  = started
+checks         = 1 passing
+webhook allowed_updates includes message_reaction_count
+both bots logged: 成功设置 12 个命令菜单项
+```
+
+Changes:
+
+- Private preview uses the explicit Telegram `LinkPreviewOptions(is_disabled=True)`
+  contract on both the new-message and edit-message paths.
+- `/cancel` restores the persistent main keyboard, so the `📱 Mini App`
+  button is not lost after cancelling a submission.
+- Removed the dead second private preview formatter; chat preview remains
+  the shared channel-caption SSOT.
+
+## Reaction Stats Evidence
+
+Production database query on 2026-09-20:
+
+```text
+bot1 message_reaction_counts = 0 rows; published_posts = 62; reactions > 0 = 0
+bot2 message_reaction_counts = 0 rows; published_posts = 57; reactions > 0 = 0
+```
+
+Webhook logs confirm `message_reaction_count` is explicitly requested. This is
+therefore not yet evidence of a handler bug; there is no accepted real reaction
+update in either database. A real user must react to a post, after which the
+per-message row and aggregate can be checked. Until then, real reaction E2E is
+`EXTERNAL_ACCEPTANCE_REQUIRED`.
+
+## Mini App Footer Boundary
+
+Telegram allows only one menu button. The current production contract is:
+menu button = commands; persistent private keyboard = Mini App entry. A channel
+footer without `MINIAPP_SHORT_NAME` necessarily routes to the bot via
+`?start=miniapp`, then sends an inline Web App button. One-tap direct Mini App
+from the channel requires the BotFather Direct Mini App short name plus
+`MINIAPP_SHORT_NAME`; this remains `EXTERNAL_ACCEPTANCE_REQUIRED`.
