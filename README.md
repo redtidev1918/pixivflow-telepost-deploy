@@ -258,3 +258,11 @@ data/                            数据库、下载缓存、outbox、实际配�
 本项目与 Pixiv、Telegram、Fly.io 无隶属或官方合作关系。部署者应只处理有权下载、保存和
 发布的内容，并自行遵守平台条款、版权要求与所在地法律。项目不会替部署者决定频道内容政策，
 也不提供规避平台限制或监管的保证。
+
+## 致谢
+
+这套部署方案建立在两个上游项目之上：[PixivFlow](https://github.com/redtidev1918/PixivFlow)
+（抓取、选品、下载与投递）和 [TelePost](https://github.com/redtidev1918/TelePost)
+（投稿、审核与频道发布）——它们各自都能独立使用，本仓库只负责把它们拼成可部署、可运维的系统。
+运行平面依赖 [Docker Compose](https://docs.docker.com/compose/) 与
+[Fly.io](https://fly.io)；定时触发与出口代理的取舍见文档站的平台章节。
