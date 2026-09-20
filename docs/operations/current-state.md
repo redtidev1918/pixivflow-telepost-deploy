@@ -53,7 +53,7 @@ PixivFlow: 2.43.0 / c27c924cf92df303b46f10d0a2552fc488f4da43 — VERIFIED
    additive Delivery Asset Contract step, not on-demand illustration delivery)
   (hot-reload config: /app/data/production.json, watchConfig=true;
    download.materializationPolicy wired from config → on-demand novel previews active)
-TelePost: 2.56.1
+TelePost: 2.56.2
   (Step 10 delivery asset contract: optional JSON media_assets on /api/v1/submissions
    persisted per review_chain_id in media_asset_refs;
    Step 11 DeliveryPlanner: read-only GET /api/v1/reviews/{id}/delivery-plan;
@@ -76,11 +76,13 @@ TelePost: 2.56.1
    private preview link previews; 2.55.4 uses the explicit
    LinkPreviewOptions API on both preview paths and restores the main
    reply keyboard after /cancel)
-  (2.56.1 pinned in fly/deploy.telepost.toml; VERIFIED: public /health reports
-   version=2.56.1, commit=0964350, and reaction_ingest_by_bot for bot1/bot2.
+  (2.56.2 pinned in fly/deploy.telepost.toml; VERIFIED: public /health reports
+   version=2.56.2, commit=8c3205e, and reaction_ingest_by_bot for bot1/bot2.
    2.56.0 makes the private-chat menu button open the Mini App while slash
    commands remain available. 2.56.1 exposes child reaction-ingestion metrics
-   through the public router /health.)
+   through the public router /health. 2.56.2 makes channel Mini App footers
+   use the Main Mini App ?startapp=miniapp deep link, avoiding a bot-chat
+   redirect fallback.)
    media_asset_refs VERIFIED on bot1/bot2 production DB;
    message_reaction_count allowed_update VERIFIED via webhook info;
    production E2E with a real media_assets payload remains EXTERNAL_ACCEPTANCE_REQUIRED;
