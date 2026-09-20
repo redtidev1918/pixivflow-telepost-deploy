@@ -4,3 +4,6 @@ name = "pixiv-media-proxy"
 main = "src/index.ts"
 compatibility_date = "2025-09-01"
 workers_dev = true
+
+[vars]
+MEDIA_PROXY_ALLOWED_HOSTS = "i.pximg.net"
