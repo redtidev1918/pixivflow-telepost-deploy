@@ -161,7 +161,9 @@ primary_region = 'iad'
     # 2.56.1 (2026-09-21): public router /health aggregates child
     # reaction_ingest_by_bot, making reaction pipeline visibility externally
     # observable.
-    TELEPOST_IMAGE = 'ghcr.io/redtidev1918/telepost:2.56.1'
+    # 2.56.2 (2026-09-21): channel Mini App footers use the Main Mini App
+    # ?startapp=miniapp deep link, avoiding a bot-chat redirect fallback.
+    TELEPOST_IMAGE = 'ghcr.io/redtidev1918/telepost:2.56.2'
 
 [[mounts]]
   source = 'data'
