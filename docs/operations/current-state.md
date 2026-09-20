@@ -53,7 +53,7 @@ PixivFlow: 2.43.0 / c27c924cf92df303b46f10d0a2552fc488f4da43 — VERIFIED
    additive Delivery Asset Contract step, not on-demand illustration delivery)
   (hot-reload config: /app/data/production.json, watchConfig=true;
    download.materializationPolicy wired from config → on-demand novel previews active)
-TelePost: 2.55.2
+TelePost: 2.55.3
   (Step 10 delivery asset contract: optional JSON media_assets on /api/v1/submissions
    persisted per review_chain_id in media_asset_refs;
    Step 11 DeliveryPlanner: read-only GET /api/v1/reviews/{id}/delivery-plan;
@@ -70,10 +70,13 @@ TelePost: 2.55.2
    2.55.1 makes private chat and Mini App previews render the real channel
    caption, restores the default command menu, and adds bulk soft-delete of
    owned terminal history; 2.55.2 fixes the default menu-button API call so
-   the command menu is actually restored)
-  (2.55.2 pinned in fly/deploy.telepost.toml; VERIFIED: /health reports
-   version=2.55.2, commit=73af312; get_chat_menu_button for both bots is
-   MenuButtonCommands, not Mini App)
+   the command menu is actually restored; 2.55.3 keeps the command menu and
+   restores Mini App access via a persistent keyboard button, uses
+   ?start=miniapp as a one-tap channel footer fallback, and suppresses
+   private preview link previews)
+  (2.55.3 pinned in fly/deploy.telepost.toml; deploy pending until runtime
+   verification reports version=2.55.3, commit=885648a; command menu and
+   Mini App keyboard entry remain EXTERNAL_ACCEPTANCE_REQUIRED)
    media_asset_refs VERIFIED on bot1/bot2 production DB;
    message_reaction_count allowed_update VERIFIED via webhook info;
    production E2E with a real media_assets payload remains EXTERNAL_ACCEPTANCE_REQUIRED)
