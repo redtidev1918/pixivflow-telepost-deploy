@@ -1277,6 +1277,5 @@ So `update → ingest → projection → /hot` is VERIFIED for a new reaction. T
 remaining zeroes are not a bug: the Bot API pushes `message_reaction_count`
 only when a count changes, so posts reacted to before the handler shipped stay
 at heat 0 until someone reacts again. Backfilling history needs a user client
-(Telethon/Pyrogram) because `scripts/crawl_channel_history.py` is deliberately a
-Bot-API stub that cannot enumerate channel history. Classified
-`KNOWN_DEBT`.
+(Telethon/Pyrogram) because the TelePost channel-history crawler is deliberately
+a Bot-API stub that cannot enumerate channel history. Classified `KNOWN_DEBT`.
