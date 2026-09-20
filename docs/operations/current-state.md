@@ -1245,6 +1245,24 @@ the 09-16+ posts (~29 candidates, max body 359 chars, no truncation risk)
 with the same canary procedure. 3058/3059/3060 test posts are already deleted
 from the channel (DB rows still `is_deleted=0` — known stale marker).
 
+### 2026-09-21 Old-post footer batch retrofit (completed)
+
+Batch applied the same canary procedure to every live 09-16+ post on both
+channels (caption = DB body verbatim + current footer; READ_ONLINE restored
+from `publication_previews` when the review had one):
+
+```text
+bot1 @xgdShare: edited 3046/3047/3049/3052 + 3056 (canary, already correct)
+bot2 @voreShare: edited 390/404/407/410/411/412/413/414/415/423/426/430
+skipped (deleted from channel, DB stale): bot1 3041-3045/3050/3051/3058/3060,
+  bot2 408/409
+```
+
+Every edit returned `ok:true` (3056 returned "message is not modified" because
+the canary already wrote the identical footer). No DB writes. All channel
+footers now use `?startapp=miniapp`; real-user tap acceptance remains
+`EXTERNAL_ACCEPTANCE_REQUIRED` on any edited post.
+
 ---
 
 # 36. 2026-09-21 TelePost 2.57.0 + Media Proxy
