@@ -1,6 +1,6 @@
 # PixivFlow Ecosystem Current Production State
 
-Snapshot: 2026-09-19
+Snapshot: 2026-09-20
 Authority: Current production evidence overrides this file
 
 本文件保存动态状态。
@@ -44,7 +44,8 @@ TelePost RBAC 演化模型（root/sudoers/Role Binding）见 [telepost-rbac-evol
 最近明确记录的生产 baseline：
 
 ```text
-PixivFlow: 2.41.0 / 471ff53f25c9e23bc3df5333232746b697ea915a
+PixivFlow: 2.42.0 / f30c74d027bac5a992e60e5f6f41c70264b1929b
+  (scheduler /health now reports version + commit; deploy pin updated to v2.42.0)
   (hot-reload config: /app/data/production.json, watchConfig=true;
    download.materializationPolicy wired from config → on-demand novel previews active)
 TelePost: 2.54.2
