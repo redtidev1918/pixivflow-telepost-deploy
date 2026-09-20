@@ -126,7 +126,7 @@ describe('pixiv media proxy', () => {
         return new Response(null, { status: 302, headers: { location: 'https://evil.example/img', 'content-type': 'image/jpeg' } });
       }) as typeof fetch,
     );
-    expect(redirect).toBe('error');
+    expect(redirect).toBe('manual');
   });
 
   it('returns only an allowlisted set of response headers', async () => {
