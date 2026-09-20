@@ -53,7 +53,7 @@ PixivFlow: 2.43.0 / c27c924cf92df303b46f10d0a2552fc488f4da43 — VERIFIED
    additive Delivery Asset Contract step, not on-demand illustration delivery)
   (hot-reload config: /app/data/production.json, watchConfig=true;
    download.materializationPolicy wired from config → on-demand novel previews active)
-TelePost: 2.56.2
+TelePost: 2.57.0
   (Step 10 delivery asset contract: optional JSON media_assets on /api/v1/submissions
    persisted per review_chain_id in media_asset_refs;
    Step 11 DeliveryPlanner: read-only GET /api/v1/reviews/{id}/delivery-plan;
@@ -76,17 +76,20 @@ TelePost: 2.56.2
    private preview link previews; 2.55.4 uses the explicit
    LinkPreviewOptions API on both preview paths and restores the main
    reply keyboard after /cancel)
-  (2.56.2 pinned in fly/deploy.telepost.toml; VERIFIED: public /health reports
-   version=2.56.2, commit=8c3205e, and reaction_ingest_by_bot for bot1/bot2.
+  (2.57.0 pinned in fly/deploy.telepost.toml; VERIFIED: public /health reports
+   version=2.57.0, commit=8696e73, and reaction_ingest_by_bot for bot1/bot2.
    2.56.0 makes the private-chat menu button open the Mini App while slash
    commands remain available. 2.56.1 exposes child reaction-ingestion metrics
    through the public router /health. 2.56.2 makes channel Mini App footers
    use the Main Mini App ?startapp=miniapp deep link, avoiding a bot-chat
-   redirect fallback.)
+   redirect fallback. 2.57.0 lets DeliveryPlanner rewrite allowlisted remote
+   media hosts through the fixed-upstream media proxy when an asset has no
+   Telegram file_id.)
    media_asset_refs VERIFIED on bot1/bot2 production DB;
    message_reaction_count allowed_update VERIFIED via webhook info;
    production E2E with a real media_assets payload remains EXTERNAL_ACCEPTANCE_REQUIRED;
-   real-user reaction ingestion and nonzero /hot remain EXTERNAL_ACCEPTANCE_REQUIRED
+   real-user reaction ingestion VERIFIED (bot1 message 3056, heat_score 1.4138);
+   pre-2.55.4 history stays at heat 0 = KNOWN_DEBT (no Bot-API backfill path)
 TelePress: 0.14.1
 Pixiv Media Proxy: pixiv-media-proxy.redtidev1918.workers.dev (v2, generic allowlist)
 ```
@@ -96,6 +99,9 @@ Pixiv Media Proxy (worker version 3fd098a7):
   (no cookie/auth passthrough), upstream responses validated as `image/*`,
   upstream 404/error mapped explicitly, `/health` VERIFIED via workers.dev.
 - Worker v2 adds `/media/<host>/<path>` for exact `MEDIA_PROXY_ALLOWED_HOSTS`; it rejects redirects and returns only a response-header allowlist.
+- TelePost 2.57.0 consumes the same worker: production sets
+  `MEDIA_PROXY_BASE_URL` + `MEDIA_PROXY_HOSTS=i.pximg.net`, and DeliveryPlanner
+  rewrites only those exact hosts when an asset has no Telegram `file_id`.
 - Worker v2 deploy verified: version `89486990-2c05-4225-a3f3-66a4cfd761f8`; `/health` ok; a real
   `i.pximg.net` generic-route image returned `200 image/jpeg` (949502 bytes).
 - TelePress deploy verified: Dockerfile pins `telepress[api]==0.14.1`; runtime package version is
@@ -1206,9 +1212,70 @@ per-message row and aggregate can be checked. Until then, real reaction E2E is
 
 ## Mini App Footer Boundary
 
-Telegram allows only one menu button. The current production contract is:
-menu button = commands; persistent private keyboard = Mini App entry. A channel
-footer without `MINIAPP_SHORT_NAME` necessarily routes to the bot via
-`?start=miniapp`, then sends an inline Web App button. One-tap direct Mini App
-from the channel requires the BotFather Direct Mini App short name plus
-`MINIAPP_SHORT_NAME`; this remains `EXTERNAL_ACCEPTANCE_REQUIRED`.
+Telegram allows only one menu button. Contract since 2.56.0/2.56.2: the
+private-chat menu button is a `MenuButtonWebApp` that opens the Main Mini App
+(slash commands stay in the `/` list, the persistent reply keyboard keeps its
+`📱 Mini App` button), and channel footers use the Main Mini App deep link
+`?startapp=miniapp`, which does not need the BotFather Direct Mini App short
+name. Configuring `MINIAPP_SHORT_NAME` upgrades the footer to the Direct Mini
+App form `https://t.me/<bot>/<short_name>?startapp=submit`. Real user taps from
+a channel post remain `EXTERNAL_ACCEPTANCE_REQUIRED`.
+
+---
+
+# 36. 2026-09-21 TelePost 2.57.0 + Media Proxy
+
+## IMPLEMENTED / VERIFIED
+
+TelePost 2.57.0 (`8696e73`, PR #212 delivery media proxy) pinned in
+`fly/deploy.telepost.toml` (PR #162) and deployed to `telesubmit-multi-bot`:
+
+```bash
+fly deploy -c fly/deploy.telepost.toml --ha=false --strategy rolling
+curl https://telesubmit-multi-bot.fly.dev/health
+```
+
+Runtime evidence:
+
+```text
+health.status = ok
+health.version = 2.57.0
+health.commit  = 8696e73ca09efba5a184bbf5c72a0a4a5df3faa3
+container env  = MEDIA_PROXY_BASE_URL=https://pixiv-media-proxy.redtidev1918.workers.dev
+                 MEDIA_PROXY_HOSTS=i.pximg.net
+both bots logged: 成功设置 12 个命令；菜单按钮类型=MenuButtonWebApp
+webhooks: /webhook/bot1 and /webhook/bot2 set successfully
+```
+
+Fixed-upstream media proxy acceptance (allowlist is exactly `i.pximg.net`):
+
+```text
+i.pximg.net without Referer            → 403 text/html
+i.pximg.net with Pixiv Referer         → 200 image/jpeg (645 658 bytes)
+/media/i.pximg.net/<same path> via proxy → 200 image/jpeg (645 658 bytes)
+Telegram sendPhoto(<proxied url>)      → ok:true (probe message deleted afterwards)
+```
+
+The rewrite only applies when a planned asset has no Telegram `file_id`; the
+`file_id` fast path is unchanged. Because `media_asset_refs` is still empty on
+both production DBs, a real illustration/novel publish that goes through the
+remote-URL strategy is still `EXTERNAL_ACCEPTANCE_REQUIRED`.
+
+## Reaction Ingest — First Real E2E
+
+A real channel reaction was accepted and projected in production
+(`message_id` 3056, bot1):
+
+```text
+bot1 health.reaction_ingest_by_bot[1] = {received_since_start: 1}
+bot1 message_reaction_counts = 1 row
+bot1 published_posts with heat_score > 0 = 1 row (reactions 1, heat_score 1.4138)
+bot2 message_reaction_counts = 0 rows; published_posts heat_score > 0 = 0 rows
+```
+
+So `update → ingest → projection → /hot` is VERIFIED for a new reaction. The
+remaining zeroes are not a bug: the Bot API pushes `message_reaction_count`
+only when a count changes, so posts reacted to before the handler shipped stay
+at heat 0 until someone reacts again. Backfilling history needs a user client
+(Telethon/Pyrogram) because the TelePost channel-history crawler is deliberately
+a Bot-API stub that cannot enumerate channel history. Classified `KNOWN_DEBT`.
