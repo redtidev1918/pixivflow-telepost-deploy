@@ -64,7 +64,7 @@ TelePost: 2.54.2
    media_asset_refs VERIFIED on bot1/bot2 production DB;
    message_reaction_count allowed_update VERIFIED via webhook info;
    production E2E with a real media_assets payload remains EXTERNAL_ACCEPTANCE_REQUIRED)
-TelePress: 0.14.1 (deploy pin updated; runtime verification pending)
+TelePress: 0.14.1
 Pixiv Media Proxy: pixiv-media-proxy.redtidev1918.workers.dev (v2, generic allowlist)
 ```
 
@@ -75,9 +75,11 @@ Pixiv Media Proxy (worker version 3fd098a7):
 - Worker v2 adds `/media/<host>/<path>` for exact `MEDIA_PROXY_ALLOWED_HOSTS`; it rejects redirects and returns only a response-header allowlist.
 - Worker v2 deploy verified: version `89486990-2c05-4225-a3f3-66a4cfd761f8`; `/health` ok; a real
   `i.pximg.net` generic-route image returned `200 image/jpeg` (949502 bytes).
-- TelePress deploy verified with `TELEPRESS_MEDIA_PROXY_BASE` and `TELEPRESS_MEDIA_PROXY_HOSTS=i.pximg.net`;
-  Fly machine healthy. A real-novel rich-novel publish through the generic route remains
-  `EXTERNAL_ACCEPTANCE_REQUIRED`.
+- TelePress deploy verified: Dockerfile pins `telepress[api]==0.14.1`; runtime package version is
+  `0.14.1`; image digest `sha256:addc0c6c11b2cd8af05a31b9563b4e565db166650934b1158cff789888cb6690`;
+  machine healthy and `/` returns `status=ok`. Production config uses `TELEPRESS_MEDIA_PROXY_BASE`
+  and `TELEPRESS_MEDIA_PROXY_HOSTS=i.pximg.net`.
+- A real-novel rich-novel publish through the generic route remains `EXTERNAL_ACCEPTANCE_REQUIRED`.
 - TelePress production config uses `TELEPRESS_MEDIA_PROXY_BASE` and
   `TELEPRESS_MEDIA_PROXY_HOSTS=i.pximg.net`; legacy `/pixiv/...` remains compatible.
 - TelePress 0.11.0 runtime E2E (post-hardening recheck): `/publish/rich-novel`
