@@ -1221,6 +1221,30 @@ name. Configuring `MINIAPP_SHORT_NAME` upgrades the footer to the Direct Mini
 App form `https://t.me/<bot>/<short_name>?startapp=submit`. Real user taps from
 a channel post remain `EXTERNAL_ACCEPTANCE_REQUIRED`.
 
+### 2026-09-21 Old-post footer retrofit (canary)
+
+Historical footers are frozen in already-published captions (Telegram Bot API
+cannot fetch a channel message's text). The retrofit mechanism was proven on
+bot1 @xgdShare message 3056: caption rebuilt from the DB body (`published_posts.caption`,
+verbatim, no template re-render) + the current footer builder, then applied via
+`editMessageCaption` (parse_mode=HTML). The API response entities verify the
+final footer:
+
+```text
+📖 在线阅读  → https://telegra.ph/狐娘雪伊与小人们的躲猫猫游戏-09-20  (from publication_previews)
+✉️ TG 投稿   → https://t.me/xgdPost_bot?start=submit
+📱 Mini App  → https://t.me/xgdPost_bot?startapp=miniapp
+```
+
+Status: old posts published before 2.56.2 carry `?startapp=submit` (pre-#208)
+or `?start=miniapp` (#208 window). With the current runtime, `?startapp=*`
+links open the Main Mini App directly and `?start=miniapp` lands in the bot
+chat where `/start miniapp` replies with a one-tap Web App button, so no known
+dead link remains. If a user tap still lands in the bot chat, batch-retrofit
+the 09-16+ posts (~29 candidates, max body 359 chars, no truncation risk)
+with the same canary procedure. 3058/3059/3060 test posts are already deleted
+from the channel (DB rows still `is_deleted=0` — known stale marker).
+
 ---
 
 # 36. 2026-09-21 TelePost 2.57.0 + Media Proxy
