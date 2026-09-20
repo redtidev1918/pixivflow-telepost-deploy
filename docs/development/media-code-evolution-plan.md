@@ -1023,29 +1023,14 @@ local upload
 
 # 19. Step 15 — Review Message Reuse
 
-API 自动投稿当前需要 Review。
+SKIPPED — YAGNI（2026-09-20）。
 
-如果 review message 已包含最终媒体：
+审核通过后走 `publish_from_file_ids`，媒体本来就是 Telegram file_id（零重传）。
+copyMessages 只省「多调一次 API」，却引入 caption / 顺序 / 源消息存活三重校验
+和新的失败语义；file_id resend 已经达到同样的零重传目标，复杂度不划算。
 
-优先评估：
-
-```text
-copyMessages
-```
-
-如果：
-
-* caption 不需要重新组织
-* media ordering 一致
-* source message 仍存在
-
-则直接 copy。
-
-否则：
-
-```text
-file_id resend
-```
+升级路径：只有当出现「同一 review 在多处发布、caption 完全一致且相册顺序固定」
+的真实需求时，再评估 copyMessages；当前无此场景。
 
 ---
 
