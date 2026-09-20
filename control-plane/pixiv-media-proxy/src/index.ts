@@ -109,9 +109,13 @@ export default {
     const upstream = await fetchImpl(target, {
       method: request.method,
       headers,
-      redirect: 'error',
+      redirect: 'manual',
       cf: { cacheTtl: 86400, cacheEverything: true },
     });
+
+    if (upstream.status >= 300 && upstream.status < 400) {
+      return json({ error: 'upstream_redirect_not_allowed' }, 502);
+    }
 
     if (upstream.status >= 400) {
       return json({ error: 'upstream_error', status: upstream.status }, upstream.status === 404 ? 404 : 502);
