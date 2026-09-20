@@ -7,7 +7,10 @@ function dispatch(input: RequestInfo | URL, init?: RequestInit, fetchImpl?: type
   const request = new Request(input, init);
   return (worker as { fetch: (r: Request, e: unknown) => Promise<Response> }).fetch(
     request,
-    { PIXIV_PROXY_FETCH: fetchImpl ?? globalThis.fetch },
+    {
+      MEDIA_PROXY_ALLOWED_HOSTS: 'i.pximg.net',
+      PIXIV_PROXY_FETCH: fetchImpl ?? globalThis.fetch,
+    },
   );
 }
 
@@ -84,5 +87,57 @@ describe('pixiv media proxy', () => {
 
     const forbidden = (async () => new Response('denied', { status: 403, headers: { 'content-type': 'text/plain' } })) as typeof fetch;
     expect((await dispatch(`${BASE}/pixiv/denied`, {}, forbidden)).status).toBe(502);
+  });
+
+  it('supports the generic /media route only for an allowlisted host', async () => {
+    let target: string | undefined;
+    const fakeFetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      target = String(input);
+      return new Response('img', { status: 200, headers: { 'content-type': 'image/jpeg' } });
+    }) as typeof fetch;
+
+    const res = await dispatch(`${BASE}/media/i.pximg.net/img-master/img/1.jpg?x=1`, {}, fakeFetch);
+    expect(res.status).toBe(200);
+    expect(target).toBe('https://i.pximg.net/img-master/img/1.jpg?x=1');
+    expect(await res.text()).toBe('img');
+
+    const other = await dispatch(`${BASE}/media/i.etsystatic.com/a.jpg`, {}, fakeFetch);
+    expect(other.status).toBe(404);
+  });
+
+  it('rejects traversal and unsafe redirects in generic media routes', async () => {
+    for (const bad of [
+      '/media/i.pximg.net/../evil',
+      '/media/i.pximg.net/a%2f..%2fb',
+      '/media/i.pximg.net.example/a.jpg',
+      '/media/localhost/a.jpg',
+      '/media/open%2Eexample.com/a.jpg',
+    ]) {
+      const res = await dispatch(`${BASE}${bad}`, {}, (async () => new Response('never')) as typeof fetch);
+      expect([400, 404]).toContain(res.status);
+    }
+
+    let redirect: RequestInit["redirect"] | undefined;
+    await dispatch(
+      `${BASE}/media/i.pximg.net/a.jpg`,
+      {},
+      (async (_input: RequestInfo | URL, init?: RequestInit) => {
+        redirect = init?.redirect;
+        return new Response(null, { status: 302, headers: { location: 'https://evil.example/img', 'content-type': 'image/jpeg' } });
+      }) as typeof fetch,
+    );
+    expect(redirect).toBe('error');
+  });
+
+  it('returns only an allowlisted set of response headers', async () => {
+    const fakeFetch = (async () => new Response('img', {
+      status: 200,
+      headers: { 'content-type': 'image/jpeg', 'set-cookie': 'secret=yes', 'x-secret': '1', etag: 'abc' },
+    })) as typeof fetch;
+    const res = await dispatch(`${BASE}/media/i.pximg.net/a.jpg`, {}, fakeFetch);
+    expect(res.headers.get('etag')).toBe('abc');
+    expect(res.headers.get('set-cookie')).toBeNull();
+    expect(res.headers.get('x-secret')).toBeNull();
+    expect(res.headers.get('x-content-type-options')).toBe('nosniff');
   });
 });
