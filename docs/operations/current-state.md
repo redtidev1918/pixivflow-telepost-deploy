@@ -44,8 +44,10 @@ TelePost RBAC 演化模型（root/sudoers/Role Binding）见 [telepost-rbac-evol
 最近明确记录的生产 baseline：
 
 ```text
-PixivFlow: 2.42.0 / f30c74d027bac5a992e60e5f6f41c70264b1929b
-  (scheduler /health now reports version + commit; deploy pin updated to v2.42.0)
+PixivFlow: 2.42.0 / f30c74d027bac5a992e60e5f6f41c70264b1929b — VERIFIED
+  (deploy pin = release commit; runtime log shows
+   `PIXIVFLOW_REVISION=2.42.0+f30c74d...`; public `/health` returned
+   `version=2.42.0`, `commit=f30c74d027ba`)
   (hot-reload config: /app/data/production.json, watchConfig=true;
    download.materializationPolicy wired from config → on-demand novel previews active)
 TelePost: 2.54.2
@@ -550,7 +552,7 @@ DeliveryVariant
 * canonical MediaAsset / Artifact / ResolvedWork / MaterializationPolicy
 * cross-service rich-novel manifest（TelePress 用 remote MediaReference，不强制下载）
 * on-demand preview：`download.materializationPolicy` 已从配置接入 DownloadManager
-  （2.41.0），生产配置为 `on-demand`，ZIP/归档仍按需物化
+  （2.41.0 引入，当前运行 2.42.0），生产配置为 `on-demand`，ZIP/归档仍按需物化
 
 仍未正式完成：
 
@@ -718,7 +720,7 @@ Cloudflare Worker Free
 
 # 22. Rich Novel Preview
 
-Status: `IN_PROGRESS`（2.41.0 已启用 on-demand 配置；真实带图 novel 端到端验收待下次执行）
+Status: `IN_PROGRESS`（2.41.0 引入 on-demand 配置，当前运行 2.42.0；真实带图 novel 端到端验收待下次执行）
 
 最终不应强制：
 
