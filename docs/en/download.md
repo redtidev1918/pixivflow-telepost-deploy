@@ -1,6 +1,10 @@
+<!-- docsite-release-repo: redtidev1918/pixivflow-telepost-deploy -->
+<!-- docsite-release-tag: v1.13.0 -->
 # 📥 Download pixivflow-telepost-deploy
 
 **Language / 语言:** [中文](/download.md) · English
+
+<!-- docsite: generated from redtidev1918/pixivflow-telepost-deploy release v1.13.0; do not edit by hand -->
 
 This page is **generated automatically** by GitHub Actions on every release and always points at the latest one.
 
@@ -16,5 +20,5 @@ This page is **generated automatically** by GitHub Actions on every release and 
 | Windows · arm64 | `deploy-windows-arm64.tar.gz` | 2.1 MB | [⬇️ Download](https://github.com/redtidev1918/pixivflow-telepost-deploy/releases/download/v1.13.0/deploy-windows-arm64.tar.gz) |
 | macOS · amd64 | `deploy-darwin-amd64.tar.gz` | 2.3 MB | [⬇️ Download](https://github.com/redtidev1918/pixivflow-telepost-deploy/releases/download/v1.13.0/deploy-darwin-amd64.tar.gz) |
 | macOS · arm64 | `deploy-darwin-arm64.tar.gz` | 2.2 MB | [⬇️ Download](https://github.com/redtidev1918/pixivflow-telepost-deploy/releases/download/v1.13.0/deploy-darwin-arm64.tar.gz) |
-| All platforms | `RELEASE-METADATA.json` | 3 KB | [⬇️ Download](https://github.com/redtidev1918/pixivflow-telepost-deploy/releases/download/v1.13.0/RELEASE-METADATA.json) |
-| All platforms | `SHA256SUMS` | 1 KB | [⬇️ Download](https://github.com/redtidev1918/pixivflow-telepost-deploy/releases/download/v1.13.0/SHA256SUMS) |
+| 通用 | `RELEASE-METADATA.json` | 3 KB | [⬇️ Download](https://github.com/redtidev1918/pixivflow-telepost-deploy/releases/download/v1.13.0/RELEASE-METADATA.json) |
+| 通用 | `SHA256SUMS` | 1 KB | [⬇️ Download](https://github.com/redtidev1918/pixivflow-telepost-deploy/releases/download/v1.13.0/SHA256SUMS) |
