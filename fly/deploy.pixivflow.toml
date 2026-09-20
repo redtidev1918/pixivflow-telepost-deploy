@@ -140,8 +140,10 @@ kill_timeout = 60
     # 471ff53 = v2.41.0 (released 2026-09-19). Wire download.materializationPolicy from
     # config into DownloadManager so production.json's on-demand is actually honored, and
     # split-worker config moves to the volume copy (/app/data/production.json, watchConfig=true).
-    PIXIVFLOW_REF = '471ff53f25c9e23bc3df5333232746b697ea915a'
-    PIXIVFLOW_VERSION = '2.41.0'
+    # f30c74d = v2.42.0 (released 2026-09-20). Scheduler /health reports runtime version
+    # and commit so release/deploy/runtime identity can be verified without shell access.
+    PIXIVFLOW_REF = 'f30c74d027bac5a992e60e5f6f41c70264b1929b'
+    PIXIVFLOW_VERSION = '2.42.0'
 
 [[mounts]]
   source = 'pixivflow_data'
