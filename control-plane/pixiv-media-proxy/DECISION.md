@@ -2,7 +2,7 @@
 
 ## Status
 
-IMPLEMENTED_NOT_VERIFIED
+VERIFIED (Worker route + deploy; full real-novel rich-novel E2E remains EXTERNAL_ACCEPTANCE_REQUIRED)
 
 ## Context
 
