@@ -141,7 +141,9 @@ primary_region = 'iad'
     # published_posts.reactions/heat_score.
     # 2.54.0 (2026-09-20): hide views/forwards from user-facing stats (Bot API
     # does not provide them) + Step 14 second-delivery file_id reuse test.
-    TELEPOST_IMAGE = 'ghcr.io/redtidev1918/telepost:2.54.0'
+    # 2.54.1 (2026-09-20): sanitize note HTML at insert and preserve submitter
+    # media order through delivery; preview now matches publication order.
+    TELEPOST_IMAGE = 'ghcr.io/redtidev1918/telepost:2.54.1'
 
 [[mounts]]
   source = 'data'
