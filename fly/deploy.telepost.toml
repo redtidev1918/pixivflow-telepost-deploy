@@ -145,7 +145,10 @@ primary_region = 'iad'
     # media order through delivery; preview now matches publication order.
     # 2.54.2 (2026-09-20): fix reaction-count callback arity and suppress
     # user-facing error replies from channel contexts.
-    TELEPOST_IMAGE = 'ghcr.io/redtidev1918/telepost:2.54.2'
+    # 2.55.0 (2026-09-20): multipart submissions accept the same optional
+    # media_assets Delivery Asset Contract as JSON submissions; review-path
+    # assets persist to existing media_asset_refs.
+    TELEPOST_IMAGE = 'ghcr.io/redtidev1918/telepost:2.55.0'
 
 [[mounts]]
   source = 'data'
