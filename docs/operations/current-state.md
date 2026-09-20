@@ -74,9 +74,10 @@ TelePost: 2.55.3
    restores Mini App access via a persistent keyboard button, uses
    ?start=miniapp as a one-tap channel footer fallback, and suppresses
    private preview link previews)
-  (2.55.3 pinned in fly/deploy.telepost.toml; deploy pending until runtime
-   verification reports version=2.55.3, commit=885648a; command menu and
-   Mini App keyboard entry remain EXTERNAL_ACCEPTANCE_REQUIRED)
+  (2.55.3 pinned in fly/deploy.telepost.toml; VERIFIED: /health reports
+   version=2.55.3, commit=885648a; both chat menu buttons remain commands and
+   a Bot1 private Web App keyboard was accepted by Telegram. User clicks of
+   the keyboard/channel footer remain EXTERNAL_ACCEPTANCE_REQUIRED)
    media_asset_refs VERIFIED on bot1/bot2 production DB;
    message_reaction_count allowed_update VERIFIED via webhook info;
    production E2E with a real media_assets payload remains EXTERNAL_ACCEPTANCE_REQUIRED)
