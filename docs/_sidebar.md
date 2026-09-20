@@ -34,6 +34,10 @@
   - [性能与内存调优](/operations/performance.md)
   - [多 Bot：加第 N 个频道](/operations/multi-bot.md)
   - [worker-sleep 端到端验收（512 MiB）](/operations/worker-sleep-acceptance.md)
+  - [生产现状](/operations/current-state.md)
+  - [媒体解耦交付计划](/operations/media-decoupling-delivery-plan.md)
+  - [渐进式交付计划](/operations/progressive-delivery-plan.md)
+  - [重抓生产验证记录（2026-09-14）](/operations/refetch-production-verification.md)
 - 参考
   - [跨仓库契约（PixivFlow ↔ TelePost）](/CONTRACT.md)
   - [部署契约（统一部署模型）](/reference/deployment-contract.md)
@@ -43,5 +47,11 @@
   - [Roadmap：多架构实现计划](/ROADMAP-MULTI-ARCH.md)
   - [事故：Pixiv 出口限流 2026-09-11](/incidents/2026-09-11-pixiv-egress-rate-limit.md)
   - [事故：定时触发漏跑 2026-09-13](/incidents/2026-09-13-schedule-trigger-miss.md)
+- 架构设计
+  - [社区参考定位](/architecture/community-reference-position.md)
+  - [生态平台架构](/architecture/ecosystem-platform.md)
+  - [TelePost RBAC 演进](/architecture/telepost-rbac-evolution.md)
+- 开发
+  - [媒体代码演进计划](/development/media-code-evolution-plan.md)
 - English
   - [English index](/en/)

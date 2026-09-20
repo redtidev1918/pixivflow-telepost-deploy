@@ -7,6 +7,8 @@
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Docs](https://img.shields.io/badge/Docs-文档站点-6366f1?style=flat-square)](https://redtidev1918.github.io/pixivflow-telepost-deploy/)
 
+📖 完整文档：<https://redtidev1918.github.io/pixivflow-telepost-deploy/>
+
 **PixivFlow + TelePost 的部署与运维套件。** 它把两个上游项目组合成一套可部署、可运维的系统：
 
 | 组件 | 负责什么 | 不负责什么 |
