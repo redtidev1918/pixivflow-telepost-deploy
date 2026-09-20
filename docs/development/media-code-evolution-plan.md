@@ -239,7 +239,7 @@ Pixiv URL：
 https://i.pximg.net/...
 ```
 
-如果配置：
+如果配置 legacy：
 
 ```text
 TELEPRESS_PIXIV_PROXY_BASE
@@ -249,6 +249,19 @@ TELEPRESS_PIXIV_PROXY_BASE
 
 ```text
 <proxy>/pixiv/...
+```
+
+生产现在使用通用且受限的配置：
+
+```text
+TELEPRESS_MEDIA_PROXY_BASE
+TELEPRESS_MEDIA_PROXY_HOSTS
+```
+
+命中 allowlist 时改写成：
+
+```text
+<proxy>/media/<host>/...
 ```
 
 否则：
