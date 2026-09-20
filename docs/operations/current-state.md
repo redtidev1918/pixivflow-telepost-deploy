@@ -59,7 +59,8 @@ TelePost: 2.54.2
    counts, recomputes published_posts.reactions/heat_score; views/forwards
    hidden from user-facing stats;
    2.54.2 fixes reaction-count callback arity and keeps channel errors silent)
-  (2.54.2 pinned in fly/deploy.telepost.toml; deploy and /health runtime verification pending)
+  (2.54.2 pinned in fly/deploy.telepost.toml; deployed: /health version=2.54.2,
+   commit=a54b892; no new reaction-handler errors after deploy)
    media_asset_refs VERIFIED on bot1/bot2 production DB;
    message_reaction_count allowed_update VERIFIED via webhook info;
    production E2E with a real media_assets payload remains EXTERNAL_ACCEPTANCE_REQUIRED)
