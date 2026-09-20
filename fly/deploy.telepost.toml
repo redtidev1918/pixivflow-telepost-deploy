@@ -148,7 +148,10 @@ primary_region = 'iad'
     # 2.55.0 (2026-09-20): multipart submissions accept the same optional
     # media_assets Delivery Asset Contract as JSON submissions; review-path
     # assets persist to existing media_asset_refs.
-    TELEPOST_IMAGE = 'ghcr.io/redtidev1918/telepost:2.55.0'
+    # 2.55.1 (2026-09-20): private chat and Mini App previews render the real
+    # channel caption; command menu button restored; bulk soft-delete added.
+    # 2.55.2 (2026-09-20): fixes the menu-button API argument after 2.55.1.
+    TELEPOST_IMAGE = 'ghcr.io/redtidev1918/telepost:2.55.2'
 
 [[mounts]]
   source = 'data'

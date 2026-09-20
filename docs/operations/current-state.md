@@ -53,7 +53,7 @@ PixivFlow: 2.43.0 / c27c924cf92df303b46f10d0a2552fc488f4da43 — VERIFIED
    additive Delivery Asset Contract step, not on-demand illustration delivery)
   (hot-reload config: /app/data/production.json, watchConfig=true;
    download.materializationPolicy wired from config → on-demand novel previews active)
-TelePost: 2.55.0
+TelePost: 2.55.2
   (Step 10 delivery asset contract: optional JSON media_assets on /api/v1/submissions
    persisted per review_chain_id in media_asset_refs;
    Step 11 DeliveryPlanner: read-only GET /api/v1/reviews/{id}/delivery-plan;
@@ -66,9 +66,13 @@ TelePost: 2.55.0
    hidden from user-facing stats;
    2.54.2 fixes reaction-count callback arity and keeps channel errors silent;
    2.55.0 accepts the same optional media_assets Delivery Asset Contract on
-   multipart submissions and persists it through the review path)
-  (2.55.0 pinned in fly/deploy.telepost.toml; deployed: /health version=2.55.0,
-   commit=aac6aa2; machine checks passing)
+   multipart submissions and persists it through the review path;
+   2.55.1 makes private chat and Mini App previews render the real channel
+   caption, restores the default command menu, and adds bulk soft-delete of
+   owned terminal history; 2.55.2 fixes the default menu-button API call so
+   the command menu is actually restored)
+  (2.55.2 pinned in fly/deploy.telepost.toml; deploy pending until runtime
+   verification reports version=2.55.2, commit=73af312)
    media_asset_refs VERIFIED on bot1/bot2 production DB;
    message_reaction_count allowed_update VERIFIED via webhook info;
    production E2E with a real media_assets payload remains EXTERNAL_ACCEPTANCE_REQUIRED)
