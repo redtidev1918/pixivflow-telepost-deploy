@@ -1249,6 +1249,24 @@ from the channel (DB rows still `is_deleted=0` — known stale marker).
 
 # 36. 2026-09-21 TelePost 2.57.0 + Media Proxy
 
+## 2026-09-21 pixivflow-scheduler 2.43.1 — media_assets wire contract fix
+
+Found pre-E2E: PixivFlow 2.43.0 serialized the canonical `MediaAsset`
+(camelCase `id`/`sourceUrl`) into the multipart `media_assets` field, but
+TelePost's Delivery Asset Contract accepts only `{asset_id, kind, source_url,
+mime_type?}` and rejects unknown fields with 400 `invalid_media_asset`. The
+10:00 slot would have been rejected outright.
+
+Fixed in PixivFlow PR #161 (v2.43.1): `HttpMultipartDelivery` maps domain
+assets to the TelePost wire shape at the single serialization point. Both
+sides now have tests asserting the same shape (PixivFlow
+`http-multipart.test.ts`; TelePost `test_media_assets_persist_and_read_back`).
+
+Runtime: deploy pin 9624b01; machine `83d1650bd23948` updated to image
+`deployment-01M30HTG9SZ0SYK4VA01N81BB1`, stopped-by-design (idle), volume
+`vol_r68wlk8ynj1x5lq4` intact. First real multipart send with media_assets is
+the 10:00 slot (EXTERNAL_ACCEPTANCE_REQUIRED).
+
 ## IMPLEMENTED / VERIFIED
 
 TelePost 2.57.0 (`8696e73`, PR #212 delivery media proxy) pinned in
