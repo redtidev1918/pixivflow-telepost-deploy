@@ -65,13 +65,16 @@ TelePost: 2.54.2
    message_reaction_count allowed_update VERIFIED via webhook info;
    production E2E with a real media_assets payload remains EXTERNAL_ACCEPTANCE_REQUIRED)
 TelePress: 0.12.1
-Pixiv Media Proxy: pixiv-media-proxy.redtidev1918.workers.dev (v1)
+Pixiv Media Proxy: pixiv-media-proxy.redtidev1918.workers.dev (v2, generic allowlist)
 ```
 
 Pixiv Media Proxy (worker version 3fd098a7):
 - `GET/HEAD` only, fixed upstream `i.pximg.net`, allowlisted client headers only
   (no cookie/auth passthrough), upstream responses validated as `image/*`,
   upstream 404/error mapped explicitly, `/health` VERIFIED via workers.dev.
+- Worker v2 adds `/media/<host>/<path>` for exact `MEDIA_PROXY_ALLOWED_HOSTS`; it rejects redirects and returns only a response-header allowlist.
+- TelePress production config uses `TELEPRESS_MEDIA_PROXY_BASE` and
+  `TELEPRESS_MEDIA_PROXY_HOSTS=i.pximg.net`; legacy `/pixiv/...` remains compatible.
 - TelePress 0.11.0 runtime E2E (post-hardening recheck): `/publish/rich-novel`
   with manifest returned `status=proxied` and rewrote `images/a.jpg` to
   `https://pixiv-media-proxy.redtidev1918.workers.dev/pixiv/...`

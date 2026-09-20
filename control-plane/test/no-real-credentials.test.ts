@@ -74,7 +74,7 @@ function isTextFile(name: string): boolean {
 function listTrackedFiles(): string[] {
   try {
     const out = execFileSync('git', ['ls-files', '-z'], { cwd: REPO_ROOT, encoding: 'buffer' });
-    return out.toString('utf8').split('\0').filter(Boolean).filter(isTextFile);
+    return out.toString().split('\0').filter((part) => part.length > 0).filter((file) => isTextFile(file));
   } catch {
     return walk(REPO_ROOT)
       .map((file) => relative(REPO_ROOT, file).split(sep).join('/'))
@@ -143,7 +143,10 @@ function scan(files: string[]): Finding[] {
       for (const match of line.match(TELEGRAM_CHAT_ID) ?? []) consider(match, 'chat-id');
       PIXIV_REFRESH_TOKEN.lastIndex = 0;
       let refresh: RegExpExecArray | null;
-      while ((refresh = PIXIV_REFRESH_TOKEN.exec(line)) !== null) consider(refresh[1], 'refresh-token');
+      while ((refresh = PIXIV_REFRESH_TOKEN.exec(line)) !== null) {
+        const value = refresh[1];
+        if (value) consider(value, 'refresh-token');
+      }
     });
   }
   return findings;

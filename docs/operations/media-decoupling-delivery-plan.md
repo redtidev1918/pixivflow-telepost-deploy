@@ -102,20 +102,25 @@ Gate：只有准确知道当前代码和生产实际路径后才能进入 Phase 
 公开接口：
 
 ```text
-GET /pixiv/<pximg path>
-HEAD /pixiv/<pximg path>
+GET /pixiv/<pximg path>             # legacy route
+HEAD /pixiv/<pximg path>            # legacy route
+GET /media/<host>/<path>            # generic allowlist route
+HEAD /media/<host>/<path>           # generic allowlist route
 ```
 
 固定约束：
 
 ```text
-固定上游 https://i.pximg.net
+固定上游 https://i.pximg.net（legacy route）
+generic route 只访问 MEDIA_PROXY_ALLOWED_HOSTS 中的精确 host
 GET/HEAD only
-不接受任意 host
+不接受任意 URL 参数、任意 host、port、wildcard 或 scheme
 不接受用户自定义 headers
 不保存 Pixiv credentials
 不允许 path escape
+拒绝 upstream redirect
 只返回 image response
+只返回响应 header allowlist
 ```
 
 响应只保留必要 headers：
@@ -151,6 +156,7 @@ Worker /health → 200
 
 - 保留现有 ImageUploader。
 - 新增 `TELEPRESS_PIXIV_PROXY_BASE`：匹配 `https://i.pximg.net/...` 的图片改写为 `<base>/pixiv/...`，不匹配或未配置则继续原图床上传。
+- 生产改用通用 `TELEPRESS_MEDIA_PROXY_*` 配置：Worker 新增 `/media/<host>/<path>` 路由，只访问精确 host allowlist；`/pixiv/<path>` 继续兼容。
 - `/publish/rich-novel` 支持可选 `manifest`：
   ```json
   [{"local": "images/001.jpg", "source": "https://i.pximg.net/..."}]
