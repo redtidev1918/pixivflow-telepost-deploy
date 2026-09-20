@@ -153,7 +153,9 @@ primary_region = 'iad'
     # 2.55.2 (2026-09-20): fixes the menu-button API argument after 2.55.1.
     # 2.55.3 (2026-09-20): command menu + Mini App keyboard coexistence, one-tap
     # ?start=miniapp fallback, and private preview link-preview suppression.
-    TELEPOST_IMAGE = 'ghcr.io/redtidev1918/telepost:2.55.3'
+    # 2.55.4 (2026-09-20): restores the reply keyboard after /cancel and uses
+    # the explicit LinkPreviewOptions API on both preview paths.
+    TELEPOST_IMAGE = 'ghcr.io/redtidev1918/telepost:2.55.4'
 
 [[mounts]]
   source = 'data'
