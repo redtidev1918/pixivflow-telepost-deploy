@@ -163,13 +163,17 @@ primary_region = 'iad'
     # observable.
     # 2.56.2 (2026-09-21): channel Mini App footers use the Main Mini App
     # ?startapp=miniapp deep link, avoiding a bot-chat redirect fallback.
-    TELEPOST_IMAGE = 'ghcr.io/redtidev1918/telepost:2.56.2'
+    # 2.57.0 (2026-09-21): DeliveryPlanner can rewrite exact allowlisted remote
+    # media hosts through the public fixed-upstream media proxy.
+    TELEPOST_IMAGE = 'ghcr.io/redtidev1918/telepost:2.57.0'
 
 [[mounts]]
   source = 'data'
   destination = '/app/data'
 
 [env]
+  MEDIA_PROXY_BASE_URL = 'https://pixiv-media-proxy.redtidev1918.workers.dev'
+  MEDIA_PROXY_HOSTS = 'i.pximg.net'
   RUN_MODE = 'WEBHOOK'
   WEBHOOK_PATH = '/webhook'
   ROUTER_CHILD_READY_TIMEOUT = '120'
