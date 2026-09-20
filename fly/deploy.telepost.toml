@@ -151,7 +151,9 @@ primary_region = 'iad'
     # 2.55.1 (2026-09-20): private chat and Mini App previews render the real
     # channel caption; command menu button restored; bulk soft-delete added.
     # 2.55.2 (2026-09-20): fixes the menu-button API argument after 2.55.1.
-    TELEPOST_IMAGE = 'ghcr.io/redtidev1918/telepost:2.55.2'
+    # 2.55.3 (2026-09-20): command menu + Mini App keyboard coexistence, one-tap
+    # ?start=miniapp fallback, and private preview link-preview suppression.
+    TELEPOST_IMAGE = 'ghcr.io/redtidev1918/telepost:2.55.3'
 
 [[mounts]]
   source = 'data'
