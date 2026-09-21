@@ -1376,8 +1376,11 @@ bounded remote→local materialization (temp file, UA
 `TelegramBot-LinkPreview/0.1`, size-capped, cleaned after send) and retries as a
 local upload. `remote_url` remains the preferred happy path; local upload is
 only the fallback. Regression tests: `tests/test_remote_fetch_fallback.py`.
+Runtime: TelePost 2.60.1 deployed; `/health` version=2.60.1 commit=8bae62d.
+A production container probe materialized the exact review-92 item 7 URL
+(`200 image/png`, 1 748 895 bytes) into a bounded temp file and cleaned it up.
 Review #92 is still `failed` in the ledger and can be retried by the operator
-after the fix deploys.
+from the review action; the retry now has the local-upload fallback available.
 
 # 37. 2026-09-21 media_assets E2E + TelePost 2.57.1 / 2.58.0
 
