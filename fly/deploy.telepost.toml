@@ -173,11 +173,10 @@ primary_region = 'iad'
     # unchanged (regression-only refactor, 978 tests).
     # 2.58.1 (2026-09-21): align trailing novel documents in mixed delivery
     # plans; a TXT file_id can no longer be sent as a photo.
-    # 2.62.0 (2026-09-22): novel inline images are preview-only (channel ships
-    # only the TXT); online reading uses telepress 0.14.1 rich markdown with
-    # real images; mixed submissions order visual -> files; linked-discussion
-    # overflow splits image thread and file thread.
-    TELEPOST_IMAGE = 'ghcr.io/redtidev1918/telepost:2.62.0'
+    # 2.62.1 (2026-09-22): regenerates legacy text-only Telegraph pages that
+    # were previously marked rich; adds CI enforcement that TelePost's
+    # telepress pin matches the TelePress service image pin.
+    TELEPOST_IMAGE = 'ghcr.io/redtidev1918/telepost:2.62.1'
 
 [[mounts]]
   source = 'data'
