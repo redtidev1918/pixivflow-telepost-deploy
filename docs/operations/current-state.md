@@ -1397,6 +1397,14 @@ text-only path. A legacy text-only preview record on a retried publication is
 upgraded once (`title=rich` marker on `publication_previews`); #92's existing
 text-only row will be replaced by the rich page when it is retried.
 
+Repeated #92 retry finding: the per-single fallback was not reached because
+Telegram's album send itself failed (``sendMediaGroup`` downloads every remote
+image up front). TelePost 2.61.1 now materializes ALL remote media through the
+proxy into bounded temp files BEFORE album planning, so Telegram only receives
+local uploads and remote URLs never participate in ``sendMediaGroup``; the
+single-send fallback remains for non-album paths. ``tests/`` cover gateway
+pre-materialization plus NetworkError-style URL fetch markers.
+
 # 37. 2026-09-21 media_assets E2E + TelePost 2.57.1 / 2.58.0
 
 ## media_assets first real production evidence (self-test)
