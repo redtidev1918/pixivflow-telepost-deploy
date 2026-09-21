@@ -173,10 +173,10 @@ primary_region = 'iad'
     # unchanged (regression-only refactor, 978 tests).
     # 2.58.1 (2026-09-21): align trailing novel documents in mixed delivery
     # plans; a TXT file_id can no longer be sent as a photo.
-    # 2.62.1 (2026-09-22): regenerates legacy text-only Telegraph pages that
-    # were previously marked rich; adds CI enforcement that TelePost's
-    # telepress pin matches the TelePress service image pin.
-    TELEPOST_IMAGE = 'ghcr.io/redtidev1918/telepost:2.62.1'
+    # 2.62.2 (2026-09-22): routes discussion publishing through the shared
+    # family-aware strategy (channel root image+file, overflow per thread);
+    # /health exposes telepress_version + telepress_rich_markdown.
+    TELEPOST_IMAGE = 'ghcr.io/redtidev1918/telepost:2.62.2'
 
 [[mounts]]
   source = 'data'
@@ -186,6 +186,7 @@ primary_region = 'iad'
   MEDIA_PROXY_BASE_URL = 'https://pixiv-media-proxy.redtidev1918.workers.dev'
   MEDIA_PROXY_HOSTS = 'i.pximg.net'
   RUN_MODE = 'WEBHOOK'
+  CHANNEL_ALBUM_REPLY = 'discussion'
   WEBHOOK_PATH = '/webhook'
   ROUTER_CHILD_READY_TIMEOUT = '120'
   PENDING_REVIEW_RETENTION_DAYS = '1'
