@@ -59,7 +59,11 @@ def delivery_plan(bot: int, review_id: int) -> dict:
 
 
 def fetch_url(url: str) -> tuple[int, str]:
-    req = urllib.request.Request(url)
+    # Cloudflare bot protection on workers.dev 403s the default
+    # "Python-urllib/x" User-Agent; the real delivery consumer (Telegram's
+    # URL fetcher) passes. Use a benign UA so the probe measures the proxy,
+    # not our own client fingerprint.
+    req = urllib.request.Request(url, headers={"User-Agent": "telepost-e2e-probe/1.0"})
     try:
         with urllib.request.urlopen(req, timeout=20) as resp:
             return resp.status, resp.headers.get("content-type", "")
