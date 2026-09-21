@@ -1282,6 +1282,12 @@ files: string[];
 
 至少保留一个 release cycle。
 
+## 25.1 Status
+
+| 状态 | 说明 |
+|---|---|
+| IMPLEMENTED | `DownloadedArtifact.files[]` 已标记为 `@deprecated use artifacts/mediaAssets`，并注明保留一个 release cycle 的兼容投影；行为和 wire contract 不变。 |
+
 ---
 
 # 26. Step 22 — Remove Legacy Compatibility
