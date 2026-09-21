@@ -165,7 +165,10 @@ primary_region = 'iad'
     # ?startapp=miniapp deep link, avoiding a bot-chat redirect fallback.
     # 2.57.0 (2026-09-21): DeliveryPlanner can rewrite exact allowlisted remote
     # media hosts through the public fixed-upstream media proxy.
-    TELEPOST_IMAGE = 'ghcr.io/redtidev1918/telepost:2.57.0'
+    # 2.57.1 (2026-09-21): review_chain_id anchors at insert time, so
+    # media_asset_refs persist for fresh submissions without waiting for a
+    # restart backfill (production E2E self-test finding).
+    TELEPOST_IMAGE = 'ghcr.io/redtidev1918/telepost:2.57.1'
 
 [[mounts]]
   source = 'data'
