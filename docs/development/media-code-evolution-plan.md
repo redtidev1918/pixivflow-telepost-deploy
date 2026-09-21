@@ -1,6 +1,10 @@
 # PixivFlow Ecosystem Media Code Evolution Plan
 
-Status: ACTIVE
+Status: ACTIVE — Steps 20-22 closed (PixivFlow 2.45.0): all download paths emit canonical
+`Artifact[]`, delivery paths are derived from artifacts, and the legacy
+`DownloadedArtifact.files[]` projection is removed. Remaining pieced outside the
+media-code plan are tracked in the operational docs (EXTERNAL_ACCEPTANCE_REQUIRED /
+KNOWN_DEBT items).
 Progress: Step 1 (manifest/proxy) DONE; Steps 2-7 IMPLEMENTED on PixivFlow master (08ec9d0, ec74b21, eea6f7e, 37bd9ca, ff736e9); Step 8 (TelePress MediaReference) DONE + VERIFIED (TelePress 0.12.1 runtime E2E returns assetId; PixivFlow 2.39.0 sends assetId/sourceUrl). Step 9 (on-demand preview via MediaReference manifest) RELEASED + DEPLOYED (PixivFlow v2.41.0/471ff53 live on pixivflow-scheduler; config materializationPolicy=on-demand in production.json) — 真实小说槽位 manifest-only 预览生产观测 EXTERNAL_ACCEPTANCE_REQUIRED. Step 10 (TelePost Delivery Asset Contract) RELEASED + DEPLOYED (TelePost 2.49.0 live on telesubmit-multi-bot; /health version=2.49.0; media_asset_refs VERIFIED on bot1/bot2 生产库). 真实 media_assets 生产 E2E EXTERNAL_ACCEPTANCE_REQUIRED（今日 10:00 槽位）；PixivFlow 上游发送 media_assets 已 VERIFIED（代码：v2.43.1 09d5c68 multipart fields.media_assets，PR #161 映射为 TelePost 契约形状 asset_id/source_url），TelePost multipart 解析已 VERIFIED（代码：2.57.0）。 Step 11 (DeliveryPlanner) RELEASED + DEPLOYED (TelePost 2.50.0 live; /health version=2.50.0; GET /api/bot1/v1/reviews/{id}/delivery-plan route VERIFIED 401-without-auth); 发布链路采纳该 plan VERIFIED（TelePost 2.52.0: publish_from_file_ids 通过 DeliveryPlanner 构建 items）。 Step 12 (TelegramMediaCache) RELEASED + DEPLOYED (TelePost 2.51.0 live; /health version=2.51.0; media_asset_refs.file_id/file_unique_id columns VERIFIED on bot1/bot2 生产库). 送达链路调用 mark_delivered_for_chain VERIFIED（TelePost 2.52.0: 确认送达后写回 media_asset_refs）。Step 11—13 完成；TelePost 2.53.0 增加 reaction-based heat（message_reaction_count → published_posts.reactions/heat_score）；Step 14 (Reuse Telegram Media) VERIFIED（同 asset 第二次投递使用 media_asset_refs.file_id，通过 Step 14 测试）。TelePost 2.54.1 隐藏 views/forwards 展示。TelePress deploy pin 收敛到 0.14.1，runtime package/version、health 和 generic-route Rich Novel E2E VERIFIED（三张真实 Pixiv novel-cover 图片 status=proxied，Telegraph 引用媒体代理，图片 200 image/jpeg）。scheduled PixivFlow manifest-only slot 观测仍 EXTERNAL_ACCEPTANCE_REQUIRED。
 Batch 5 (TelePost MediaAsset 领域模型 + DeliveryVariant) RELEASED + DEPLOYED (TelePost 2.58.0, PR #223; 2.57.1 PR #221 修复新评审行 chain 只有重启才回填、导致 media_asset_refs 静默丢失的缺陷; 2026-09-21 生产自测: bot1 review 122 chain-122 落 10 行 i.pximg.net refs, delivery-plan 10 entries — 首次真实 media_assets 生产 E2E 证据; 10:00/10:10 槽位 VERIFIED，bot2 review 91 published 且 chain-91 file_id/file_unique_id 写回 VERIFIED；bot1 122/123/124 rejected，bot2 92 failed 属审批/发布结果，不代表 ingest/delivery-plan 链路失败)。TelePost 2.59.0 继续把 Step 17 的整组投递规划锁进回归测试，并把 `media_delivery_strategy` 记入 publish audit。
 Scope: PixivFlow / TelePost / TelePress / Deploy
@@ -1263,7 +1267,7 @@ file should already exist
 
 | 状态 | 说明 |
 |---|---|
-| IMPLEMENTED（首个消费端） | TelePress rich-novel 预览先从 `DownloadedArtifact.artifacts` 解析 `text` / `markdown` / `metadata`；`files[]` 与 `cleanupFiles` 保留为 legacy fallback。PixivFlow 2.44.0 已发布并部署，`/health` 返回 `2.44.0 / b0076f89`。 |
+| IMPLEMENTED | TelePress rich-novel 预览先从 `DownloadedArtifact.artifacts` 解析 `text` / `markdown` / `metadata`（2.44.0）；插画/ugoira/on-disk recovery 也统一产出 canonical `Artifact[]`，`DeliveryService.enqueue` 通过 `deliveryFilePaths()` 从 `artifacts` 派生投递路径，不再读取 legacy `files[]`。本地文件仍是真的 transport 输入，但只有消费者主动 `materialize()` 后才有路径事实。 |
 
 ---
 
@@ -1292,7 +1296,7 @@ files: string[];
 
 | 状态 | 说明 |
 |---|---|
-| IMPLEMENTED | `DownloadedArtifact.files[]` 已标记为 `@deprecated use artifacts/mediaAssets`，并注明保留一个 release cycle 的兼容投影；行为和 wire contract 不变。 |
+| IMPLEMENTED | `DownloadedArtifact.files[]` 已在 2.44.0 标记为 `@deprecated use artifacts/mediaAssets`；随后被 2.45.0 正式移除，仅保留一个 release cycle 的兼容窗口。 |
 
 ---
 
@@ -1312,6 +1316,12 @@ files: string[];
 ```text
 legacy file-only contract
 ```
+
+## 26.1 Status
+
+| 状态 | 说明 |
+|---|---|
+| IMPLEMENTED | `DownloadedArtifact.files[]` 已从领域类型移除（PixivFlow 2.45.0）。`DeliveryRequest.files` 保留为 wire transport 字段：PixivFlow 在 enqueue 时从 canonical `Artifacts` 派生路径，TelePost multipart / Telegram upload 仍按该契约收本地文件；历史 outbox 行与 legacy outbox manifest 的 `files` 字段不变，继续由迁移器读取。 |
 
 ---
 
