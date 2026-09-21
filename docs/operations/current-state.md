@@ -1379,5 +1379,16 @@ repository returning `MediaAsset`, the planner consuming both assets and wire
 dicts, and JSON boundaries still emitting the dict wire shape. Regression-only
 (978 tests). Deployed as 2.58.0 (`db93975`, PR #223) and pinned in
 `fly/deploy.telepost.toml` (PR-free pin commit 2bbcc6c). `health.version=2.58.0`
-verified. Scheduled-slot confirmation and the post-approval
-`mark_delivered_for_chain` file_id write-back remain the closing checks.
+verified. Scheduled-slot confirmation (2026-09-21 10:00/10:10 run, VERIFIED):
+
+```text
+bot1 reviews 123 (illust, chain-123: 2 refs) / 124 (novel, chain-124: 2 refs)
+bot2 reviews 91 (illust, chain-91: 1 ref) / 92 (novel, chain-92: 26 refs, 0 file_id)
+delivery-plan: 92 = mixed (25 remote_url covers + 1 file_id doc);
+               123/91 = telegram_file_id (staged files win by design)
+proxied covers via media proxy: 200 image/png (sampled 3/3 + full first fetch);
+probe 403s were a false negative — workers.dev bot protection blocks the
+"Python-urllib" User-Agent (fixed in probe 1fa5e2d); Telegram's fetcher passes
+(production sendPhoto acceptance in 2.57.0).
+Approval + mark_delivered_for_chain file_id write-back happen on publish
+(user clicks approve in the review group; behavior covered by tests).
