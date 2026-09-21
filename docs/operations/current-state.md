@@ -53,7 +53,7 @@ PixivFlow: 2.43.0 / c27c924cf92df303b46f10d0a2552fc488f4da43 — VERIFIED
    additive Delivery Asset Contract step, not on-demand illustration delivery)
   (hot-reload config: /app/data/production.json, watchConfig=true;
    download.materializationPolicy wired from config → on-demand novel previews active)
-TelePost: 2.57.0
+TelePost: 2.58.0
   (Step 10 delivery asset contract: optional JSON media_assets on /api/v1/submissions
    persisted per review_chain_id in media_asset_refs;
    Step 11 DeliveryPlanner: read-only GET /api/v1/reviews/{id}/delivery-plan;
@@ -84,10 +84,14 @@ TelePost: 2.57.0
    use the Main Mini App ?startapp=miniapp deep link, avoiding a bot-chat
    redirect fallback. 2.57.0 lets DeliveryPlanner rewrite allowlisted remote
    media hosts through the fixed-upstream media proxy when an asset has no
-   Telegram file_id.)
+   Telegram file_id. 2.57.1 anchors review_chain_id at insert time (PR #221).
+   2.58.0 adds the typed MediaAsset domain model + DeliveryVariant
+   (Batch 5, PR #223) — wire contract, DB schema and delivery behavior
+   unchanged.)
    media_asset_refs VERIFIED on bot1/bot2 production DB;
    message_reaction_count allowed_update VERIFIED via webhook info;
-   production E2E with a real media_assets payload remains EXTERNAL_ACCEPTANCE_REQUIRED;
+   first real media_assets production E2E (self-test, review 122): 10 refs
+   landed under chain-122; slot-level confirmation pending the 10:00 run;
    real-user reaction ingestion VERIFIED (bot1 message 3056, heat_score 1.4138);
    pre-2.55.4 history stays at heat 0 = KNOWN_DEBT (no Bot-API backfill path)
 TelePress: 0.14.1
@@ -1339,3 +1343,41 @@ only when a count changes, so posts reacted to before the handler shipped stay
 at heat 0 until someone reacts again. Backfilling history needs a user client
 (Telethon/Pyrogram) because the TelePost channel-history crawler is deliberately
 a Bot-API stub that cannot enumerate channel history. Classified `KNOWN_DEBT`.
+
+# 37. 2026-09-21 media_assets E2E + TelePost 2.57.1 / 2.58.0
+
+## media_assets first real production evidence (self-test)
+
+Manual ad-hoc run (`pixivflow run-once --target bot1-illust-botefuku`,
+PixivFlow 2.43.1) delivered the same multipart contract a scheduled slot uses:
+
+```text
+bot1 review 122 (chain-122): media_asset_refs = 10 rows
+  asset_id  = pixiv:149892458:illust:page-1..10
+  source_url= https://i.pximg.net/img-original/... (canonical originals)
+  file_id   = '' (no Telegram cache yet)
+GET /api/bot1/v1/reviews/122/delivery-plan
+  strategy=telegram_file_id, 10 entries (staged file_ids win by design)
+review 120 earlier exposed the blocker below before the fix
+```
+
+## Blocking defect found and fixed: chain anchored only at restart
+
+`pending_reviews.review_chain_id` for new non-refetch submissions stayed ''
+until the next `init_db()` backfill, so `_persist_media_assets` silently
+returned 0 and `media_asset_refs` was never written for fresh reviews.
+
+```text
+2.57.1 (PR #221): ReviewRepository.insert_into anchors chain-<id> at insert.
+health.version = 2.57.1 verified before the E2E self-test above.
+```
+
+## Batch 5 shipped: typed MediaAsset domain model
+
+`telepost/domain/media.py` (frozen `MediaAsset`, `DeliveryVariant`) with the
+repository returning `MediaAsset`, the planner consuming both assets and wire
+dicts, and JSON boundaries still emitting the dict wire shape. Regression-only
+(978 tests). Deployed as 2.58.0 (`db93975`, PR #223) and pinned in
+`fly/deploy.telepost.toml` (PR-free pin commit 2bbcc6c). `health.version=2.58.0`
+verified. Scheduled-slot confirmation and the post-approval
+`mark_delivered_for_chain` file_id write-back remain the closing checks.
