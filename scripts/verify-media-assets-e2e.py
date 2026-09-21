@@ -90,7 +90,7 @@ def probe_db(path: str, day: str) -> dict:
         if refs:
             try:
                 plan = delivery_plan(bot, row["id"])
-                entries = (plan.get("result") or {}).get("entries") or []
+                entries = (plan.get("data") or {}).get("entries") or []
                 proxied = []
                 for entry in entries:
                     url = entry.get("source_url") or ""
@@ -115,8 +115,16 @@ def main(argv: list[str]) -> int:
     if not new_refs:
         print("NO_MEDIA_ASSET_REFS: 今日投稿未携带 media_assets")
         return 1
-    ok = all(p.get("proxied") and all(x.get("status") == 200 and "image/" in (x.get("content_type") or "") for x in p.get("proxied", []))
-            for b in report["bots"] for p in b["delivery_plans"])
+    # A plan that resolved every asset to Telegram file_id legitimately has no
+    # proxied URL; remote_url plans must each answer 200 image/*.
+    remote_plans = [
+        p for b in report["bots"] for p in b["delivery_plans"]
+        if any((e.get("strategy") == "remote_url") for e in ((p.get("plan") or {}).get("data") or {}).get("entries", []))
+    ]
+    ok = bool(remote_plans) and all(
+        p.get("proxied") and all(x.get("status") == 200 and "image/" in (x.get("content_type") or "") for x in p.get("proxied", []))
+        for p in remote_plans
+    )
     print("E2E_OK" if ok else "E2E_INCOMPLETE")
     return 0 if ok else 1
 
