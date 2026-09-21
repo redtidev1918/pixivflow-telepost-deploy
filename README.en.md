@@ -2,15 +2,15 @@
 
 **Language / 语言:** [中文](README.md) · English
 
+**Deployment and operations toolkit for PixivFlow + TelePost.** It wires the two upstream
+projects into one deployable, operable system:
+
+📖 [Full documentation](https://redtidev1918.github.io/pixivflow-telepost-deploy/)
+
 [![Validate](https://github.com/redtidev1918/pixivflow-telepost-deploy/actions/workflows/validate.yml/badge.svg)](https://github.com/redtidev1918/pixivflow-telepost-deploy/actions/workflows/validate.yml)
 [![Release](https://github.com/redtidev1918/pixivflow-telepost-deploy/actions/workflows/release.yml/badge.svg)](https://github.com/redtidev1918/pixivflow-telepost-deploy/actions/workflows/release.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Docs](https://img.shields.io/badge/Docs-documentation-6366f1?style=flat-square)](https://redtidev1918.github.io/pixivflow-telepost-deploy/)
-
-📖 Full documentation: <https://redtidev1918.github.io/pixivflow-telepost-deploy/>
-
-**Deployment and operations toolkit for PixivFlow + TelePost.** It wires the two upstream
-projects into one deployable, operable system:
 
 | Component | Owns | Does not own |
 | --- | --- | --- |
@@ -195,7 +195,7 @@ Resource profile (variable)    How much RAM each running unit gets
 
 ## Documentation
 
-Docs site: <https://redtidev1918.github.io/pixivflow-telepost-deploy/>
+[Docs site](https://redtidev1918.github.io/pixivflow-telepost-deploy/)
 (Chinese is authoritative; English mirrors cover the choose-an-architecture, deploy, and operate
 paths.)
 

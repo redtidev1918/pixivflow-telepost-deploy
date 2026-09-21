@@ -2,14 +2,14 @@
 
 **语言 / Language:** 中文 · [English](README.en.md)
 
+**PixivFlow + TelePost 的部署与运维套件。** 它把两个上游项目组合成一套可部署、可运维的系统：
+
+📖 [完整文档](https://redtidev1918.github.io/pixivflow-telepost-deploy/)
+
 [![Validate](https://github.com/redtidev1918/pixivflow-telepost-deploy/actions/workflows/validate.yml/badge.svg)](https://github.com/redtidev1918/pixivflow-telepost-deploy/actions/workflows/validate.yml)
 [![Release](https://github.com/redtidev1918/pixivflow-telepost-deploy/actions/workflows/release.yml/badge.svg)](https://github.com/redtidev1918/pixivflow-telepost-deploy/actions/workflows/release.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Docs](https://img.shields.io/badge/Docs-文档站点-6366f1?style=flat-square)](https://redtidev1918.github.io/pixivflow-telepost-deploy/)
-
-📖 完整文档：<https://redtidev1918.github.io/pixivflow-telepost-deploy/>
-
-**PixivFlow + TelePost 的部署与运维套件。** 它把两个上游项目组合成一套可部署、可运维的系统：
 
 | 组件 | 负责什么 | 不负责什么 |
 | --- | --- | --- |
@@ -174,7 +174,7 @@ PRIMARY（cron-job.org）在预定时刻触发，SECONDARY（Cloudflare Cron）�
 
 ## 文档
 
-文档站：<https://redtidev1918.github.io/pixivflow-telepost-deploy/>
+[文档站](https://redtidev1918.github.io/pixivflow-telepost-deploy/)
 （中文为权威版本，英文镜像覆盖「选择架构 → 部署 → 运维」路径上的页面。）
 
 | 我想… | 看这里 |
