@@ -4,12 +4,28 @@
 
 > **PixivFlow + TelePost 的部署与运维套件。** 它把两个上游项目组合成一套可部署、可运维的系统：
 
-📖 [完整文档](https://redtidev1918.github.io/pixivflow-telepost-deploy/)
+[完整文档](https://redtidev1918.github.io/pixivflow-telepost-deploy/)
 
 [![Validate](https://github.com/redtidev1918/pixivflow-telepost-deploy/actions/workflows/validate.yml/badge.svg)](https://github.com/redtidev1918/pixivflow-telepost-deploy/actions/workflows/validate.yml)
 [![Release](https://github.com/redtidev1918/pixivflow-telepost-deploy/actions/workflows/release.yml/badge.svg)](https://github.com/redtidev1918/pixivflow-telepost-deploy/actions/workflows/release.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Docs](https://img.shields.io/badge/Docs-文档站点-6366f1?style=flat-square)](https://redtidev1918.github.io/pixivflow-telepost-deploy/)
+
+## 目录
+
+- [这个仓库适合谁](#这个仓库适合谁)
+- [我该选哪种部署方式？](#我该选哪种部署方式)
+- [快速开始](#快速开始)
+- [组合起来能做什么](#组合起来能做什么)
+- [支持哪些部署架构](#支持哪些部署架构)
+- [三个概念，不要混淆](#三个概念不要混淆)
+- [文档](#文档)
+- [目录](#目录)
+- [安全边界](#安全边界)
+- [参与项目](#参与项目)
+- [相关项目](#相关项目)
+- [许可证](#许可证)
+- [致谢](#致谢)
 
 | 组件 | 负责什么 | 不负责什么 |
 | --- | --- | --- |
@@ -66,7 +82,9 @@
 
 ---
 
-## 快速开始（默认 `single-host`）
+## 快速开始
+
+下面的默认拓扑是 `single-host`，适合先把整条链路跑通。
 
 需要 Docker 24+ 与 Compose v2。
 
