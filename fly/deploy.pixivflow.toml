@@ -144,13 +144,11 @@ kill_timeout = 60
     # and commit so release/deploy/runtime identity can be verified without shell access.
     # 09d5c687 = v2.43.1: fix(delivery) maps canonical MediaAsset to TelePost's
     # wire contract (asset_id/source_url) before the multipart send.
-    # 333f6f3f = v2.45.0: removes the legacy DownloadedArtifact.files[]
-    # projection. Illustrations/ugoira/on-disk recovery now emit canonical
-    # Artifact[]; DeliveryService derives transport paths from artifacts via
-    # deliveryFilePaths(); TelePress reads canonical artifacts only. Wire
-    # multipart contract / outbox payloads stay unchanged.
-    PIXIVFLOW_REF = '333f6f3fef9a056b936e029187490048ec40cf1f'
-    PIXIVFLOW_VERSION = '2.45.0'
+    # a97e350 = v2.45.1: WebUI recovery write path requires a same-host Origin
+    # (http/https) and returns 403 SCHEDULER_RECOVERY_ORIGIN_REJECTED otherwise,
+    # closing the CSRF/origin gap on the bearer-token recovery proxy.
+    PIXIVFLOW_REF = 'a97e35009391fe339e82e36b1fa5c3329771f322'
+    PIXIVFLOW_VERSION = '2.45.1'
 
 [[mounts]]
   source = 'pixivflow_data'

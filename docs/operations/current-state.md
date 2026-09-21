@@ -490,7 +490,10 @@ WebUI POST /api/scheduler/targets/:targetId/recover
 
 仍必须评审（通过前不能视为 Phase 4 完成）：
 
-* authorization / CSRF / origin protection
+* authorization / CSRF / origin protection — 已落地（PixivFlow 2.46.0）：
+  `recoverTarget` 只接受与自身 host 匹配的 `Origin`（http/https），跨站页面无法
+  借用操作者浏览器会话触发持久化恢复；缺失 Origin 的非浏览器调用会被 403 拒绝，
+  `SCHEDULER_RECOVERY_ORIGIN_REJECTED` + 回归测试。
 * 并发点击 / duplicate recovery prevention
 * allowed terminal states（当前投影：failed retryable；no_candidate/duplicate 仅 relaxed）
 * audit record / operator identity
