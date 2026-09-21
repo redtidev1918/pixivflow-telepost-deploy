@@ -45,6 +45,7 @@ TelePost RBAC 演化模型（root/sudoers/Role Binding）见 [telepost-rbac-evol
 
 ```text
 PixivFlow: 2.43.0 / c27c924cf92df303b46f10d0a2552fc488f4da43 — VERIFIED
+PixivFlow: 2.44.0 / b0076f89c0e98286d21250aca9e78b85833369a0 — VERIFIED
   (deploy pin = release commit; public `/health` returned
    `version=2.43.0`, `commit=c27c924cf92d`)
   (2.43.0 builds canonical illustration `MediaAsset[]` from pages and passes

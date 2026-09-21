@@ -144,8 +144,10 @@ kill_timeout = 60
     # and commit so release/deploy/runtime identity can be verified without shell access.
     # 09d5c687 = v2.43.1: fix(delivery) maps canonical MediaAsset to TelePost's
     # wire contract (asset_id/source_url) before the multipart send.
-    PIXIVFLOW_REF = '09d5c687f5cd81dfc42c1c64624ae26abd31017a'
-    PIXIVFLOW_VERSION = '2.43.1'
+    # b0076f89 = v2.44.0: rich-novel preview resolves text/markdown/metadata
+    # through canonical Artifact first; files[] remains the legacy fallback.
+    PIXIVFLOW_REF = 'b0076f89c0e98286d21250aca9e78b85833369a0'
+    PIXIVFLOW_VERSION = '2.44.0'
 
 [[mounts]]
   source = 'pixivflow_data'

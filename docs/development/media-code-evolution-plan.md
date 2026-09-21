@@ -1259,6 +1259,12 @@ materialize()
 file should already exist
 ```
 
+## 24.3 Progress
+
+| 状态 | 说明 |
+|---|---|
+| IMPLEMENTED（首个消费端） | TelePress rich-novel 预览先从 `DownloadedArtifact.artifacts` 解析 `text` / `markdown` / `metadata`；`files[]` 与 `cleanupFiles` 保留为 legacy fallback。PixivFlow 2.44.0 已发布并部署，`/health` 返回 `2.44.0 / b0076f89`。 |
+
 ---
 
 # 25. Step 21 — Deprecate Legacy DownloadedArtifact Semantics
