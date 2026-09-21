@@ -1405,6 +1405,22 @@ local uploads and remote URLs never participate in ``sendMediaGroup``; the
 single-send fallback remains for non-album paths. ``tests/`` cover gateway
 pre-materialization plus NetworkError-style URL fetch markers.
 
+## 37.7 2026-09-22 publication rules (TelePost 2.62.0)
+
+1. Novel inline images are preview-only: a PixivFlow novel review with
+   `media_assets` + TXT now sends ONLY the TXT document to the channel; all
+   illustrations are rendered on the Telegraph reading page.
+2. Online reading images are real again: TelePost pins `telepress==0.14.1`
+   (the version providing `publish_rich_markdown`); the preview record is
+   marked rich only when that path truly succeeded, so text-only pages are
+   regenerated on retry.
+3. Multi-image channel publications keep ONE visual batch plus one file batch
+   on the channel (files after images, replying after them); overflow goes to
+   the linked discussion.
+4. Mixed submissions are ordered visual → animation/audio → documents; overflow
+   images reply in the image discussion thread and overflow files reply in the
+   file discussion thread. Saved post order matches the actual send order.
+
 # 37. 2026-09-21 media_assets E2E + TelePost 2.57.1 / 2.58.0
 
 ## media_assets first real production evidence (self-test)
