@@ -171,7 +171,9 @@ primary_region = 'iad'
     # 2.58.0 (2026-09-21): Batch 5 typed MediaAsset domain model
     # (telepost/domain/media.py + DeliveryVariant); wire/DB/publish behavior
     # unchanged (regression-only refactor, 978 tests).
-    TELEPOST_IMAGE = 'ghcr.io/redtidev1918/telepost:2.58.0'
+    # 2.58.1 (2026-09-21): align trailing novel documents in mixed delivery
+    # plans; a TXT file_id can no longer be sent as a photo.
+    TELEPOST_IMAGE = 'ghcr.io/redtidev1918/telepost:2.58.1'
 
 [[mounts]]
   source = 'data'
