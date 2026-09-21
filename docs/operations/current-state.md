@@ -1421,6 +1421,10 @@ pre-materialization plus NetworkError-style URL fetch markers.
    images reply in the image discussion thread and overflow files reply in the
    file discussion thread. Saved post order matches the actual send order.
 
+Dependency contract: TelePost `requirements.txt` telepress pin and the TelePress
+service Dockerfile pin must match; `Version sync check` CI in TelePost enforces
+this on every PR/push. This is what caught the earlier `telepress==0.9.0` drift.
+
 # 37. 2026-09-21 media_assets E2E + TelePost 2.57.1 / 2.58.0
 
 ## media_assets first real production evidence (self-test)
