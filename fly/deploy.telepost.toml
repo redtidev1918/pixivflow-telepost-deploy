@@ -173,7 +173,7 @@ primary_region = 'iad'
     # unchanged (regression-only refactor, 978 tests).
     # 2.58.1 (2026-09-21): align trailing novel documents in mixed delivery
     # plans; a TXT file_id can no longer be sent as a photo.
-    TELEPOST_IMAGE = 'ghcr.io/redtidev1918/telepost:2.58.1'
+    TELEPOST_IMAGE = 'ghcr.io/redtidev1918/telepost:2.59.0'
 
 [[mounts]]
   source = 'data'
