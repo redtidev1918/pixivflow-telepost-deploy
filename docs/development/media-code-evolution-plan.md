@@ -1136,6 +1136,12 @@ cannot coherently present
 → explicit fallback mode
 ```
 
+## 21.2 Status
+
+| 状态 | 说明 |
+|---|---|
+| VERIFIED（代码） | TelePost `telepost/telegram/delivery/planner.py` already plans whole ordered media runs into homogeneous visual / document / animation / audio batches before send.  `tests/test_media_delivery_pipeline.py::test_novel_cover_assets_and_txt_never_mix_album_families` now locks the production-shape regression: 25 novel covers + one TXT must remain 25 photos + one document, never a mixed album. |
+
 ---
 
 # 22. Step 18 — TelePress Web Reader
