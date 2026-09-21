@@ -1194,6 +1194,13 @@ new sqlite db
 
 只因为实现方便。
 
+## 23.1 Decision
+
+No new persistence layer is needed. TelePress keeps publishing stateless; the
+production TelePost database already owns the durable `publication_previews`
+row keyed by the publication. That is sufficient for the current Telegraph-only
+Web path. Revisit this only when a first-party Web Reader is actually built.
+
 ---
 
 # 24. Step 20 — Remove Mandatory Local File Assumptions
