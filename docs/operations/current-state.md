@@ -1390,5 +1390,14 @@ proxied covers via media proxy: 200 image/png (sampled 3/3 + full first fetch);
 probe 403s were a false negative — workers.dev bot protection blocks the
 "Python-urllib" User-Agent (fixed in probe 1fa5e2d); Telegram's fetcher passes
 (production sendPhoto acceptance in 2.57.0).
-Approval + mark_delivered_for_chain file_id write-back happen on publish
-(user clicks approve in the review group; behavior covered by tests).
+
+Post-review outcome check (2026-09-21, read-only):
+
+```text
+bot2 review 91 = published
+chain-91 media_asset_refs = 1 pximg ref with non-empty file_id/file_unique_id
+=> mark_delivered_for_chain cache write-back VERIFIED on production publish.
+
+bot1 reviews 122/123/124 = rejected (no write-back expected)
+bot2 review 92 = failed (publish path did not complete)
+```
