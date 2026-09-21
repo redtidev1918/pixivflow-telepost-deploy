@@ -13,9 +13,9 @@ Docker Compose 与 Fly.io 三种后端交付。
 
 ## 三条阅读路径
 
-| 你是谁 | 从这里开始 |
+| 场景 | 从哪开始 |
 | --- | --- |
-| **普通用户**：想跑起来 | [我该选哪种部署方式](getting-started/choose-architecture.md) → [快速开始](getting-started/quickstart.md) → 平台页 |
+| **新用户**：先把服务跑起来 | [我该选哪种部署方式](getting-started/choose-architecture.md) → [快速开始](getting-started/quickstart.md) → 平台页 |
 | **运维者**：已经在跑 | [监控与只读核对](operations/monitoring.md) → [故障排查](operations/troubleshooting.md) → [升级与回滚](operations/upgrades.md) |
 | **Agent / 二次开发**：要改东西 | [AGENTS.md](https://github.com/redtidev1918/pixivflow-telepost-deploy/blob/main/AGENTS.md) → [部署契约](reference/deployment-contract.md) → [架构矩阵](https://github.com/redtidev1918/pixivflow-telepost-deploy/blob/main/docs/reference/architecture-matrix.json) → 具体页面 |
 
