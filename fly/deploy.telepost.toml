@@ -173,11 +173,12 @@ primary_region = 'iad'
     # unchanged (regression-only refactor, 978 tests).
     # 2.58.1 (2026-09-21): align trailing novel documents in mixed delivery
     # plans; a TXT file_id can no longer be sent as a photo.
-    # 2.61.0 (2026-09-22): online reading page now carries inline novel
-    # images. Text marker refs are rewritten to image refs and published via
-    # rich-novel manifest (proxy URLs, no image host). 2.60.1 remains the
-    # remote_url fallback: Telegram webpage_curl_failed -> local upload.
-    TELEPOST_IMAGE = 'ghcr.io/redtidev1918/telepost:2.61.0'
+    # 2.61.1 (2026-09-22): materializes all remote media through the proxy
+    # into bounded temp files BEFORE album planning, so Telegram only receives
+    # local uploads and webpage_curl_failed cannot abort sendMediaGroup. Also
+    # carries 2.60.1 single-send fallback + 2.61.0 rich online-reading with
+    # inline Pixiv images.
+    TELEPOST_IMAGE = 'ghcr.io/redtidev1918/telepost:2.61.1'
 
 [[mounts]]
   source = 'data'
