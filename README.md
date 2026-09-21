@@ -2,7 +2,7 @@
 
 **语言 / Language:** 中文 · [English](README.en.md)
 
-**PixivFlow + TelePost 的部署与运维套件。** 它把两个上游项目组合成一套可部署、可运维的系统：
+> **PixivFlow + TelePost 的部署与运维套件。** 它把两个上游项目组合成一套可部署、可运维的系统：
 
 📖 [完整文档](https://redtidev1918.github.io/pixivflow-telepost-deploy/)
 
