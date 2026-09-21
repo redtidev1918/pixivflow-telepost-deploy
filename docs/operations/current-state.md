@@ -1343,7 +1343,13 @@ remaining zeroes are not a bug: the Bot API pushes `message_reaction_count`
 only when a count changes, so posts reacted to before the handler shipped stay
 at heat 0 until someone reacts again. Backfilling history needs a user client
 (Telethon/Pyrogram) because the TelePost channel-history crawler is deliberately
-a Bot-API stub that cannot enumerate channel history. Classified `KNOWN_DEBT`.
+a Bot-API stub that cannot enumerate channel history. TelePost 2.60.0 ships
+`scripts/backfill_reactions.py` (Pyrogram, dry-run default, `--apply` writes
+through the same `message_reaction_counts` → `published_posts.reactions/heat_score`
+projection as live ingestion and records `reaction.backfilled` audit). The
+operator-run acceptance with real my.telegram.org credentials is
+`EXTERNAL_ACCEPTANCE_REQUIRED`; code/unit tests (`test_reaction_backfill.py`)
+are VERIFIED.
 
 # 37. 2026-09-21 media_assets E2E + TelePost 2.57.1 / 2.58.0
 

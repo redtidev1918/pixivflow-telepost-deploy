@@ -173,7 +173,11 @@ primary_region = 'iad'
     # unchanged (regression-only refactor, 978 tests).
     # 2.58.1 (2026-09-21): align trailing novel documents in mixed delivery
     # plans; a TXT file_id can no longer be sent as a photo.
-    TELEPOST_IMAGE = 'ghcr.io/redtidev1918/telepost:2.59.0'
+    # 2.60.0 (2026-09-21): ships scripts/backfill_reactions.py — operator-run
+    # Pyrogram reaction history backfill (dry-run default; --apply writes
+    # through the same message_reaction_counts -> heat_score projection as live
+    # ingestion and records reaction.backfilled audit).
+    TELEPOST_IMAGE = 'ghcr.io/redtidev1918/telepost:2.60.0'
 
 [[mounts]]
   source = 'data'
