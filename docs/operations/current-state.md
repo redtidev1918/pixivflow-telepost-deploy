@@ -1355,6 +1355,30 @@ operator-run acceptance with real my.telegram.org credentials is
 `EXTERNAL_ACCEPTANCE_REQUIRED`; code/unit tests (`test_reaction_backfill.py`)
 are VERIFIED.
 
+# 37.5 2026-09-22 remote_url delivery failure (review 92)
+
+Production evidence:
+
+```text
+bot2 review 92 approve at 00:16 CST failed:
+Failed to send message #7 with the error message "webpage_curl_failed"
+review 92: 26 media_asset_refs (25 remote covers + 1 file_id TXT), no cached
+file_id; proxy URL for item 7 returns 200 image/png (1.75 MB)
+```
+
+Root cause: Telegram's own URL fetcher is not reliable for an album of remote
+media; one slow/refused fetch aborts the whole media group. The worker proxy
+itself is healthy (Fly container probe: `200 image/png`).
+
+Fix (TelePost 2.60.1): when a RemoteUrl single/album item fails with a Telegram
+fetch error (`webpage_curl_failed`/`failed to fetch`/...), TelePost now does ONE
+bounded remote→local materialization (temp file, UA
+`TelegramBot-LinkPreview/0.1`, size-capped, cleaned after send) and retries as a
+local upload. `remote_url` remains the preferred happy path; local upload is
+only the fallback. Regression tests: `tests/test_remote_fetch_fallback.py`.
+Review #92 is still `failed` in the ledger and can be retried by the operator
+after the fix deploys.
+
 # 37. 2026-09-21 media_assets E2E + TelePost 2.57.1 / 2.58.0
 
 ## media_assets first real production evidence (self-test)
