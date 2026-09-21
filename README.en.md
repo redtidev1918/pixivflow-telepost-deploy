@@ -2,8 +2,8 @@
 
 **Language / 语言:** [中文](README.md) · English
 
-**Deployment and operations toolkit for PixivFlow + TelePost.** It wires the two upstream
-projects into one deployable, operable system:
+> **Deployment and operations toolkit for PixivFlow + TelePost.** It wires the two upstream
+> projects into one deployable, operable system:
 
 📖 [Full documentation](https://redtidev1918.github.io/pixivflow-telepost-deploy/)
 
