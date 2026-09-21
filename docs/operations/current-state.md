@@ -1382,6 +1382,21 @@ A production container probe materialized the exact review-92 item 7 URL
 Review #92 is still `failed` in the ledger and can be retried by the operator
 from the review action; the retry now has the local-upload fallback available.
 
+## 37.6 2026-09-22 online reading images (TelePost 2.61.0)
+
+Root cause: TelePost published the Telegraph preview from the raw TXT body, so
+`[uploadedimage:...]` markers rendered as text and the online reading page had
+no images, even though the review chain carried the canonical media refs.
+
+Fix: TelePost 2.61.0 enricher loads `media_asset_refs` for review
+publications, rewrites matched markers to relative
+`![](images/<id>.<ext>)` refs, and calls TelePress
+`publish_rich_markdown(..., manifest)` so every inline image is rewritten to
+`pixiv-media-proxy` (no user-owned image host). Pure-text TXT keeps the old
+text-only path. A legacy text-only preview record on a retried publication is
+upgraded once (`title=rich` marker on `publication_previews`); #92's existing
+text-only row will be replaced by the rich page when it is retried.
+
 # 37. 2026-09-21 media_assets E2E + TelePost 2.57.1 / 2.58.0
 
 ## media_assets first real production evidence (self-test)

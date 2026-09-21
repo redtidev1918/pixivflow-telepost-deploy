@@ -173,11 +173,11 @@ primary_region = 'iad'
     # unchanged (regression-only refactor, 978 tests).
     # 2.58.1 (2026-09-21): align trailing novel documents in mixed delivery
     # plans; a TXT file_id can no longer be sent as a photo.
-    # 2.60.1 (2026-09-22): remote_url delivery fallback. When Telegram's own
-    # fetcher fails a remote media URL (webpage_curl_failed), TelePost streams
-    # the source once through the media proxy into a size-capped temp file and
-    # retries as a local upload; no user-owned image host required.
-    TELEPOST_IMAGE = 'ghcr.io/redtidev1918/telepost:2.60.1'
+    # 2.61.0 (2026-09-22): online reading page now carries inline novel
+    # images. Text marker refs are rewritten to image refs and published via
+    # rich-novel manifest (proxy URLs, no image host). 2.60.1 remains the
+    # remote_url fallback: Telegram webpage_curl_failed -> local upload.
+    TELEPOST_IMAGE = 'ghcr.io/redtidev1918/telepost:2.61.0'
 
 [[mounts]]
   source = 'data'
