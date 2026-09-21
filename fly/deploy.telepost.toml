@@ -168,7 +168,10 @@ primary_region = 'iad'
     # 2.57.1 (2026-09-21): review_chain_id anchors at insert time, so
     # media_asset_refs persist for fresh submissions without waiting for a
     # restart backfill (production E2E self-test finding).
-    TELEPOST_IMAGE = 'ghcr.io/redtidev1918/telepost:2.57.1'
+    # 2.58.0 (2026-09-21): Batch 5 typed MediaAsset domain model
+    # (telepost/domain/media.py + DeliveryVariant); wire/DB/publish behavior
+    # unchanged (regression-only refactor, 978 tests).
+    TELEPOST_IMAGE = 'ghcr.io/redtidev1918/telepost:2.58.0'
 
 [[mounts]]
   source = 'data'
