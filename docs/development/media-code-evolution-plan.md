@@ -1168,6 +1168,13 @@ TelegraphRenderer
 WebReaderRenderer
 ```
 
+## 22.1 Decision
+
+SKIPPED — YAGNI（2026-09-21）。TelePress 已经把 Telegraph 作为可用的在线阅读
+renderer，且 `publication_previews` 已经持久化 URL。当前没有 first-party Web
+Reader 的真实需求。只有当后续确有非 Telegraph 的 reader 目标时，再把抽象
+renderer 抽出来。
+
 ---
 
 # 23. Step 19 — Preview Persistence Decision
