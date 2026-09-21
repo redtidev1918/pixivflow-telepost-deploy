@@ -1401,3 +1401,21 @@ chain-91 media_asset_refs = 1 pximg ref with non-empty file_id/file_unique_id
 bot1 reviews 122/123/124 = rejected (no write-back expected)
 bot2 review 92 = failed (publish path did not complete)
 ```
+
+## Step 9 real-scheduled-slot evidence
+
+The same 2026-09-21 10:10 production slot also gave the on-demand novel
+preview path its first real evidence:
+
+```text
+Novel 29176318 inline images: 0/26 downloaded
+Saved rich-media markdown sidecar: .../29176318_*.md
+TelePress preview attempt was skipped transiently as telepress_network_error.
+```
+
+Retrying that real work through TelePress 0.14.1 later produced a two-page
+Telegraph article (`https://telegra.ph/第五卷这一定是大主教的安排-12-09-21`)
+with all 26 novel covers rewritten to the generic media-proxy route and
+reported `status=proxied`. One sampled proxy URL returned `200 image/png`
+(1,979,224 bytes). This closes the Step 9 external-acceptance gap for the
+real manifest-only scheduled-slot shape.
