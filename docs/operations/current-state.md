@@ -1425,6 +1425,13 @@ Dependency contract: TelePost `requirements.txt` telepress pin and the TelePress
 service Dockerfile pin must match; `Version sync check` CI in TelePost enforces
 this on every PR/push. This is what caught the earlier `telepress==0.9.0` drift.
 
+Runtime (TelePost 2.62.2): `/health` reports `version=2.62.2`,
+`commit=c28f2a3`, `telepress_version=0.14.1`, `telepress_rich_markdown=True`,
+`bots=[1,2]`; machine env `CHANNEL_ALBUM_REPLY=discussion`. Both bot webhooks
+initialized (12 command items, MenuButtonWebApp). Discussion publishing now
+delegates to the shared `DiscussionStrategy`, so the family-aware overflow path
+is the production path, not a separate legacy copy.
+
 # 37. 2026-09-21 media_assets E2E + TelePost 2.57.1 / 2.58.0
 
 ## media_assets first real production evidence (self-test)
