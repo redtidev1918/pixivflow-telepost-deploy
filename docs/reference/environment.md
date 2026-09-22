@@ -86,6 +86,7 @@
 | `SEARCH_ANALYZER` | `simple` | `jieba` 会额外占约 100 MB |
 | `DB_CACHE_KB` | `1024` | SQLite 缓存 |
 | `MALLOC_ARENA_MAX` | `2` | 防 glibc arena 膨胀 |
+| `REVIEW_ALBUM_SIZE` | `10` | 审核群每个相册的媒体数（Telegram 上限）；512 MiB 小内存机器可调回 4–5 压低上传峰值 |
 | `PENDING_REVIEW_RETENTION_DAYS` | `1` | pending 保留；>2 会超出 Telegram 48h 删除窗口 |
 | `PENDING_REVIEW_CLEANUP_BATCH_SIZE` | `20` | 每轮过期清理条数 |
 | `MEDIA_GROUP_CAPACITY` | `10` | 频道发布的 media-group 容量 SSOT（Telegram 上限）。11 张 → root 10 + reply 1；21 → 10 + 10 + 1。缺省即可，仅当 Telegram 上限变化时调整（clamp 到 10） |
