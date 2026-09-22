@@ -173,10 +173,10 @@ primary_region = 'iad'
     # unchanged (regression-only refactor, 978 tests).
     # 2.58.1 (2026-09-21): align trailing novel documents in mixed delivery
     # plans; a TXT file_id can no longer be sent as a photo.
-    # 2.62.2 (2026-09-22): routes discussion publishing through the shared
-    # family-aware strategy (channel root image+file, overflow per thread);
-    # /health exposes telepress_version + telepress_rich_markdown.
-    TELEPOST_IMAGE = 'ghcr.io/redtidev1918/telepost:2.62.2'
+    # 2.62.3 (2026-09-22): anchors discussion overflow to each media group
+    # root and routes API/review publication through the discussion mode;
+    # review albums default to Telegram's full 10-item capacity.
+    TELEPOST_IMAGE = 'ghcr.io/redtidev1918/telepost:2.62.3'
 
 [[mounts]]
   source = 'data'
@@ -205,6 +205,7 @@ primary_region = 'iad'
   REVIEW_PREVIEW_THREAD = '1'
   REVIEW_PREVIEW_INTERVAL_SECONDS = '0.75'
   REVIEW_PREVIEW_TIMEOUT_SECONDS = '120'
+  REVIEW_ALBUM_SIZE = '10'
   # Submitter publication notification (2.27.0): one durable idempotent DM per
   # publication, triggered by publication success only (never by review
   # approval). 'with_changes' also lists what the channel owner edited before
