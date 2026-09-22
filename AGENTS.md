@@ -162,6 +162,17 @@ docs/operations/current-state.md
 
 不要把临时生产状态永久写进 architecture principle。
 
+### 一次性 / 阶段文档不进仓库
+
+* 一次性报告、阶段快照、交接/状态文、审计/验证输出**默认不提交仓库**；任务完成即清理，
+  或留在工作区临时/归档目录。
+* 动态状态只更新 `docs/operations/current-state.md`；禁止新增
+  `*-status-YYYY-MM-DD.md`、`*-final.md`、`*-postfix.md` 之类的阶段副本。
+* 确需保留的取证、ADR、事故记录放入 `docs/archive/`，头部带 docsite 生命周期块，
+  不进入用户侧边栏。
+* 规范与自动检查以 docsite `docs/CONVENTIONS.md`「一次性与阶段文档生命周期」和
+  `docsite.py lifecyclecheck` 为准。
+
 ---
 
 # 6. Documentation State Labels
