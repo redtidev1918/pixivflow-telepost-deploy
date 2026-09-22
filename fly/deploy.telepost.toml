@@ -173,10 +173,9 @@ primary_region = 'iad'
     # unchanged (regression-only refactor, 978 tests).
     # 2.58.1 (2026-09-21): align trailing novel documents in mixed delivery
     # plans; a TXT file_id can no longer be sent as a photo.
-    # 2.62.3 (2026-09-22): anchors discussion overflow to each media group
-    # root and routes API/review publication through the discussion mode;
-    # review albums default to Telegram's full 10-item capacity.
-    TELEPOST_IMAGE = 'ghcr.io/redtidev1918/telepost:2.62.3'
+    # 2.63.0 (2026-09-22): admin manager alerts expose the anonymous submitter
+    # ID, and /ban_user + /ban_api provide manual moderation fallbacks.
+    TELEPOST_IMAGE = 'ghcr.io/redtidev1918/telepost:2.63.0'
 
 [[mounts]]
   source = 'data'
