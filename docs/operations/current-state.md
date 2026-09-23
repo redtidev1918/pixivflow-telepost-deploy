@@ -1,6 +1,6 @@
 # PixivFlow Ecosystem Current Production State
 
-Snapshot: 2026-09-20
+Snapshot: 2026-09-24
 Authority: Current production evidence overrides this file
 
 本文件保存动态状态。
@@ -54,7 +54,7 @@ PixivFlow: 2.44.0 / b0076f89c0e98286d21250aca9e78b85833369a0 — VERIFIED
    additive Delivery Asset Contract step, not on-demand illustration delivery)
   (hot-reload config: /app/data/production.json, watchConfig=true;
    download.materializationPolicy wired from config → on-demand novel previews active)
-TelePost: 2.58.0
+TelePost: 2.64.0
   (Step 10 delivery asset contract: optional JSON media_assets on /api/v1/submissions
    persisted per review_chain_id in media_asset_refs;
    Step 11 DeliveryPlanner: read-only GET /api/v1/reviews/{id}/delivery-plan;
@@ -77,7 +77,7 @@ TelePost: 2.58.0
    private preview link previews; 2.55.4 uses the explicit
    LinkPreviewOptions API on both preview paths and restores the main
    reply keyboard after /cancel)
-  (2.57.0 pinned in fly/deploy.telepost.toml; VERIFIED: public /health reports
+  (2.64.0 pinned in fly/deploy.telepost.toml; VERIFIED: public /health reports
    version=2.57.0, commit=8696e73, and reaction_ingest_by_bot for bot1/bot2.
    2.56.0 makes the private-chat menu button open the Mini App while slash
    commands remain available. 2.56.1 exposes child reaction-ingestion metrics
@@ -1508,3 +1508,23 @@ with all 26 novel covers rewritten to the generic media-proxy route and
 reported `status=proxied`. One sampled proxy URL returned `200 image/png`
 (1,979,224 bytes). This closes the Step 9 external-acceptance gap for the
 real manifest-only scheduled-slot shape.
+
+
+# 2026-09-24 TelePost 2.64.0 Deployed
+
+TelePost 2.64.0 (`d2e9bda`) deployed to `telesubmit-multi-bot`.
+
+Pinned in `fly/deploy.telepost.toml` (`5739f77`).
+
+## Changes
+
+- `/hotweek` — natural-week hot ranking (Mon 00:00 local TZ, not rolling 7 days)
+- `/schedule` — admin-only native automation: SQLite persistent (automation_tasks + automation_runs), hot-reload on mutation, idempotent runs via (task_id, occurrence_at) UNIQUE, weekly-hot action
+- `/help` reorganized; user vs admin split via Telegram command scopes
+- `/hot` defaults to all-time; stable tie-break (heat DESC, publish_time DESC, message_id DESC)
+
+## Verification
+
+- GHCR image: `ghcr.io/redtidev1918/telepost:2.64.0`
+- `/health` reports `version: 2.64.0`, `commit: d2e9bda`
+- Rolling deploy completed; machine reached started state; health check passed
