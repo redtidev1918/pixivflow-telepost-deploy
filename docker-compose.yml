@@ -7,7 +7,7 @@ name: pixivflow-telepost
 
 services:
   telepost:
-    image: ${TELEPOST_IMAGE:-ghcr.io/redtidev1918/telepost:2.64.0}
+    image: ${TELEPOST_IMAGE:-ghcr.io/redtidev1918/telepost:2.64.1}
     restart: unless-stopped
     init: true
     environment:
@@ -164,4 +164,5 @@ networks:
 volumes:
   caddy-data:
   caddy-config:
+
 
