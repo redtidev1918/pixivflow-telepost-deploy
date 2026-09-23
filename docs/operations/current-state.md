@@ -54,7 +54,7 @@ PixivFlow: 2.44.0 / b0076f89c0e98286d21250aca9e78b85833369a0 — VERIFIED
    additive Delivery Asset Contract step, not on-demand illustration delivery)
   (hot-reload config: /app/data/production.json, watchConfig=true;
    download.materializationPolicy wired from config → on-demand novel previews active)
-TelePost: 2.64.0
+TelePost: 2.64.2
   (Step 10 delivery asset contract: optional JSON media_assets on /api/v1/submissions
    persisted per review_chain_id in media_asset_refs;
    Step 11 DeliveryPlanner: read-only GET /api/v1/reviews/{id}/delivery-plan;
@@ -1528,3 +1528,11 @@ Pinned in `fly/deploy.telepost.toml` (`5739f77`).
 - GHCR image: `ghcr.io/redtidev1918/telepost:2.64.0`
 - `/health` reports `version: 2.64.0`, `commit: d2e9bda`
 - Rolling deploy completed; machine reached started state; health check passed
+
+
+# 2026-09-24 TelePost 2.64.2 Docs Sync
+
+- `/schedule` usage guide added to `docs/COMMANDS.md` + `docs/en/COMMANDS.md`
+- Help copy updated to point at `/schedule` for interactive guidance
+- Goldens regenerated
+- TelePost source pinned at `2.64.2` in all deploy files
