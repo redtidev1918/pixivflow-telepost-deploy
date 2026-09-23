@@ -178,7 +178,7 @@ primary_region = 'iad'
     # 2.64.0 (2026-09-24): /hotweek (natural-week hot ranking), /schedule
     # (native admin automation: SQLite persistent, hot-reload, idempotent),
     # scoped bot command menus (user vs admin), /help reorganized.
-    TELEPOST_IMAGE = 'ghcr.io/redtidev1918/telepost:2.64.1'
+    TELEPOST_IMAGE = 'ghcr.io/redtidev1918/telepost:2.64.2'
 
 [[mounts]]
   source = 'data'
@@ -273,6 +273,7 @@ primary_region = 'iad'
 
 [[restart]]
   policy = 'always'
+
 
 
 
