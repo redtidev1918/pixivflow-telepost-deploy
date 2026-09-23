@@ -175,6 +175,9 @@ primary_region = 'iad'
     # plans; a TXT file_id can no longer be sent as a photo.
     # 2.63.0 (2026-09-22): admin manager alerts expose the anonymous submitter
     # ID, and /ban_user + /ban_api provide manual moderation fallbacks.
+    # 2.64.0 (2026-09-24): /hotweek (natural-week hot ranking), /schedule
+    # (native admin automation: SQLite persistent, hot-reload, idempotent),
+    # scoped bot command menus (user vs admin), /help reorganized.
     TELEPOST_IMAGE = 'ghcr.io/redtidev1918/telepost:2.64.0'
 
 [[mounts]]
@@ -270,4 +273,5 @@ primary_region = 'iad'
 
 [[restart]]
   policy = 'always'
+
 
