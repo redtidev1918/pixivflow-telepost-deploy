@@ -44,6 +44,10 @@ TelePost RBAC 演化模型（root/sudoers/Role Binding）见 [telepost-rbac-evol
 最近明确记录的生产 baseline：
 
 ```text
+PixivFlow: 2.46.0 / 326b8c06d04879e308e97e617486c84f9bed00f7 — VERIFIED
+TelePost: 2.66.0 / 5613a3b24585fd5eaeb3d759818d99365f561087 — VERIFIED
+  (novel cover semantics: explicit `:novelcover` assets, Pixiv default-cover
+   normalization, TelePost cover root + TXT reply, and fallback card)
 PixivFlow: 2.43.0 / c27c924cf92df303b46f10d0a2552fc488f4da43 — VERIFIED
 PixivFlow: 2.44.0 / b0076f89c0e98286d21250aca9e78b85833369a0 — VERIFIED
   (deploy pin = release commit; public `/health` returned
@@ -1577,3 +1581,37 @@ Pinned in `fly/deploy.telepost.toml` (`1505943`).
 - `scripts/smoke-telepost.sh` passed health/live and unauthorized API checks.
 - `scripts/verify-production.sh` passed image/commit checks; webhook-ownership
   checks skipped locally (no bot tokens on this machine).
+
+# 2026-09-24 TelePost 2.66.0 / PixivFlow 2.46.0 Deployed
+
+- PixivFlow normalizes a Pixiv default novel cover to `cover_url: null` and
+  emits real covers as dedicated `pixiv:<id>:novelcover` assets.
+- TelePost consumes only explicit `:novelcover` assets for the novel visual
+  root. With a cover, publication is cover root + TXT reply; without one, a
+  rendered fallback card can be the root; if the card is disabled or fails,
+  TXT remains the root. When preview filtering empties the plan, TelePost
+  falls back to the full plan instead of failing with no messages.
+- TelePost runtime image adds CJK fonts for the fallback card renderer.
+
+Production pins:
+
+- TelePost image: `ghcr.io/redtidev1918/telepost:2.66.0`
+- TelePost commit: `5613a3b24585fd5eaeb3d759818d99365f561087`
+- PixivFlow ref: `326b8c06d04879e308e97e617486c84f9bed00f7`
+- PixivFlow tag: `v2.46.0`
+
+Verification:
+
+- Rolling TelePost deployment completed; health checks passed.
+- Rolling PixivFlow deployment completed; the scheduler is stopped by design
+  when idle and wakes on demand.
+- TelePost `/health` reports `version=2.66.0`, `commit=5613a3b`, and bots 1
+  and 2.
+- Woken PixivFlow `/health` reports `version=2.46.0` and `commit=326b8c06d048`.
+- `scripts/smoke-telepost.sh` passed health, live, and unauthorized API checks.
+- `scripts/verify-production.sh` passed lifecycle, proxy, business probes,
+  image/commit, and scheduler version checks; webhook ownership and
+  Cloudflare clock checks were skipped because local read-only credentials
+  were unavailable.
+- PixivFlow Release workflow completed successfully and `v2.46.0` is the
+  repository Latest release.
