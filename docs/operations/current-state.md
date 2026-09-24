@@ -1554,3 +1554,26 @@ Pinned in `fly/deploy.telepost.toml` (`0937cab`).
 - Rolling deploy completed; machine reached started state.
 - `/health` reports `version: 2.64.3`, `commit: 984ec88`, bots 1 and 2.
 - `scripts/smoke-telepost.sh` passed health/live and unauthorized API checks.
+
+# 2026-09-24 TelePost 2.65.0 Deployed
+
+- Mini App gains a light content-consumption entry: home hot previews, full /
+  week hot list (`/hot`, `/hotweek`), post detail and authenticated media
+  preview. Bot and Mini App share one HotService; no second hot-ranking
+  implementation.
+- Fixed a hot-page offset bug that skipped the first page of `/hot` results.
+- New optional flag `MINIAPP_CONTENT_ENABLED` (default on) gates only the
+  public content API; submission/review/publication paths are untouched.
+- Public content API never exposes file_ids, captions or submitter identity;
+  media bytes are proxied server-side from `published_posts` only.
+
+Pinned in `fly/deploy.telepost.toml` (`1505943`).
+
+## Verification
+
+- GHCR image: `ghcr.io/redtidev1918/telepost:2.65.0`
+- Rolling deploy completed; machine reached started state, checks passing.
+- `/health` reports `version: 2.65.0`, `commit: de95160`, bots 1 and 2.
+- `scripts/smoke-telepost.sh` passed health/live and unauthorized API checks.
+- `scripts/verify-production.sh` passed image/commit checks; webhook-ownership
+  checks skipped locally (no bot tokens on this machine).
