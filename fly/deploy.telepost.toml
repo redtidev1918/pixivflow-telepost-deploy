@@ -186,7 +186,9 @@ primary_region = 'iad'
     # 2.66.0 (2026-09-24): novel cover root + Pillow fallback card
     # (NOVEL_FALLBACK_CARD_ENABLED); inline illustrations stay preview-only;
     # delivery can never be emptied by preview filtering (#130 class).
-    TELEPOST_IMAGE = 'ghcr.io/redtidev1918/telepost:2.66.0'
+    # 2.67.0 (2026-09-24): mixed photo/document publications keep every asset
+    # in the post archive; multi-document captions ship as trailing text.
+    TELEPOST_IMAGE = 'ghcr.io/redtidev1918/telepost:2.67.0'
 
 [[mounts]]
   source = 'data'
