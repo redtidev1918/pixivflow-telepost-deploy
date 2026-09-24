@@ -1615,3 +1615,34 @@ Verification:
   were unavailable.
 - PixivFlow Release workflow completed successfully and `v2.46.0` is the
   repository Latest release.
+
+# 2026-09-24 TelePost 2.67.0 Deployed
+
+- Mixed photo/document submissions now preserve every delivered asset in the
+  public-post archive. Documents are no longer discarded when at least one
+  visual media item exists.
+- A caption for a multi-document publication ships as a trailing text message,
+  so it is no longer attached to the first document. Single-document and
+  visual-root captions keep the prior behavior.
+- The production verifier now reads the UTF-8 schedule configuration correctly
+  on Windows.
+
+Production pin:
+
+- TelePost image: `ghcr.io/redtidev1918/telepost:2.67.0`
+- TelePost commit: `3c7a58ba8ab345e7a5ab17aaecb3453347c4b601`
+- Deploy repository pin commit: `b9f2311`
+- GHCR tag digest: `e2a72112a331646389ee5e3511566900a4b34b66f75733c88cd975978a7a9f77`
+
+Verification:
+
+- TelePost `v2.67.0` Release completed successfully; all required release
+  assets and the GHCR image were published.
+- Rolling Fly deployment completed; the machine reached a good state and DNS
+  checks passed.
+- `/health` reports `version=2.67.0`, `commit=3c7a58ba`, and bots 1 and 2.
+- `scripts/smoke-telepost.sh` passed health, live, and unauthorized API checks.
+- `scripts/verify-production.sh` passed lifecycle, proxy, business probes,
+  unauthorized trigger auth, image/commit, and scheduler version checks.
+  Webhook ownership and Cloudflare clock checks were skipped because local
+  read-only credentials were unavailable.

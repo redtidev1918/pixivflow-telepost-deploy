@@ -21,7 +21,7 @@ schedule_id=${SCHEDULE_ID:-}
 if [[ -z "$schedule_id" ]]; then
   schedule_id=$(python3 -c '
 import json, sys
-cfg = json.load(open("pixivflow/config/production.json"))
+cfg = json.load(open("pixivflow/config/production.json", encoding="utf-8"))
 for s in cfg.get("schedules") or []:
     if s.get("enabled") is not False and s.get("id"):
         print(s["id"])
