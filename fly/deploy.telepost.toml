@@ -180,7 +180,10 @@ primary_region = 'iad'
     # scoped bot command menus (user vs admin), /help reorganized.
     # 2.64.3 (2026-09-24): novel TXT stays in the delivery plan (fixes empty
     # delivery); oversized images try bounded JPEG compression before document.
-    TELEPOST_IMAGE = 'ghcr.io/redtidev1918/telepost:2.64.3'
+    # 2.65.0 (2026-09-24): Mini App hot content entry (home previews, /hot,
+    # /post detail, media proxy) sharing the Bot HotService; fixes a hot-page
+    # offset that skipped the first page; MINIAPP_CONTENT_ENABLED flag.
+    TELEPOST_IMAGE = 'ghcr.io/redtidev1918/telepost:2.65.0'
 
 [[mounts]]
   source = 'data'
