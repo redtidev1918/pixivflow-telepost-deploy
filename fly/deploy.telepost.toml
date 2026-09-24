@@ -183,7 +183,10 @@ primary_region = 'iad'
     # 2.65.0 (2026-09-24): Mini App hot content entry (home previews, /hot,
     # /post detail, media proxy) sharing the Bot HotService; fixes a hot-page
     # offset that skipped the first page; MINIAPP_CONTENT_ENABLED flag.
-    TELEPOST_IMAGE = 'ghcr.io/redtidev1918/telepost:2.65.0'
+    # 2.66.0 (2026-09-24): novel cover root + Pillow fallback card
+    # (NOVEL_FALLBACK_CARD_ENABLED); inline illustrations stay preview-only;
+    # delivery can never be emptied by preview filtering (#130 class).
+    TELEPOST_IMAGE = 'ghcr.io/redtidev1918/telepost:2.66.0'
 
 [[mounts]]
   source = 'data'

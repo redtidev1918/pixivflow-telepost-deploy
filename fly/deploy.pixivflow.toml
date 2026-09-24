@@ -147,8 +147,12 @@ kill_timeout = 60
     # a97e350 = v2.45.1: WebUI recovery write path requires a same-host Origin
     # (http/https) and returns 403 SCHEDULER_RECOVERY_ORIGIN_REJECTED otherwise,
     # closing the CSRF/origin gap on the bearer-token recovery proxy.
-    PIXIVFLOW_REF = 'a97e35009391fe339e82e36b1fa5c3329771f322'
-    PIXIVFLOW_VERSION = '2.45.1'
+    # 326b8c0 = v2.46.0 (a7e99c5): novel cover semantics — the webview coverUrl
+    # is normalized (default placeholder → null) and emitted as a dedicated
+    # pixiv:<id>:novelcover MediaAsset so TelePost can build 'cover root + TXT
+    # reply' without positional guessing; inline art stays preview-only.
+    PIXIVFLOW_REF = '326b8c06d04879e308e97e617486c84f9bed00f7'
+    PIXIVFLOW_VERSION = '2.46.0'
 
 [[mounts]]
   source = 'pixivflow_data'
