@@ -1536,3 +1536,21 @@ Pinned in `fly/deploy.telepost.toml` (`5739f77`).
 - Help copy updated to point at `/schedule` for interactive guidance
 - Goldens regenerated
 - TelePost source pinned at `2.64.2` in all deploy files
+
+# 2026-09-24 TelePost 2.64.3 Deployed
+
+- Novel delivery plan now keeps the TXT document when a novel has one cover
+  asset plus one TXT; the previous photo/document pairing removed every item
+  and could report `delivery returned no messages`.
+- Oversized images now attempt bounded JPEG compression before falling back to
+  documents. Very large images without reduced decode still stay documents to
+  protect the 512 MB box.
+
+Pinned in `fly/deploy.telepost.toml` (`0937cab`).
+
+## Verification
+
+- GHCR image: `ghcr.io/redtidev1918/telepost:2.64.3`
+- Rolling deploy completed; machine reached started state.
+- `/health` reports `version: 2.64.3`, `commit: 984ec88`, bots 1 and 2.
+- `scripts/smoke-telepost.sh` passed health/live and unauthorized API checks.
