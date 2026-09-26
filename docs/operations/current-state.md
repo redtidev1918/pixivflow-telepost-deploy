@@ -44,6 +44,11 @@ TelePost RBAC 演化模型（root/sudoers/Role Binding）见 [telepost-rbac-evol
 最近明确记录的生产 baseline：
 
 ```text
+PixivFlow: 3.0.0 / c43e4c3f52fcb571478399d829e19ad6ac70858e — VERIFIED
+  (major: the WebUI location refactor — `GET /api/files/location` answers where
+   a file is and showing it is a host capability, so a server copies the path
+   instead of erroring; plus the CLI output fix, so `delivery`/`gateway`/
+   `outbox`/`runs` print, and the no-auth notice no longer covers the app)
 PixivFlow: 2.47.0 / c5d2995ecd4ca8f6443d32ddfb40123e8d218ad0 — VERIFIED
   (submission-path consistency: idempotency_key auto-fill, capability-key
    validation, telegram target deprecated, author carried into submissions)
@@ -1863,3 +1868,51 @@ Verification:
 Rollback: `mv /app/data/production.json.bak-author /app/data/production.json`
 (or restore `PIXIVFLOW_REF`/`VERSION` to the previous pin and let the image
 hydration take over after clearing the volume file).
+
+# 2026-09-26 PixivFlow 3.0.0 pinned and deployed (scheduler)
+
+Change: `fly/deploy.pixivflow.toml` — `PIXIVFLOW_REF`
+`c5d2995ecd4ca8f6443d32ddfb40123e8d218ad0` → `c43e4c3f52fcb571478399d829e19ad6ac70858e`,
+`PIXIVFLOW_VERSION` `2.47.0` → `3.0.0` (commit `e3c0b58`), then `fly deploy`.
+
+What 3.0.0 carries: release PR #170 (release-please commit `95ccabe`, merge
+commit `c43e4c3`, annotated tag `v3.0.0` → `c43e4c3`). It is a major because the
+WebUI location refactor is breaking: `GET /api/files/location` answers *where* a
+file is and PixivFlow no longer spawns a file manager — revealing is a host
+capability (the desktop shows it, a headless server copies the path, and the
+WebUI degrades to the clipboard instead of erroring). It also carries the CLI
+output fix (a command's returned `CommandResult` was discarded, so
+`delivery`/`gateway`/`outbox`/`runs` printed nothing; they now declare
+`metadata.rendersResult` and the delivery id may be given positionally) and the
+no-auth notice fix (it no longer covers the app or shifts the layout). The
+`{{author}}` note template applied to the volume on 2026-09-26 is unaffected.
+
+Verification:
+
+- release evidence: `npm view pixivflow dist-tags` → `latest: 3.0.0`;
+  `git ls-remote --tags origin v3.0.0` → tag object `7e2a1783…`, dereferenced
+  `c43e4c3f52fcb571478399d829e19ad6ac70858e`; `gh release view v3.0.0` →
+  published, not a draft;
+- `fly deploy -c fly/deploy.pixivflow.toml` exit 0, image
+  `registry.fly.io/pixivflow-scheduler:deployment-01M3FFPN9H9PWX9KEQ4RX0HYFR`
+  (172 MB, sha256:ef313353e9ab845df9f8db772b2c04ddc8874394930fb9704b81c15c9573b153),
+  machine `83d1650bd23948` updated with the rolling strategy, DNS verified;
+- `curl https://pixivflow-scheduler.fly.dev/health` →
+  `{"status":"ok","service":"pixivflow-scheduler-trigger","version":"3.0.0","commit":"c43e4c3f52fc"}`;
+  `fly logs … | grep -o 'PIXIVFLOW_REVISION[^ ]*' | tail` →
+  `PIXIVFLOW_REVISION=3.0.0+c43e4c3f52fcb571478399d829e19ad6ac70858e` above the
+  previous `2.47.0+c5d2995…`, i.e. code = Release = Deploy = Runtime;
+- `./scripts/verify-images.sh` exit 0 (TelePost `2.67.0` and the new commit both OK);
+- the CLI answers inside the container now:
+  `fly ssh console -a pixivflow-scheduler -C "node /app/dist/index.js delivery status"`
+  → `bot1-submit 39 delivered / 1 failed / 0 pending`, `bot2-submit 45 / 1 / 0`
+  (`--json` prints the same payload). Both failed intents are `dead` on the
+  outbox with a permanent TelePost rejection (`HTTP 400`,
+  `business_status=permanent_failure`, `reason="refetch attempt is unknown or
+  terminal"`) — already converged dead-letters from refetch attempts, not a live
+  fault, and re-arming them cannot succeed while TelePost treats the attempt as
+  terminal.
+
+Rollback: set `PIXIVFLOW_REF` back to
+`c5d2995ecd4ca8f6443d32ddfb40123e8d218ad0` / `PIXIVFLOW_VERSION` `2.47.0` and
+redeploy.
