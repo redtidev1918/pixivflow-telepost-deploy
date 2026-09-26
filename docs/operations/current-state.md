@@ -1953,3 +1953,93 @@ result-returning commands were not verified: `ExecuteSlotCommand`,
 Known-debt entries above are intentionally not "fixed here": the discipline is
 that a production-observability defect is repaired upstream and then re-verified
 through the release → pin → runtime chain, never by hand inside the container.
+
+# 2026-09-27 彻底优化: CLI failure visibility, topic-mode note, author-line acceptance
+
+Status: `VERIFIED` (upstream fix, volume config, runtime re-read) /
+`EXTERNAL_ACCEPTANCE_REQUIRED` (the next 10:00/10:10 CST submission is the
+author-line acceptance point)
+
+Three items surfaced by the compatibility review of the 3.0.0 pin. All three were
+repaired at the layer that owns them; nothing was hand-patched inside the
+container.
+
+## 1. CLI failure visibility — fixed upstream (PixivFlow `ca007ca`, docs `4de211b`)
+
+`[ERROR] Command execution failed {"command":"reconcile","error":{}}` had three
+causes, and only the combination explains the silence:
+
+* `src/logger.ts` wrote `JSON.stringify(record)` with no replacer, so an `Error`
+  (own but non-enumerable `message`/`stack`) serialised as `{}` — literally the
+  recorded shape. Now `serializeLogValue` expands `Error` →
+  `{name,message,stack,cause}`.
+* `BaseCommand.failure` returned `{success:false, error}` with no `message`, so
+  even a non-JSON consumer had nothing to print. The reason now travels in
+  `message` as well.
+* `src/index.ts` only set an exit code. It now prints `❌ <reason>` to stderr and
+  logs `{command, stage:'command.execute', reason, retryable, error}` — the
+  Failure Contract fields of §25. A command that prints its own richer guidance
+  (`download`) declares `metadata.printsOwnErrors: true`, so the reason is logged
+  but not printed twice.
+* `pixivflow diagnose-egress` was a **documentation** error, not a missing
+  command: `DiagnoseEgressCommand.ts` registers `name = 'diagnose'`, so the real
+  invocation is `pixivflow diagnose egress`. The alias `diagnose-egress` was added
+  anyway so the intuitive spelling answers.
+* `reconcile --repair` printed nothing on success; it now logs the ledger row it
+  wrote (target / workType / pixivId / deliveryId / created).
+* The other result-returning commands were audited: `execute-slot`,
+  `scheduler-run-once`, `webui`, `random-download`, `download`, `doctor`, `dirs`
+  all print inline, so they stay unflagged; `AGENTS.md` now names them.
+
+Evidence: full suite `npx jest --silent --runInBand` → **124 suites / 1356 tests
+passed**; new `src/__tests__/logger.test.ts` (an Error survives as data, `cause`
+reachable) and `CommandResultRenderer.test.ts` cases (a failing stage is never
+silent). Pushed `e1c0ac3..4de211b` on PixivFlow `master`.
+
+## 2. Topic-mode note template — `{{rankingDate}}` removed (both layers)
+
+All four production targets are `mode: "topic"`, so no candidate carries a ranking
+date, and `renderDeliveryTemplate` renders a *known* variable with no value as an
+empty string (`src/delivery/HttpMultipartDelivery.ts:478-481`) — that is what left
+`📅  · ⭐ 49 · 👁 694` in the delivered note.
+
+* repo: `pixivflow/config/production.json`, both `bot1-submit` and `bot2-submit`
+  notes;
+* volume: `/app/data/production.json` on `vol_r68wlk8ynj1x5lq4`, 10937 → 10889
+  bytes. Uploaded to `.new`, read back and byte-compared with the repo file
+  (`ROUNDTRIP_IDENTICAL`), then `mv` over the original (`LIVE_CONFIG_UPDATED`);
+  sha256 `dfb32db460078ee9808df67c070d2a1f7ea40ff304fbf142751a3acc38e351a9` on both
+  sides; backup `production.json.bak-ranking` (10937 bytes, mode preserved);
+  rollback `mv /app/data/production.json.bak-ranking /app/data/production.json`;
+* hot reload proven rather than assumed: `fly logs` shows
+  `Scheduler configuration snapshot activated {"generation":2,…}` at
+  `2026-09-26T22:00:45Z`, i.e. generation 1 → 2 across the `mv`;
+* a PixivFlow contract test pins both halves
+  (`src/__tests__/delivery/http-multipart.test.ts`): the production note renders
+  `🖌 作者：藤原ここあ` / `⭐ 49 · 👁 694` / `🏷 ボテ腹 · Pixiv 分级：R-18` with no
+  `📅` and no empty slot, while the old form demonstrably produces `📅  · ⭐ 49`.
+
+## 3. Runtime ledger re-read (read-only probe)
+
+`fly machine start 83d1650bd23948` → `fly ssh console -a pixivflow-scheduler -C
+"node /app/dist/index.js delivery status"` → `bot1-submit 39 delivered / 1 failed /
+0 pending`, `bot2-submit 45 / 1 / 0` — identical to the numbers recorded when the
+3.0.0 pin was verified, with no pending intent. The machine was then stopped again
+(`fly machine stop 83d1650bd23948`, state `stopped`) to restore the
+stopped-by-default design; the wake used the same lifecycle the clock trigger uses.
+
+## 4. Author line — acceptance point
+
+`🖌 作者：{{author}}` entered the volume copy on 2026-09-26 (entry above) and every
+submission observed so far predates it. The next `bot1-daily` (10:00 CST) /
+`bot2-daily` (10:10 CST) run is the acceptance point: the delivered note must carry
+the author line. Until that is observed: `EXTERNAL_ACCEPTANCE_REQUIRED`.
+
+## Pending
+
+* PixivFlow's next release must carry the CLI fix; then bump `PIXIVFLOW_REF` /
+  `PIXIVFLOW_VERSION`, redeploy, and re-verify `/health`, `PIXIVFLOW_REVISION` and
+  the CLI probe. Until that pin moves, the container still runs `c43e4c3` and the
+  fix lives only on `master` — the debt is repaired, not yet delivered.
+* Rollback: note change → restore `production.json.bak-ranking`; code change → keep
+  the pin at `c43e4c3`.
