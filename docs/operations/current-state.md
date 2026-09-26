@@ -44,6 +44,9 @@ TelePost RBAC 演化模型（root/sudoers/Role Binding）见 [telepost-rbac-evol
 最近明确记录的生产 baseline：
 
 ```text
+PixivFlow: 2.47.0 / c5d2995ecd4ca8f6443d32ddfb40123e8d218ad0 — VERIFIED
+  (submission-path consistency: idempotency_key auto-fill, capability-key
+   validation, telegram target deprecated, author carried into submissions)
 PixivFlow: 2.46.0 / 326b8c06d04879e308e97e617486c84f9bed00f7 — VERIFIED
 TelePost: 2.66.0 / 5613a3b24585fd5eaeb3d759818d99365f561087 — VERIFIED
   (novel cover semantics: explicit `:novelcover` assets, Pixiv default-cover
@@ -1774,3 +1777,59 @@ Verification:
   `min_machines_running=0`).
 
 Rollback: revert both pins to 0.14.1 and redeploy.
+
+# 2026-09-26 PixivFlow 2.47.0 pinned and deployed (scheduler)
+
+Moved the production scheduler pin from 2.46.0/326b8c0 to 2.47.0/c5d2995 — the
+v2.47.0 release merge commit — so the submission-path consistency work is live.
+
+Change:
+
+- `fly/deploy.pixivflow.toml`: `PIXIVFLOW_REF`
+  `326b8c06d04879e308e97e617486c84f9bed00f7` → `c5d2995ecd4ca8f6443d32ddfb40123e8d218ad0`,
+  `PIXIVFLOW_VERSION` `2.46.0` → `2.47.0` (40-hex commit pin, never a tag).
+- `pixivflow/config/production.json`: the submission note leads with
+  `🖌 作者：{{author}}` for both `bot1-submit`/`bot2-submit` targets. The pinned
+  revision renders an absent author as empty (`author: c.author ?? ''`), so the
+  template change is safe for works whose author is unknown.
+
+What 2.47.0 carries on the submission path (PixivFlow master `48c22ea`,
+`80aeea6`, `5b5b4cf`):
+
+- an `httpMultipart` target whose `config.fields` omits `idempotency_key` gets
+  `{{idempotencyKey}}` auto-filled (`autoIdempotencyKey: false` opts out), so an
+  ACK lost in transit converges at TelePost instead of publishing twice;
+- the never-evaluated `success` block is gone (the business ACK is the only
+  verdict) and an unknown capability key warns with `Did you mean "album"?`
+  instead of being silently dropped;
+- `type: "telegram"` (PixivFlow owning a bot token) is deprecated and warns;
+- the Pixiv author travels into every submission.
+
+Verification:
+
+- Release: release PR #169 merged → merge commit
+  `c5d2995ecd4ca8f6443d32ddfb40123e8d218ad0`; tag `v2.47.0`
+  (annotated tag object `cf22e899fd31a9dbc6c8a7492f3d6cbb0d82807d`); package
+  `2.47.0` on npm (`https://registry.npmjs.org/pixivflow/-/pixivflow-2.47.0.tgz`).
+- Deploy: `fly deploy -c fly/deploy.pixivflow.toml` → image
+  `deployment-01M3FCXGVENEKPF6P4RH6XFWVP` (172 MB), machine `83d1650bd23948`
+  (`dry-glade-4438`, iad, volume `vol_r68wlk8ynj1x5lq4`) updated and reached a
+  good state.
+- Runtime: `GET https://pixivflow-scheduler.fly.dev/health` →
+  `{"status":"ok","service":"pixivflow-scheduler-trigger","version":"2.47.0","commit":"c5d2995ecd4c"}`;
+  startup log `PIXIVFLOW_REVISION=2.47.0+c5d2995ecd4ca8f6443d32ddfb40123e8d218ad0`
+  (code = Release = Deploy = Runtime).
+- Tests: PixivFlow `npx jest --silent --runInBand` 120 suites / 1316 tests
+  green, `tsc --noEmit` clean.
+
+Note (config hydration): `docker/pixivflow-scheduler-entrypoint.sh` copies
+`/app/config/pixivflow.production.json` onto the volume only when
+`/app/data/production.json` is missing or empty, so the note-template change is
+in the image and in the repo but NOT yet in the running volume copy. The
+existing submission config (already carrying
+`"idempotency_key": "{{idempotencyKey}}"`) is unaffected; the volume copy keeps
+the previous note until it is rewritten (the scheduler hot-reloads
+`targets`/`delivery` with `watchConfig=true`).
+
+Rollback: set `PIXIVFLOW_REF`/`PIXIVFLOW_VERSION` back to
+`326b8c06d04879e308e97e617486c84f9bed00f7` / `2.46.0` and redeploy.
