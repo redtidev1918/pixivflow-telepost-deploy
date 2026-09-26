@@ -151,8 +151,17 @@ kill_timeout = 60
     # is normalized (default placeholder → null) and emitted as a dedicated
     # pixiv:<id>:novelcover MediaAsset so TelePost can build 'cover root + TXT
     # reply' without positional guessing; inline art stays preview-only.
-    PIXIVFLOW_REF = '326b8c06d04879e308e97e617486c84f9bed00f7'
-    PIXIVFLOW_VERSION = '2.46.0'
+    # c5d2995 = v2.47.0 (2b617256): submission-path consistency. An httpMultipart
+    # target that does not declare idempotency_key gets {{idempotencyKey}}
+    # auto-filled (autoIdempotencyKey: false opts out), so an ACK lost in transit
+    # converges at TelePost instead of publishing twice; the never-evaluated
+    # `success` block is gone and the capability key list is now enforced (a
+    # misspelled key such as supportsAlbum warns instead of being dropped);
+    # `type: "telegram"` is deprecated and warns once; the Pixiv author travels
+    # into every submission ({{author}}); config-validation failures answer a
+    # stable CONFIG_VALIDATION_* code instead of CLI guidance text.
+    PIXIVFLOW_REF = 'c5d2995ecd4ca8f6443d32ddfb40123e8d218ad0'
+    PIXIVFLOW_VERSION = '2.47.0'
 
 [[mounts]]
   source = 'pixivflow_data'

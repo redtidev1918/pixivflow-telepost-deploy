@@ -101,7 +101,7 @@
                 "fields": {
                     "tags": "{{workTags}},{{topicTag}}",
                     "title": "{{title}}",
-                    "note": "📅 {{rankingDate}} · ⭐ {{bookmarkCount}} · 👁 {{viewCount}}\n🏷 {{topicTag}} · Pixiv 分级：{{xRestrictLabel}}",
+                    "note": "🖌 作者：{{author}}\n📅 {{rankingDate}} · ⭐ {{bookmarkCount}} · 👁 {{viewCount}}\n🏷 {{topicTag}} · Pixiv 分级：{{xRestrictLabel}}",
                     "link": "{{link}}",
                     "spoiler": "{{spoiler}}",
                     "idempotency_key": "{{idempotencyKey}}",
@@ -130,7 +130,7 @@
                 "fields": {
                     "tags": "{{workTags}},{{topicTag}}",
                     "title": "{{title}}",
-                    "note": "📅 {{rankingDate}} · ⭐ {{bookmarkCount}} · 👁 {{viewCount}}\n🏷 {{topicTag}} · Pixiv 分级：{{xRestrictLabel}}",
+                    "note": "🖌 作者：{{author}}\n📅 {{rankingDate}} · ⭐ {{bookmarkCount}} · 👁 {{viewCount}}\n🏷 {{topicTag}} · Pixiv 分级：{{xRestrictLabel}}",
                     "link": "{{link}}",
                     "spoiler": "{{spoiler}}",
                     "idempotency_key": "{{idempotencyKey}}",
