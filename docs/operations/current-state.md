@@ -44,6 +44,13 @@ TelePost RBAC 演化模型（root/sudoers/Role Binding）见 [telepost-rbac-evol
 最近明确记录的生产 baseline：
 
 ```text
+PixivFlow: 3.0.1 / 33362ac35c116be7d040b8cdf7ad6b3c40b1466e — VERIFIED
+  (a failing CLI stage is visible: the reason travels in both `message` and
+   `error`, the entry point prints `❌ …` to stderr and logs
+   command/stage/reason/retryable, and `src/logger.ts` expands an Error instead
+   of writing `"error":{}`; `pixivflow diagnose-egress` is an accepted alias;
+   the production note no longer carries an empty `📅 {{rankingDate}} · ` slot —
+   author-line acceptance is the next 10:00/10:10 CST run)
 PixivFlow: 3.0.0 / c43e4c3f52fcb571478399d829e19ad6ac70858e — VERIFIED
   (major: the WebUI location refactor — `GET /api/files/location` answers where
    a file is and showing it is a host capability, so a server copies the path
