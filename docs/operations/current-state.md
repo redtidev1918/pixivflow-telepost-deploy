@@ -2043,3 +2043,71 @@ the author line. Until that is observed: `EXTERNAL_ACCEPTANCE_REQUIRED`.
   fix lives only on `master` — the debt is repaired, not yet delivered.
 * Rollback: note change → restore `production.json.bak-ranking`; code change → keep
   the pin at `c43e4c3`.
+
+# 2026-09-27 PixivFlow 3.0.1 上线：CLI 失败可见
+
+Status: VERIFIED (release → pin → runtime) / EXTERNAL_ACCEPTANCE_REQUIRED (author line)
+
+上一节的 Pending（“修复只在 master，容器仍跑 `c43e4c3`”）已由本节关闭：修复已经过
+release → pin → runtime 三段路，并且在容器里现场复现。
+
+## 1. 发布
+
+* 上游修复 `fix(cli): keep a failing stage visible` 经 release PR
+  [#172](https://github.com/redtidev1918/PixivFlow/pull/172) 合并为
+  `33362ac35c116be7d040b8cdf7ad6b3c40b1466e`。release PR 由 `redtidev1918` 账号合并
+  （车队没有自动合并；引擎 `reusable-release.yml` 的注释解释了先合并再发版的原因：
+  merged release PR 仍带 `autorelease: pending` 会让 release-please 中止后续版本）。
+* v3.0.1 已发布：tag `v3.0.1`（annotated，对象 `77f7f0069836f66e840fe92451f9afeb06b1642c`
+  → commit `33362ac35c116be7d040b8cdf7ad6b3c40b1466e`），Release 资产
+  `pixivflow-3.0.1.tgz` / `RELEASE-METADATA.json` / `SHA256SUMS`，`draft=false`
+  `prerelease=false`；Release run `36275032972`（master push）三个 job
+  (`release-please` / `build-plan` / `build`, `finalize`) 全部 success。
+* 发布产物自证（不看源码，只看发布物）：下载 tgz（2 507 044 bytes）解包后
+  `package.json` = `3.0.1`；`dist/logger.js` 含 `serializeLogValue`；
+  `dist/commands/CommandResultRenderer.js` 含 `formatCommandFailure`；
+  `dist/commands/DiagnoseEgressCommand.js` 含别名 `diagnose-egress`；
+  `dist/commands/DownloadCommand.js` 含 `printsOwnErrors`；
+  `dist/commands/ReconcileCommand.js` 含 `--repair` 成功路径日志。
+* 交付物本地复现（解包 + `npm install --omit=dev`）：`node dist/index.js diagnose bogus`
+  → stderr 打出 `❌ Unknown diagnose target: bogus. Try: pixivflow diagnose egress`，
+  结构化行含 `stage` / `reason` / `retryable` / `error{name,message,stack}`，exit 1；
+  不再出现 `"error":{}`。
+
+## 2. 部署
+
+* `fly/deploy.pixivflow.toml`：`PIXIVFLOW_REF = '33362ac35c116be7d040b8cdf7ad6b3c40b1466e'`、
+  `PIXIVFLOW_VERSION = '3.0.1'`，注释写明回滚就是上一行的 `c43e4c3`；deploy 仓库提交
+  `adff6ed chore(pixivflow): pin 3.0.1 (33362ac) for visible CLI failures`。
+* `fly deploy -c fly/deploy.pixivflow.toml --ha=false` → 镜像
+  `registry.fly.io/pixivflow-scheduler:deployment-01M3FWM24AH09J4YWJVXAZGPQ0`（172 MB），
+  machine `83d1650bd23948` 滚动更新后停在 `stopped`（符合“空闲不占资源”的设计）。
+
+## 3. 现场核对（全部只读）
+
+* `/health` →
+  `{"status":"ok","service":"pixivflow-scheduler-trigger","version":"3.0.1","commit":"33362ac35c11"}`。
+* 启动日志：`PIXIVFLOW_REVISION=3.0.1+33362ac35c116be7d040b8cdf7ad6b3c40b1466e`，
+  紧邻的前一行是 `PIXIVFLOW_REVISION=3.0.0+c43e4c3f52fcb571478399d829e19ad6ac70858e`
+  —— 版本切换的现场证据，不靠推断。
+* `./scripts/verify-images.sh` → exit 0（TelePost `2.67.0` 匹配；执行端报告的版本包含
+  `33362ac35c11`）。
+* 运行期账本未变（修复不动数据）：`delivery status` → `bot1-submit 39 delivered / 1 failed /
+  0 pending`、`bot2-submit 45 / 1 / 0`，与 3.0.0 pin 时的记录一致。
+* 卷上配置就是新模板：两个 `delivery.targets.*.fields.note` 都是
+  `🖌 作者：{{author}}\n⭐ {{bookmarkCount}} · 👁 {{viewCount}}\n🏷 {{topicTag}} · Pixiv 分级：{{xRestrictLabel}}`，
+  `rankingDate_refs = 0`、`author_refs = 2`。
+* 失败可见性现场复现（用 KNOWN_DEBT 记录里的原命令）：`node /app/dist/index.js reconcile`
+  → stderr `❌ Usage: reconcile --target <name> --type <illustration|novel> --pixiv-id <id>
+  [--remote-id <id>] [--reason <text>] [--repair]`，结构化行
+  `{"command":"reconcile","stage":"command.execute","reason":"Usage: …","retryable":false,"error":{"name":"Error","message":"…","stack":"…"}}`，
+  exit 1。对照 1920-1955 记录的症状 `{"command":"reconcile","error":{}}`：失败阶段不再不可见。
+* `diagnose-egress` 别名随镜像生效（`/app/dist/commands/DiagnoseEgressCommand.js` 内含），
+  即文档里那个“Command not found”的写法现在也能用。
+* 核对完成后 `fly machine stop 83d1650bd23948` → state `stopped`，恢复设计状态。
+
+## Pending
+
+* 只剩一项：下一次 `bot1-daily`（10:00 CST）/ `bot2-daily`（10:10 CST）投稿的 note 必须
+  出现 `🖌 作者：…` 行（卷配置已就位、模板变量在 topic 模式下由下载器填充 `author`）。
+  观察到之前，本节状态保持 `EXTERNAL_ACCEPTANCE_REQUIRED`。
