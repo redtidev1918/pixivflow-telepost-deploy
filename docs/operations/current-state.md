@@ -1968,6 +1968,14 @@ Known-debt entries above are intentionally not "fixed here": the discipline is
 that a production-observability defect is repaired upstream and then re-verified
 through the release → pin → runtime chain, never by hand inside the container.
 
+**Resolved** by the 2026-09-27 entries below, through exactly that chain:
+PixivFlow `4617d7d` + `f682048` → release **3.0.2** (`a0e5f0b`) → the pin in
+`fly/deploy.pixivflow.toml` (`aff769c`) → the in-container proof of the
+contract fields. Every command listed as unverified was then audited: they all
+print inline, so none needs `rendersResult` (`download` declares
+`printsOwnErrors`, and `reconcile --repair` gained the inline success line it
+was missing). This entry stays as the historical record of the debt.
+
 # 2026-09-27 彻底优化: CLI failure visibility, topic-mode note, author-line acceptance
 
 Status: `VERIFIED` (upstream fix, volume config, runtime re-read) /
