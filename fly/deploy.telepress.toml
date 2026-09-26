@@ -16,6 +16,14 @@ primary_region = 'iad'
 kill_signal = 'SIGTERM'
 kill_timeout = 60
 
+# Explicit 256MB cap (HARD, see ecosystem-platform.md §3.3.1). TelePress is
+# stateless and request-driven; do not raise. "512" is a mistaken assumption —
+# verified 2026-09-26 the machine runs shared-cpu-1x:256MB.
+[[vm]]
+  size = 'shared-cpu-1x'
+  memory = '256mb'
+  cpu_kind = 'shared'
+
 [build]
   dockerfile = '../docker/telepress.Dockerfile'
 

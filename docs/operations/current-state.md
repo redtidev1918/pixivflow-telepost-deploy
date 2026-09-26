@@ -1675,3 +1675,11 @@ Verification:
 
 Rollback: revert `min_machines_running` to `1` and `auto_stop_machines` to
 `false`, redeploy — restores always-on.
+
+Machine size: `shared-cpu-1x:256MB` (verified 2026-09-26; not 512). No change
+needed — it is already at the target size.
+
+Consolidation decision (2026-09-26): TelePress **stays standalone**; it is NOT
+merged into TelePost. Rationale and HARD constraints recorded in
+`docs/architecture/ecosystem-platform.md` §3.3.1 (attack surface / §telepress-preview
+invariant / no-parallel-systems / scale-to-zero is the cost-control tool).

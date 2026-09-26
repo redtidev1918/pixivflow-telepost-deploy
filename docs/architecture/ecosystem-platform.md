@@ -210,6 +210,43 @@ TelePress 不负责：
 
 ---
 
+## 3.3.1 TelePress 交付形态与生命周期约束(HARD)
+
+决策(2026-09-26,经完整调用链审计后定):
+
+```text
+TelePress 作为独立 Preview / Publishing Plane 交付,
+独立部署为一个无状态、按需唤醒的 HTTP 服务(telepress-publish),
+绝不并入 TelePost 进程。
+```
+
+理由(绑定,勿再推翻):
+
+1. **攻击面边界**:TelePost 是唯一持有 Telegram 凭据的服务(§16)。若把
+   自由发布端点搬进 TelePost,等于把「TelePress as a service」塞进凭据持有者,
+   扩大唯一敏感服务的攻击面。TelePress 独立部署、只发 Telegraph 不发 Telegram,
+   攻击面封闭在独立平面。
+2. **§telepress-preview 不变量**:TelePost 的 TelePress 集成是「thin
+   preview-provider adapter,绑定不可变 Publication snapshot」。TelePress 独立服务
+   做的是 PixivFlow 执行时的 rich 带图预览(独立调用点)。两者是**两条不同链路、
+   两个不同消费者**,各有正确定位,不可合并。
+3. **§15 不建平行系统**:把独立 TelePress 能力重实现进 TelePost 恰是平行系统。
+4. **已定省成本手段 = scale-to-zero,非集成**:TelePress 无状态、无卷、单一消费者
+   (PixivFlow 每日 2 次 novel 预览)。用 scale-to-zero(空闲休眠按需唤醒)即可,
+   机器规格 shared-cpu-1x:**256MB**。无需为「省掉已休眠的机器」付出扩大攻击面的代价。
+
+强约束(agent 与工程师不得违反):
+
+- `fly/deploy.telepress.toml` 生命周期 = `scale-to-zero`:
+  `auto_stop_machines=true`、`auto_start_machines=true`、`min_machines_running=0`。
+- TelePress server 保持**无持久卷**(临时文件运行时创建即清理)。
+- 雪崩安全:**TelePress 预览失败绝不影响 TXT 发布**;冷启动只跳过当次预览。
+- 机器规格上限:**256MB**,不需要也不要提升。
+- **禁止**在 TelePost 内新增「外部可触发生成 Telegraph 页」的 HTTP 端点。
+- 下线独立 app 的诉求,统一导向「确认 scale-to-zero 已生效」而非「并入 TelePost」。
+
+---
+
 ## 3.4 PixivFlow WebUI
 
 定位：
