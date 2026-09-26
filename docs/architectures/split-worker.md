@@ -292,6 +292,16 @@ cd control-plane && npx wrangler secret put SCHEDULER_TRIGGER_TOKEN && npx wrang
 #        表达式以 `PRIMARY_CRONS`（control-plane/src/cron-map.ts 导出）为准：
 #        operator runbook 与契约测试读同一份列表，而不是各自抄一遍。
 #        两个时钟的部署是**两个独立的 operator 步骤**，完成情况分别记录。
+#
+#    4c) TERTIARY：GitHub Actions watchdog（`.github/workflows/schedule-watchdog.yml`）
+#        当日计划发生后兜底重放的第三条路径。它只读一个 secret：
+#
+#          gh secret set SCHEDULE_TRIGGER_TOKEN --repo <owner>/<repo>   # 与 4a/执行端同一令牌
+#
+#        触发 origin **刻意不是 secret**：脚本从 control-plane/wrangler.toml 的
+#        PIXIVFLOW_TRIGGER_BASE_URL 读取，仓库里只有这一处陈述。
+#        任何“顺手加一个 URL secret”的改动都会让该时钟静默打错主机
+#        （`/health` 200、真实触发 404），并由 deployment-contract.test.ts 拦下。
 ```
 
 部署后核对（全部只读、缺变量时输出 `SKIP`、不打印密钥）：

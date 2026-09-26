@@ -18,6 +18,12 @@
 | `PIXIVFLOW_REFETCH_TOKEN` | `publisher` 持有、`executor` 校验 | 审核群单目标手动重抓鉴权；不授予定时触发权 | TelePost / PixivFlow |
 | `SUB_URL` | `network`（仅内置代理时） | 代理订阅 | proxy 单元 |
 
+触发端点的 **origin 不是凭据**：它是配置，且在仓库里只有一处陈述——`control-plane/wrangler.toml`
+的 `PIXIVFLOW_TRIGGER_BASE_URL`。任何时钟（Cloudflare Worker、cron-job.org、GitHub Actions
+watchdog）都不得自持一份私有 URL 副本；private copy 曾让第三道时钟指向一台无关的常驻主机，
+`/health` 依旧 200、每次真实触发 404，静默失效数天。见
+[detection](#检测与回归) 的 `deployment-contract.test.ts`。
+
 ## 安全不变量（矩阵 `securityInvariants`）
 
 | ID | 陈述 | 适用范围 | 守护 |
@@ -126,6 +132,7 @@ Telegram Bot API 的 token 位于**请求 URL 路径**中，因此 HTTP 客户�
 | 全历史 + 增量 secret 扫描 | `.github/workflows/gitleaks.yml`、`.gitleaks.toml` | 阻断新的凭据泄漏 |
 | 公开仓库内容门禁 | `scripts/check_public_repo.py`（由 `validate.yml` 强制执行） | 拒绝把敏感内容合入公开面 |
 | 执行端无 Telegram 凭据 | `control-plane/test/webhook-ownership.test.ts` | `SI-1` 静态守护 |
+| 时钟 origin 单一陈述 | `control-plane/test/deployment-contract.test.ts`（`github actions schedule watchdog`） | 禁止 workflow 自持触发 URL 副本，防止 watchdog 打错主机后静默失效 |
 | 无第二份业务状态 | `control-plane/test/no-business-state.test.ts` | `SI-3` 静态守护 |
 | webhook 归属只读核对 | `scripts/verify-webhooks.sh` | `SI-2` 运行时核对 |
 | 日志回归 | `TelePost/tests/test_webhook_secret_logging.py`、`test_bot_token_logging.py` | webhook secret / Bot token 不进入日志 |

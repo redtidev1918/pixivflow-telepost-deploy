@@ -53,7 +53,17 @@ cd control-plane && npx wrangler secret put SCHEDULER_TRIGGER_TOKEN
 ```
 
 `wrangler.toml` 里的 `PIXIVFLOW_TRIGGER_BASE_URL` 指向执行端应用地址；cron 表达式与
-`src/cron-map.ts` 的键必须一致（`npm test` 会核对）。
+`src/cron-map.ts` 的键必须一致（`npm test` 会核对）。该变量是触发 origin 在仓库里的**唯一陈述**，
+所有时钟都读它。
+
+第三道时钟（GitHub Actions `schedule-watchdog`）只需要令牌，不要 URL：
+
+```bash
+gh secret set SCHEDULE_TRIGGER_TOKEN --repo <owner>/<repo>
+```
+
+给它单独的 URL secret 会让它悄悄指向别的主机：`/health` 依然 200、真实触发 404，
+watchdog 在“看起来配置齐全”的状态下长期失效。`deployment-contract.test.ts` 会拦下这种改动。
 
 ## Telegram Mini App 部署（可选）
 
