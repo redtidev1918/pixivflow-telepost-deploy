@@ -1707,6 +1707,10 @@ Verification:
   signature, `publish_rich_markdown`, `publish_text`, `skip_duplicate` all present.
 - Standalone `telepress-publish` redeployed with 0.16.1 image; machine
   `84edd6dc154028` reached started state, `/` health check 1 total 1 passing.
+- Always-on `telesubmit-multi-bot` redeployed through `docker/telepost.Dockerfile`,
+  which layers `telepress==0.16.1` over the immutable TelePost 2.67.0 application
+  image. Runtime `/health` verified: `telepress_version=0.16.1`,
+  `telepress_rich_markdown=true`.
 - Machine remains scale-to-zero (`shared-cpu-1x:256MB`, `auto_stop/auto_start`,
   `min_machines_running=0`).
 
