@@ -23,7 +23,6 @@ jobs:
       - name: Fire schedule trigger
         env:
           SCHEDULE_TRIGGER_TOKEN: ${{ secrets.SCHEDULE_TRIGGER_TOKEN }}
-          SCHEDULE_TRIGGER_URL: ${{ secrets.SCHEDULE_TRIGGER_URL }}
         shell: bash
         run: |
           set -u
@@ -33,7 +32,12 @@ jobs:
           umask 077
           printf '%s' "$SCHEDULE_TRIGGER_TOKEN" > "$RUNNER_TEMP/scheduler-trigger-token"
           export SCHEDULER_TRIGGER_TOKEN_FILE="$RUNNER_TEMP/scheduler-trigger-token"
-          export PIXIVFLOW_TRIGGER_BASE_URL="$SCHEDULE_TRIGGER_URL"
+          # The trigger ORIGIN is deliberately NOT supplied here. It has exactly one
+          # statement in this repo — control-plane/wrangler.toml's
+          # PIXIVFLOW_TRIGGER_BASE_URL — and trigger-schedule.sh reads it from
+          # there. A secret copy of the URL is how this watchdog silently pointed
+          # at an always-on but unrelated host, got a healthy /health and 404'd on
+          # every real trigger, and stayed red for days without anyone noticing.
           failed=0
           for id in bot1-daily bot2-daily; do
             if ! bash ./scripts/trigger-schedule.sh "$id"; then
