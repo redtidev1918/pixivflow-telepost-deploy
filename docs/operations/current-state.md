@@ -1825,7 +1825,8 @@ Verification:
 Note (config hydration): `docker/pixivflow-scheduler-entrypoint.sh` copies
 `/app/config/pixivflow.production.json` onto the volume only when
 `/app/data/production.json` is missing or empty, so the note-template change is
-in the image and in the repo but NOT yet in the running volume copy. The
+in the image and in the repo but NOT yet in the running volume copy
+(applied by hand on 2026-09-26 — see the volume-config entry below). The
 existing submission config (already carrying
 `"idempotency_key": "{{idempotencyKey}}"`) is unaffected; the volume copy keeps
 the previous note until it is rewritten (the scheduler hot-reloads
@@ -1833,3 +1834,32 @@ the previous note until it is rewritten (the scheduler hot-reloads
 
 Rollback: set `PIXIVFLOW_REF`/`PIXIVFLOW_VERSION` back to
 `326b8c06d04879e308e97e617486c84f9bed00f7` / `2.46.0` and redeploy.
+
+# 2026-09-26 Volume config: the author is rendered in the live note templates
+
+Change: `/app/data/production.json` on volume `vol_r68wlk8ynj1x5lq4` was edited
+in place — both `httpMultipart` targets (`bot1-submit`, `bot2-submit`) now start
+their `fields.note` with `🖌 作者：{{author}}` followed by the previous template.
+Nothing else changed: the file was rewritten byte-for-byte apart from those two
+lines (`10885 → 10937` bytes), so the live scheduler/queue state is untouched.
+
+What it fixes: the entrypoint hydrates the volume copy only when it is missing
+or empty, so pinning 2.47.0 (which renders the author) left the running
+templates without it. This is the deliberate one-off volume write that closes
+the gap; a future template change needs the same treatment or a hydration
+change in `docker/pixivflow-scheduler-entrypoint.sh`.
+
+Verification:
+
+- `cp -p /app/data/production.json /app/data/production.json.bak-author` first
+  (the original 10885-byte file is still on the volume as the rollback);
+- the new document was uploaded to a temporary path, read back off the machine
+  and compared byte-for-byte with the intended file (`ROUNDTRIP_IDENTICAL`),
+  then moved over the original (`LIVE_CONFIG_UPDATED`);
+- the scheduler hot-reloaded it: `Scheduler configuration snapshot activated
+  {"generation":2,...}` (generation 1 → 2) with both `bot1-daily`/`bot2-daily`
+  schedules intact and no validation warning.
+
+Rollback: `mv /app/data/production.json.bak-author /app/data/production.json`
+(or restore `PIXIVFLOW_REF`/`VERSION` to the previous pin and let the image
+hydration take over after clearing the volume file).
