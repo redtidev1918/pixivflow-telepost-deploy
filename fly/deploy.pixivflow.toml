@@ -170,8 +170,16 @@ kill_timeout = 60
     # metadata.rendersResult and print it (--json prints the payload), and
     # `pixivflow delivery status <id>` / `delivery retry <id> --yes` accept the id
     # positionally. The no-auth security notice no longer covers the app.
-    PIXIVFLOW_REF = 'c43e4c3f52fcb571478399d829e19ad6ac70858e'
-    PIXIVFLOW_VERSION = '3.0.0'
+    # 33362ac = v3.0.1 (released 2026-09-26). A failing stage is visible again:
+    # BaseCommand.failure() carries the reason in both `message` and `error`; the
+    # entry point prints it to stderr and logs {command, stage, reason, retryable,
+    # error}; src/logger.ts serializes an Error as {name,message,stack,cause}
+    # instead of `"error":{}` (which is how `reconcile` hid its failing stage);
+    # commands that print richer text themselves declare metadata.printsOwnErrors
+    # so the reason is not duplicated; `pixivflow diagnose-egress` is an accepted
+    # alias of `pixivflow diagnose egress`. Rollback = the c43e4c3 line above.
+    PIXIVFLOW_REF = '33362ac35c116be7d040b8cdf7ad6b3c40b1466e'
+    PIXIVFLOW_VERSION = '3.0.1'
 
 [[mounts]]
   source = 'pixivflow_data'
