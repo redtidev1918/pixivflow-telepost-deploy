@@ -1646,3 +1646,32 @@ Verification:
   unauthorized trigger auth, image/commit, and scheduler version checks.
   Webhook ownership and Cloudflare clock checks were skipped because local
   read-only credentials were unavailable.
+
+---
+
+# 2026-09-26 TelePress scale-to-zero (deploy.telepress.toml)
+
+TelePress standalone app is now request-driven scale-to-zero instead of always-on.
+
+Change:
+
+- `fly/deploy.telepress.toml`: `auto_stop_machines false → true`,
+  `min_machines_running 1 → 0` (kept `auto_start_machines = true`).
+- Rationale: TelePress is stateless (no volume, temp dirs only, Telegraph/Catbox
+  remote) with exactly one caller — PixivFlow's daily novel preview (2 runs/day).
+  Nothing needs it resident, so it sleeps idle and wakes on request (Fly starts
+  the machine and forwards the POST). Cost drops from always-on to pay-per-use.
+- Novel preview is an OPTIONAL enrichment (AGENTS invariant): a cold-start
+  timeout only skips that run's preview and never fails the TXT publication.
+  PixivFlow per-run retry + next-run recovery absorb an occasional miss.
+
+Verification:
+
+- `flyctl config validate` passed.
+- Rolling deploy completed; machine `84edd6dc154028` reached started state,
+  health check `GET /` passing (1 total, 1 passing).
+- Running config confirms `auto_stop_machines=true`, `auto_start_machines=true`,
+  `min_machines_running=0`.
+
+Rollback: revert `min_machines_running` to `1` and `auto_stop_machines` to
+`false`, redeploy — restores always-on.
