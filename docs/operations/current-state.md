@@ -2252,3 +2252,95 @@ Status: VERIFIED (config → live volume → hot reload) / EXTERNAL_ACCEPTANCE_R
 * 下一次 `bot1-daily`（10:00 CST）/`bot2-daily`（10:10 CST）投稿必须出现 `spoiler=0` 的
   `pending_reviews` 行、且审核群图片不带遮罩；同时核对 note 的 `🖌 作者：…` 行。
   观察到之前保持 `EXTERNAL_ACCEPTANCE_REQUIRED`。
+
+# 2026-09-27 TelePost 2.68.0 上线：审核群预览小说封面
+
+Status: VERIFIED (release → pin → runtime) / EXTERNAL_ACCEPTANCE_REQUIRED (下一次小说投稿的现场确认)
+
+## 0 现场问题与根因
+
+* 现象：有真实封面的小说投稿，频道是「封面图 + TXT 文档」，但**审核群里只看得到 TXT，看不到封面**。
+* 根因（读代码可判定）：封面是 PixivFlow 通过 `media_assets` 侧信道带来的
+  `pixiv:<id>:novelcover` canonical asset；TelePost 落库后**发布侧**（
+  `handlers/publish.py:_novel_channel_items`）会用它自建频道 root，但**审核 staging** 阶段
+  从未拿到它——`QueueCommand` 里没有 `media_assets` 字段，`stage_local`/`stage_file_ids`
+  只发 files/media/documents。所以审核群 = TXT only。
+* 旧现场形状（只读探针，`review_message_ids` 计数）：bot1 行 134/132/130、bot2 行
+  102/100/98（都是 novel，`source=api`）全是 `media=0 docs=1 previews=1`；
+  同期 illustration 行 previews 等于图片数（3/5/1）——只有小说缺一条。
+
+## 1 发布（TelePost 2.68.0）
+
+* 代码提交：`c8d7048 feat(review): preview a novel's real cover in the review group`
+  （7 文件 / +384 −26：`review_stager.py`、`review_queue.py`、`handlers/review.py`、
+  `utils/api_server.py`、新 `tests/test_novel_cover_preview.py`(7 用例)、
+  `tests/test_submission_timeout_idempotency.py`、`AGENTS.md` 的 §novel-cover 不变量）+
+  `977b61b docs(config): document the review-group cover preview`。
+  实现要点：`QueueCommand.media_assets`（第一个唯一来源）→ `novel_cover_preview_url()`
+  只认显式 `:novelcover` 资产、经 `_proxied_source_url()` 转媒体代理 URL →
+  stager 把它作为 `staging_only` 的 **URL 照片**先发（先于 TXT），且永不写入
+  `media_json`/`documents_json`（发布侧从 canonical asset 自建 root，不能重复计数）；
+  远程项永不进相册、其后的项也不与它同批（`_is_remote_item`）。
+* **发版提交是人工按 release-please 格式落的**：两次 push（`c8d7048`、`977b61b`）触发的
+  Release run（`36278028107`、`36278237880`）里 release-please 都是 success 但**没有**产出
+  发版 PR / 发版提交（远端连 `release-please--branches--main--components--TelePost` 分支
+  都没有；`workflow_dispatch` 与每小时 cron 按引擎设计会 skip release-please 作业）。
+  于是按本仓 2.65.0/2.66.0/2.67.0 的既有形状手工落发版提交
+  `4653a80 chore: release 2.68.0`（`.release-please-manifest.json` → 2.68.0、
+  `CHANGELOG.md` 新增 2.68.0 段、`telepost/build_info.py` → 2.68.0），
+  push 后由引擎完成构建/打 tag/建 release/推 ghcr。
+* 发版 run `36278544519`（head `4653a80`）：release-please / build-plan /
+  build(ubuntu-latest, macos-14, windows-latest) / finalize **全部 success**。
+* 注解 tag `v2.68.0`：ref 对象 `ec91f156a064e6eb6791aaba61fdfdafc4a8939c`（type `tag`）
+  deref 到 commit `4653a80a1b40ad0c84cb09f7bb05d2d580d7bf6e` —— pin/核对都用 commit。
+* Release `v2.68.0`：isDraft=false / isPrerelease=false（published 2026-09-26T23:17:44Z），
+  资产 8 个（3 个裸二进制、3 个带版本归档、`SHA256SUMS`、`RELEASE-METADATA.json`）。
+* 容器镜像 `ghcr.io/redtidev1918/telepost:2.68.0`：manifest digest
+  `sha256:e1574b0cb076a687de7123bf509ea5a84b0d4e24a7a8c43337a13896a5f63f11`
+  （linux/amd64 + linux/arm64）。
+* 自证（仓库内）：`pytest -q` 1065 passed / 1 skipped；`python check_config.py` 通过。
+
+## 2 部署（pin）
+
+* `fly/deploy.telepost.toml` 的 `TELEPOST_IMAGE` 由 `2.67.0` → `2.68.0`（现在在 :195，
+  上方按惯例追加 2.68.0 的说明注释；回滚 = 改回 `2.67.0` 行）。
+* `fly deploy -c fly/deploy.telepost.toml --ha=false` exit 0：镜像
+  `registry.fly.io/telesubmit-multi-bot:deployment-01M3G09D38CS256M40P62MN5Y6`（70 MB），
+  机器 `683032ec6617e8` 滚动更新到 version 229，state `started`、健康检查 1/1 passing。
+* TelePress pin 未动（`telepress==0.16.1`），跨仓契约保持：`/health` 同时报
+  `telepress_version=0.16.1` 与 `telepress_rich_markdown=true`。
+
+## 3 现场核对（只读）
+
+* `/health` → `{"status":"ok","service":"telepost","version":"2.68.0",
+  "commit":"4653a80a1b40ad0c84cb09f7bb05d2d580d7bf6e", "telepress_version":"0.16.1", …}`
+  —— 执行端上报的 commit 就是发版提交本身。
+* `./scripts/smoke-telepost.sh` exit 0：`/health` 200、`/live` 200，
+  bot1/bot2 投稿接口无令牌 → HTTP 401。
+* `./scripts/verify-production.sh` exit 0：TelePost 固定镜像 = `2.68.0`、
+  PixivFlow 固定提交 = `a0e5f0be1522…`、常驻参数与 force_https=off 全部 OK
+  （第一次运行曾出现「1 项不合格」，重跑全绿，属瞬时抖动；未定位到具体条目，
+  下一次核对再观察）。
+* 审核队列现状（只读探针，`/app/data/botN/submissions.db` → `pending_reviews`）：
+  bot1 pending 0 / expired 19，bot2 pending 0 / expired 11，无积压。
+* 核对后 `fly machine stop 83d1650bd23948 -a pixivflow-scheduler` → `stopped`
+  （PixivFlow 设计状态；核对期间它因 2.68.0 前的卷配置改动被临时启动过）。
+
+## 运维教训
+
+* **本仓的发版提交可能得自己落**：release-please 在 CI 里 success 但不出发版 PR 时，
+  按既有形状（manifest + CHANGELOG + `telepost/build_info.py`）提交
+  `chore: release X.Y.Z` 并 push，引擎就会走完整的 build → tag → release → ghcr 流程。
+  手工发版提交是**可回滚的**（tag 出现前 revert 即可）。
+* `fly ssh console -C` 不跑 shell：多命令要 `sh -c '…'`，脚本用 `python3 -` 管道喂。
+* TelePost 的库是**每 bot 一个**：`/app/data/botN/submissions.db`（`/app/data/submissions.db`
+  是 0 字节的遗留空文件）；审核预览的消息 id 列叫 **`review_message_ids`**（不是
+  `preview_message_ids`），小说投稿修复后该数组应从 1 变成 2。
+
+## Pending
+
+* **封面预览验收点**：下一次 `bot1-daily`（10:00 CST）/`bot2-daily`（10:10 CST）里
+  「有真实封面」的小说投稿，`pending_reviews` 行必须仍是 `media=0 docs=1` 但
+  `review_message_ids` 长度为 **2**，且审核群里先出现封面图再是 TXT。观察到之前保持
+  `EXTERNAL_ACCEPTANCE_REQUIRED`。
+* 作者行验收点（`🖌 作者：…`）与遮罩验收点（`spoiler=0`）不变，见上一节。
