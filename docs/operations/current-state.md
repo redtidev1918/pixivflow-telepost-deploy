@@ -269,8 +269,17 @@ pixiv-media-proxy(Worker)       /health 200  POST → 405   ← 排除
 `github actions schedule watchdog`，断言该 workflow **不含** URL secret（`PIXIVFLOW_TRIGGER_BASE_URL`
 / `SCHEDULE_TRIGGER_URL`）但仍带令牌 —— 已用修复前的 workflow 反向验证过它会 FAIL。
 
-遗留（不阻塞）：该 workflow 失败**没有告警通道**，所以能连红 8 天无人知。
-这是 `KNOWN_DEBT`，属观测面缺口，另立事项，不在本次时钟修复范围内。
+告警通道（同批修复）：该 workflow 失败**默认是静默的**，这正是它能连红 8 天无人知的原因。
+现在 failure 会自动开（或追加评论到）标题为 `schedule-watchdog failed (tertiary clock)` 的 issue，
+后续 success 自动关闭它 —— 信号是推送式且自愈的；`issues: write` 只授予本 job。
+
+```text
+2026-09-26 09:55:51Z run 36234246401  故意用错误令牌 → failure → 自动开 issue #166   ✓
+2026-09-26 09:56:51Z run 36234292616  恢复真实令牌 → success → 自动关闭 issue #166   ✓
+```
+
+（该测试只临时替换 GitHub secret 的令牌：cron-job.org / Cloudflare 不读 GitHub secret，
+且当日 occurrence 已 completed，对生产无影响。）
 
 ---
 

@@ -302,6 +302,8 @@ cd control-plane && npx wrangler secret put SCHEDULER_TRIGGER_TOKEN && npx wrang
 #        PIXIVFLOW_TRIGGER_BASE_URL 读取，仓库里只有这一处陈述。
 #        任何“顺手加一个 URL secret”的改动都会让该时钟静默打错主机
 #        （`/health` 200、真实触发 404），并由 deployment-contract.test.ts 拦下。
+#        失败会自动开 issue（`schedule-watchdog failed (tertiary clock)`）、
+#        恢复后自动关闭 —— 不要依赖“定时 workflow 红了会有人看到”。
 ```
 
 部署后核对（全部只读、缺变量时输出 `SKIP`、不打印密钥）：
