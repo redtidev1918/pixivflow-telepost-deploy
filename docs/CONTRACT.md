@@ -38,6 +38,8 @@ PixivFlow 默认 multipart 字段名即 `files` / `previews`（可经 operator �
 
 `files`/`previews` 之外的所有 form part 对 TelePost 而言都是普通文本字段（`tags`、`title`、`note`、`link`、`spoiler`、`anonymous`、`idempotency_key`、`target_id`、`work_type`、`pixiv_id`、`source_label`、`refetch_request_id` 等）。这些字段的内容完全取决于 PixivFlow 侧 operator 配置的模板，**不属于本契约固定的 schema**。
 
+其中 `spoiler` 虽然是可配置字段，语义上却是**每个 target 的显式策略**，而不是「上游给什么就照做」：同一个值同时决定**审核群预览**与**频道发布**两个界面是否加 Telegram 遮罩，取值只有三种含义——`false`（默认不遮罩，R-18/R-18G 也照常展示）、`"{{spoiler}}"`（兼容旧版：Pixiv 受限作品一律遮罩）、`true`（全部遮罩）。默认不遮罩的口径自 CHANGELOG 的 1.8.3（见 `CHANGELOG.md`）起生效，示例配置 `pixivflow/config/fly-two-bots.example.json` 与生产配置 `pixivflow/config/production.json` 现在都用 `false`；需要逐稿切换时用审核卡片上的遮罩按钮（那是唯一的逐稿开关）。
+
 本契约只固定：字段如何被归并（媒体 vs 文本字段）、改名/新增字段的时序（先改本文档再改代码）。
 
 ---
