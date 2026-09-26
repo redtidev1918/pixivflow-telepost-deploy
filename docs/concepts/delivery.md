@@ -37,6 +37,20 @@ PixivFlow 把作品文件与模板字段渲染成一次标准的 `multipart/form
 因此任何能发 multipart HTTP 的程序、cron 或 CI 都能复用同一接口；PixivFlow 只是其中一个上游。
 反过来，`httpMultipart` delivery 也可以指向任意兼容该表单约定的接收端。
 
+### 遮罩（`spoiler`）是**每个 target 的显式策略**，不是自动分级结论
+
+`fields.spoiler` 只有三种合法取值，含义完全不同（见 `CHANGELOG.md` 1.8.3）：
+
+| 取值 | 行为 |
+| --- | --- |
+| `false` | **默认不遮罩**：R-18/R-18G 作品照常原图发送（审核群与频道一致）。 |
+| `"{{spoiler}}"` | 兼容旧版：所有 Pixiv 受限作品（`x_restrict > 0`）自动加 Telegram 遮罩。 |
+| `true` | 全部遮罩。 |
+
+同一份 `spoiler` 值同时决定**审核群预览**与**频道发布**的遮罩，二者不存在独立开关：
+想让 R-18 只进审核群不加遮罩、发布时再加遮罩，需要在 TelePost 侧做逐稿切换（审核卡“遮罩”按钮），
+而不是靠 delivery 配置。
+
 ## 幂等：两种键，两个含义
 
 幂等键由 PixivFlow 按 occurrence 生成：
