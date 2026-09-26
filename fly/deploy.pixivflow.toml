@@ -178,8 +178,17 @@ kill_timeout = 60
     # commands that print richer text themselves declare metadata.printsOwnErrors
     # so the reason is not duplicated; `pixivflow diagnose-egress` is an accepted
     # alias of `pixivflow diagnose egress`. Rollback = the c43e4c3 line above.
-    PIXIVFLOW_REF = '33362ac35c116be7d040b8cdf7ad6b3c40b1466e'
-    PIXIVFLOW_VERSION = '3.0.1'
+    # a0e5f0b = v3.0.2 (released 2026-09-27). A failure's contract fields survive
+    # the log line: src/logger.ts now keeps an Error's own enumerable fields, so
+    # `code`/`statusCode`/`cause` (CONFIG_ERROR, AUTH_ERROR, …) reach the
+    # structured line instead of only name/message/stack — the field Deploy
+    # AGENTS.md §25 tells an operator to grep. The startup path moved to
+    # src/cli/fatalError.ts, logs the error object with stage=application.startup
+    # and prints a reason to stderr even for an unrecognised failure; the command
+    # catch and the default scheduler/download failure path print the reason too.
+    # Rollback = the 33362ac line above.
+    PIXIVFLOW_REF = 'a0e5f0be1522d2cda5500bb83dcd75295ab43fe9'
+    PIXIVFLOW_VERSION = '3.0.2'
 
 [[mounts]]
   source = 'pixivflow_data'
