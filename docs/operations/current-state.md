@@ -44,6 +44,13 @@ TelePost RBAC 演化模型（root/sudoers/Role Binding）见 [telepost-rbac-evol
 最近明确记录的生产 baseline：
 
 ```text
+PixivFlow: 3.0.2 / a0e5f0be1522d2cda5500bb83dcd75295ab43fe9 — VERIFIED
+  (a failure's contract fields survive the log line: `src/logger.ts` keeps an
+   Error's own enumerable fields, so `code`/`statusCode`/`cause` reach the
+   structured line; the startup path lives in `src/cli/fatalError.ts`, logs the
+   error object with `stage=application.startup` and prints a reason to stderr
+   even for an unrecognised failure — author-line acceptance is still the next
+   10:00/10:10 CST run)
 PixivFlow: 3.0.1 / 33362ac35c116be7d040b8cdf7ad6b3c40b1466e — VERIFIED
   (a failing CLI stage is visible: the reason travels in both `message` and
    `error`, the entry point prints `❌ …` to stderr and logs
@@ -2118,3 +2125,64 @@ release → pin → runtime 三段路，并且在容器里现场复现。
 * 只剩一项：下一次 `bot1-daily`（10:00 CST）/ `bot2-daily`（10:10 CST）投稿的 note 必须
   出现 `🖌 作者：…` 行（卷配置已就位、模板变量在 topic 模式下由下载器填充 `author`）。
   观察到之前，本节状态保持 `EXTERNAL_ACCEPTANCE_REQUIRED`。
+
+# 2026-09-27 PixivFlow 3.0.2 上线：失败的契约字段存活
+
+Status: VERIFIED (release → pin → runtime) / EXTERNAL_ACCEPTANCE_REQUIRED (author line)
+
+## 1 发布
+
+* PR #173 `chore(master): release 3.0.2`（head `17a97fe`，12 个 check 全 SUCCESS，
+  release-please 在 PR 上按设计 SKIPPED）→ merge commit
+  `a0e5f0be1522d2cda5500bb83dcd75295ab43fe9`。
+* 注解 tag `v3.0.2`：ref 对象 `d1898c2115296e16e6b3988c786aad8cf3c424d6`（type `tag`）
+  deref 到 `a0e5f0be1522…`（type `commit`）—— pin 必须用 commit。
+* Release 资产：`pixivflow-3.0.2.tgz`、`RELEASE-METADATA.json`、`SHA256SUMS`；
+  isDraft=false / isPrerelease=false；npm `pixivflow@3.0.2` 已发布。
+* 发布 run `36276314580`（head `a0e5f0b`）：release-please / build-plan / build /
+  finalize 全部 success。
+* 两个修复：`4617d7d`（`serializeLogValue` 保留错误自身的可枚举契约字段：
+  `code`/`statusCode`/`cause`…）+ `f682048`（启动失败路径抽到
+  `src/cli/fatalError.ts`，把 error 对象按 `stage=application.startup` 记日志，
+  未知错误也打印原因；命令 catch 与默认执行路径同样打印原因）。
+
+## 2 部署（pin）
+
+* `fly/deploy.pixivflow.toml` 从 `33362ac`/3.0.1 → `a0e5f0b`/3.0.2（commit `b705997`，
+  回滚 = 上方 33362ac 行）。
+* `fly deploy -c fly/deploy.pixivflow.toml --ha=false` exit 0：镜像
+  `registry.fly.io/pixivflow-scheduler:deployment-01M3FY2NJJMSS21QAZZQAHSWMM`（172 MB），
+  机器 `83d1650bd23948` 滚动更新后回到 `stopped`。
+
+## 3 现场核对（只读）
+
+* `/health` → `{"status":"ok","version":"3.0.2","commit":"a0e5f0be1522"}`。
+* 运行日志同时存在 pin 前后两行：`PIXIVFLOW_REVISION=3.0.1+33362ac…` 与
+  `PIXIVFLOW_REVISION=3.0.2+a0e5f0be1522d2cda5500bb83dcd75295ab43fe9`。
+* `./scripts/verify-images.sh` exit 0（TelePost 固定镜像匹配、执行端版本含
+  `a0e5f0be1522`）。注意：该脚本要求机器处于 started 状态，stop 时会 [FAIL]。
+* `node /app/dist/index.js delivery status` → `bot1-submit 39 / 1 / 0`、
+  `bot2-submit 45 / 1 / 0`（与 3.0.1 核对值一致，账本无漂移）。
+* 卷配置未被部署覆盖：`/app/data/production.json` sha256
+  `dfb32db460078ee9808df67c070d2a1f7ea40ff304fbf142751a3acc38e351a9`（= 仓库文件），
+  `rankingDate` 0 处、`author` 2 处；备份 `production.json.bak-author`（10885）与
+  `production.json.bak-ranking`（10937）都在。
+* 契约字段的现场证明（只读，用镜像内已有文件当坏配置，不在容器里写任何文件）：
+  `env PIXIV_DOWNLOADER_CONFIG=/app/dist/index.js PIXIV_LOG_FORMAT=json node /app/dist/index.js delivery status`
+  → stderr `❌ Configuration Error: Invalid JSON in configuration file: …` +
+  `{"level":"error","stage":"application.startup","error":{"name":"ConfigError","code":"CONFIG_ERROR","statusCode":400,"cause":{"name":"SyntaxError",…}}}`，
+  退出码 1。对照 1927-1962 记录的症状 `{"command":"reconcile","error":{}}`：
+  code/statusCode/cause 现在都在，可被 grep。
+* 核对后 `fly machine stop 83d1650bd23948` → `stopped`，恢复设计状态。
+
+## 运维教训
+
+* 推 master 之后要等 push 触发的 Release run 跑完再 merge 发版 PR：这次 push 触发的
+  run `36276271407`（head `f682048`）因为 `state cannot be changed. The pull request
+  cannot be reopened.` 失败——它和我几秒前的 merge 抢同一个 PR。属良性竞态，下一次
+  run（merge 提交）正常发版，但顺序错会留一条红色 run。
+
+## Pending
+
+* 作者行验收点不变：下一次 `bot1-daily`（10:00 CST）/`bot2-daily`（10:10 CST）投稿的
+  note 必须出现 `🖌 作者：…` 行。观察到之前保持 `EXTERNAL_ACCEPTANCE_REQUIRED`。
