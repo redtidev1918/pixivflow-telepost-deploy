@@ -22,7 +22,7 @@ Fly Proxy  auto_start_machines = true ──► 唤醒停止的执行端机器
 pixivflow-scheduler（独立机器 + 独立卷，平时 stopped，跑完 exit(0)）
       │ POST /publish/rich-novel（富媒体小说，Flycast 私网 + bearer）
       ▼
-telepress-publish（常驻机器，无持久卷；Catbox 上传 + Telegraph 页面）
+telepress-publish（按需机器，无持久卷；Catbox 上传 + Telegraph 页面，空闲休眠）
       │ POST /api/botN/v1/submissions（Flycast 私网 + bearer）
       ▼
 telesubmit-multi-bot（常驻机器 + 独立卷，唯一持有 Telegram 令牌）
@@ -41,7 +41,7 @@ Telegram（审核群 → 人工批准 → 频道）
 | --- | --- | --- | --- |
 | `fly/deploy.telepost.toml` | 业务端 | `always-on`（`auto_stop=false`, `min=1`, 长期 `/health` 检查） | `data` → `/app/data` |
 | `fly/deploy.pixivflow.toml` | 执行端 | `wake-run-exit`（`auto_start=true`, `auto_stop=false`, `restart=never`，**无** checks） | `pixivflow_data` → `/app/data` |
-| `fly/deploy.telepress.toml` | 富媒体发布端 | `always-on`（`auto_stop=false`, `min=1`, `/` 检查） | 无（Catbox/Telegraph 远端状态） |
+| `fly/deploy.telepress.toml` | 富媒体发布端 | `scale-to-zero`（`auto_stop=true`, `min=0`, 空闲休眠按需唤醒, `/` 检查） | 无（Catbox/Telegraph 远端状态） |
 
 首次使用把三份配置里的 `app` 改成自己的名字，然后：
 
@@ -134,7 +134,7 @@ Fly secret 在机器停止时不可见（`inactive`），这是正常现象—�
 ./scripts/verify-webhooks.sh      # webhook 归属只有 TelePost（SI-2）
 fly status -a telesubmit-multi-bot
 fly status -a pixivflow-scheduler  # 空闲时应为 stopped：健康状态，不是故障
-fly status -a telepress-publish    # 常驻；实际无需手动停机
+fly status -a telepress-publish   # 空闲时应为 stopped/hibernated：按需休眠，发送 POST 自动唤醒
 ```
 
 ## 成本模型

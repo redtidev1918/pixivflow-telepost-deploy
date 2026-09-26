@@ -34,9 +34,17 @@ kill_timeout = 60
   # reaches this app over Flycast (WireGuard-protected 6PN), and force_https
   # would 301 that delivery into a dead end.
   force_https = false
-  auto_stop_machines = false
+  # Scale-to-zero: TelePress is a stateless, request-driven publish service with
+  # exactly one caller (PixivFlow's daily novel preview, 2 runs/day). Nothing
+  # needs it resident, so it sleeps idle and wakes on request (Fly starts the
+  # machine and forwards the POST). Cost drops from always-on to pay-per-use.
+  # Cold-start latency is acceptable: novel preview is an OPTIONAL enrichment
+  # (AGENTS invariant) — a cold-start timeout only skips that run's preview and
+  # never fails the TXT publication. PixivFlow per-run retry + next-run recovery
+  # absorb an occasional miss.
+  auto_stop_machines = true
   auto_start_machines = true
-  min_machines_running = 1
+  min_machines_running = 0
 
   [[http_service.checks]]
     interval = '15s'
