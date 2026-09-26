@@ -99,7 +99,7 @@ TelePost: 2.64.2
    landed under chain-122; slot-level confirmation pending the 10:00 run;
    real-user reaction ingestion VERIFIED (bot1 message 3056, heat_score 1.4138);
    pre-2.55.4 history stays at heat 0 = KNOWN_DEBT (no Bot-API backfill path)
-TelePress: 0.14.1
+TelePress: 0.16.1
 Pixiv Media Proxy: pixiv-media-proxy.redtidev1918.workers.dev (v2, generic allowlist)
 ```
 
@@ -1683,3 +1683,31 @@ Consolidation decision (2026-09-26): TelePress **stays standalone**; it is NOT
 merged into TelePost. Rationale and HARD constraints recorded in
 `docs/architecture/ecosystem-platform.md` §3.3.1 (attack surface / §telepress-preview
 invariant / no-parallel-systems / scale-to-zero is the cost-control tool).
+
+---
+
+# 2026-09-26 TelePress upgraded 0.14.1 → 0.16.1 (standalone + TelePost pin)
+
+Upgraded the TelePress publishing plane to the latest additive release.
+
+Change:
+
+- `docker/telepress.Dockerfile`: `telepress[api]==0.14.1` → `telepress[api]==0.16.1`
+- (TelePost `requirements.txt` pin bumped in the TelePost repo to keep the
+  cross-repo Version sync check green — `verify_telepress_version_sync.py`.)
+- Rationale: 0.15/0.16 are purely additive (UploadError subclasses, retry
+  classification, ResolvedMedia, ImageHostCapabilities, structured logs). The
+  `/publish/rich-novel` wire contract and `publish_rich_markdown`/
+  `publish_text`/`TelegraphPublisher(token, skip_duplicate=...)` library API are
+  unchanged, verified directly against 0.16.1 on PyPI.
+
+Verification:
+
+- `telepress 0.16.1` installed and introspected: `TelegraphPublisher.__init__`
+  signature, `publish_rich_markdown`, `publish_text`, `skip_duplicate` all present.
+- Standalone `telepress-publish` redeployed with 0.16.1 image; machine
+  `84edd6dc154028` reached started state, `/` health check 1 total 1 passing.
+- Machine remains scale-to-zero (`shared-cpu-1x:256MB`, `auto_stop/auto_start`,
+  `min_machines_running=0`).
+
+Rollback: revert both pins to 0.14.1 and redeploy.
