@@ -1153,6 +1153,13 @@ EXTERNAL_ACCEPTANCE_REQUIRED
 * idempotent operation
 * explicitly labeled test
 
+生产配置的两个陷阱：
+
+* **「仓库/镜像里已经改好」不等于「线上生效」**：`split-worker` 的入口点只在卷上运行副本缺失或为空时
+  才收集内置默认值，所以改配置模板必须**同时**改卷上的运行副本，并留下备份名 + 回读逐字节校验证据
+  （序列见 `docs/operations/upgrades.md`）。反过来说，发布新镜像不会静默改写生产配置。
+* **改配置优先做字节级替换**：整份重新序列化会让 diff 无法复核，也可能静默增删键。
+
 ---
 
 # 43. Release Discipline
@@ -1197,6 +1204,12 @@ actual behavior
 ```
 
 它们必须指向预期实现。
+
+**运行时可见性也是验收的一部分。** 容器内的运维入口必须能读出真实状态
+（例如 `node /app/dist/index.js delivery status` 应打印每个 gateway 的账本计数），
+生产验收允许并鼓励这一类**只读**探针。命令沉默、输出为空、错误对象序列化成 `{}`，
+都算**上游缺陷**：去上游修（PixivFlow `AGENTS.md` §CLI 输出契约），
+不允许用「进容器手写 SQL / 临时脚本 / 只在本地跑」替代——那等于把生产可观测性留在部署环境之外。
 
 ---
 
