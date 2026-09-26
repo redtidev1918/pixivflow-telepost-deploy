@@ -160,8 +160,18 @@ kill_timeout = 60
     # `type: "telegram"` is deprecated and warns once; the Pixiv author travels
     # into every submission ({{author}}); config-validation failures answer a
     # stable CONFIG_VALIDATION_* code instead of CLI guidance text.
-    PIXIVFLOW_REF = 'c5d2995ecd4ca8f6443d32ddfb40123e8d218ad0'
-    PIXIVFLOW_VERSION = '2.47.0'
+    # c43e4c3 = v3.0.0 (95ccabe). The major is the WebUI location refactor, which
+    # is breaking: `GET /api/files/location` answers *where* a file is and the
+    # runtime no longer spawns a file manager — "reveal" became a host capability
+    # (the desktop shows it, a server copies the path, and the WebUI falls back
+    # to the clipboard instead of erroring). Also carries the CLI output fix:
+    # `delivery`/`gateway`/`outbox`/`runs` printed nothing at all because the
+    # entry point discarded the CommandResult a command returns; they now declare
+    # metadata.rendersResult and print it (--json prints the payload), and
+    # `pixivflow delivery status <id>` / `delivery retry <id> --yes` accept the id
+    # positionally. The no-auth security notice no longer covers the app.
+    PIXIVFLOW_REF = 'c43e4c3f52fcb571478399d829e19ad6ac70858e'
+    PIXIVFLOW_VERSION = '3.0.0'
 
 [[mounts]]
   source = 'pixivflow_data'
