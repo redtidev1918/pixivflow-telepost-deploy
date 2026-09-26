@@ -222,6 +222,56 @@ future detection: 复盘当前周期后，失控项应立即显式标记，禁�
 
 该事项不因历史 slot 未成功而标记完成；只有当后续计划周期 PRIMARY/SECONDARY + watchdog 观测合同被重复验证通过后，才算 `VERIFIED`。
 
+### 2026-09-26 watchdog 腿修复（此前该腿实际是死的）
+
+`schedule-watchdog`（TERTIARY，GitHub Actions）从 2026-09-19 起**每一个日周期都失败**，
+是当时唯一长期红的 workflow。根因不是网络也不是执行端，而是**它打错了主机**：
+
+```text
+GitHub secret SCHEDULE_TRIGGER_URL  →  一台无关的常驻主机（TelePost）
+GET  /health                       →  200   （所以脚本报 "executor reachable"）
+POST /internal/schedules/:id/run   →  404   （该主机根本没有这条路由）
+```
+
+特征比对（2026-09-26 实测）：
+
+```text
+pixivflow-scheduler.fly.dev    /health 200   POST → 401   ← 正确目标（路由在，需令牌）
+telesubmit-multi-bot.fly.dev   /health 200   POST → 404   ← 与失败特征一致
+pixivflow-control-plane(Worker) /health 200  POST → 405   ← 排除（只答 GET）
+pixiv-media-proxy(Worker)       /health 200  POST → 405   ← 排除
+```
+
+执行端在请求到达时 `listSchedules()` 必然已注册（注册表在 `manager.start()` 内建好、
+`app.listen()` 之后才可能应答 `/health`），所以「health 200 紧跟 404」**不可能**由执行端产生 ——
+这本身就是「打错主机」的证据。
+
+修复（两处，缺一不可）：
+
+1. `.github/workflows/schedule-watchdog.yml` 不再传入触发 URL：origin 只从
+   `control-plane/wrangler.toml` 的 `PIXIVFLOW_TRIGGER_BASE_URL` 读取（`trigger-schedule.sh`
+   本来就有这条回退）。
+2. `SCHEDULE_TRIGGER_TOKEN` 与执行端不一致（修 URL 后由 404 变 401 暴露）。把执行端当前
+   令牌**经 stdin 原样写入** GitHub secret（不打印、不落地、不进 argv，遵循 I-1/I-3），
+   未轮换执行端令牌 —— 轮换会同时打断外部 PRIMARY（cron-job.org，其凭据在仓库外）。
+   已删除陈旧且已证明错误的 `SCHEDULE_TRIGGER_URL` secret。
+
+验证（VERIFIED，2026-09-26 09:49Z workflow_dispatch 36233913631）：
+
+```text
+[OK] trigger origin: https://pixivflow-scheduler.fly.dev
+[OK] executor reachable (…/health -> 200)
+[OK] HTTP 200, disposition=already_completed: this occurrence was already completed   # bot1-daily
+[OK] HTTP 200, disposition=already_completed: this occurrence was already completed   # bot2-daily
+```
+
+回归防护：`control-plane/test/deployment-contract.test.ts` 新增
+`github actions schedule watchdog`，断言该 workflow **不含** URL secret（`PIXIVFLOW_TRIGGER_BASE_URL`
+/ `SCHEDULE_TRIGGER_URL`）但仍带令牌 —— 已用修复前的 workflow 反向验证过它会 FAIL。
+
+遗留（不阻塞）：该 workflow 失败**没有告警通道**，所以能连红 8 天无人知。
+这是 `KNOWN_DEBT`，属观测面缺口，另立事项，不在本次时钟修复范围内。
+
 ---
 
 # 5. Candidate Observability

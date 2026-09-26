@@ -274,3 +274,27 @@ describe('telepost service topology', () => {
     );
   });
 });
+
+/**
+ * The tertiary clock posts to the SAME origin as the two production clocks, and
+ * that origin has exactly one statement in this repo: control-plane/wrangler.toml.
+ * `trigger-schedule.sh` reads it from there whenever PIXIVFLOW_TRIGGER_BASE_URL is
+ * unset, so the workflow must NOT supply a copy. A secret copy of the URL is how
+ * the watchdog spent 2026-09-19..2026-09-26 pointing at an always-on but unrelated
+ * host: `GET /health` still answered 200, every real trigger answered 404, and the
+ * third clock was silently dead while looking configured.
+ */
+describe('github actions schedule watchdog', () => {
+  const workflow = withoutComments(read('.github/workflows/schedule-watchdog.yml'));
+
+  it('takes the trigger origin from wrangler.toml, not from a secret', () => {
+    expect(workflow).not.toContain('PIXIVFLOW_TRIGGER_BASE_URL');
+    expect(workflow).not.toContain('SCHEDULE_TRIGGER_URL');
+  });
+
+  it('still authenticates with the clock bearer token', () => {
+    // Dropping the URL override must not drop the CREDENTIAL: an unauthenticated
+    // watchdog is as dead as a misdirected one, only louder.
+    expect(workflow).toContain('SCHEDULE_TRIGGER_TOKEN');
+  });
+});
