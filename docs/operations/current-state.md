@@ -1916,3 +1916,40 @@ Verification:
 Rollback: set `PIXIVFLOW_REF` back to
 `c5d2995ecd4ca8f6443d32ddfb40123e8d218ad0` / `PIXIVFLOW_VERSION` `2.47.0` and
 redeploy.
+
+# 2026-09-26 CLI visibility debt (found while verifying the 3.0.0 pin)
+
+Status: `KNOWN_DEBT`
+
+Verifying the 3.0.0 pin used one **read-only** probe — the operator CLI inside the
+container. Getting it to answer exposed three separate problems, all upstream in
+PixivFlow (this entry only records them; the fix belongs in that repo):
+
+* **A command's returned result was discarded** (fixed in 3.0.0): `src/index.ts`
+  validated, executed and exited without printing `CommandResult.message`/`data`,
+  so `delivery`/`gateway`/`outbox`/`runs` printed nothing at all — the production
+  probe was silent for exactly this reason. Fixed by the opt-in
+  `metadata.rendersResult` flag + `CommandResultRenderer` (PixivFlow `AGENTS.md`
+  §CLI 输出契约), and `pixivflow delivery <id> --yes` now also takes the id
+  positionally.
+* **`pixivflow reconcile` fails opaquely**: `[ERROR] Command execution failed
+  {"command":"reconcile","error":{}}` — the error object serialises as `{}`, so
+  the failing stage is invisible. That is a Failure Contract violation (Deploy
+  `AGENTS.md` §25) and the reason a re-run cannot be diagnosed from CI or a
+  terminal.
+* **`pixivflow diagnose-egress` is not a command name**: `Command not found`,
+  although `src/commands/DiagnoseEgressCommand.ts` exists — it registers under a
+  different name, so the documented/first-guess spelling is wrong. Either the
+  file or the docs must move.
+
+Output-contract coverage is **partial on purpose**: only commands that *return*
+their result were flagged. Commands that print inline (including `doctor` and
+`dirs`, which print through the logger — a `console.log` count is not a reliable
+mute test) must stay unflagged or they would print twice. The remaining
+result-returning commands were not verified: `ExecuteSlotCommand`,
+`SchedulerRunOnceCommand`, `WebUICommand`, `RandomDownloadCommand`,
+`DownloadCommand`, `ReconcileCommand`, `DiagnoseEgressCommand`.
+
+Known-debt entries above are intentionally not "fixed here": the discipline is
+that a production-observability defect is repaired upstream and then re-verified
+through the release → pin → runtime chain, never by hand inside the container.

@@ -57,6 +57,10 @@ fly logs -a pixivflow-scheduler --no-tail | grep -o 'PIXIVFLOW_REVISION[^ ]*' | 
 
 - `split-worker` 的运行副本在卷上（`/app/data/production.json`），改镜像内置默认值仍需要发布新镜像；
   编辑卷上运行副本则可热重载，无需重建。
+- **入口点只在卷上副本「缺失或为空」时才收集内置默认值**（`docker/pixivflow-scheduler-entrypoint.sh` 的
+  `[ ! -s "$CONFIG_DEST" ]`）。所以「仓库/镜像里的 `production.json` 已经改好」**不等于**线上生效：
+  已经跑过一次的卷永远不会被新镜像覆盖。改模板必须同时改**卷上的运行副本**，并留下备份与校验证据
+  （见下）。反过来说，这也是一条安全边界：发布新镜像不会静默改写生产配置。
 - 即使 `watchConfig=true`，改动配置的 `pixiv`、`network` 或 `storage` 段仍需要手工重启执行单元：
   监听器只热替换 `schedules`、`targets`、`delivery` 与 `download`。
 
@@ -78,6 +82,27 @@ ssh user@server 'cd /opt/pixivflow-telepost \
 
 不要 `scp` 直接覆盖目标文件：执行单元可能在写入中途读到只写了一半的 JSON，而「校验后一次替换」
 的前提是它读到的是一份完整文件。
+
+### Fly（`split-worker`）上的同一序列
+
+Fly 没有可用的 `scp`/`ssh`，而且工具本身有几处反直觉的行为，照下面的顺序做（`fly` 需要
+`HTTPS_PROXY` / `HTTP_PROXY`，机器空闲会自动停机，先 `curl -m 90 https://pixivflow-scheduler.fly.dev/health`
+唤醒再连）：
+
+```bash
+fly ssh console -a pixivflow-scheduler -C "cp -p /app/data/production.json /app/data/production.json.bak-<tag>"
+# 本地改写：优先做「字节级替换」（只动要改的那一段），不要整份重新序列化——
+# 格式化翻新会让 diff 无法复核，也可能静默增删键。改完先 python3 -m json.tool 校验。
+printf 'put /tmp/production.new.json /app/data/production.json.new\n' | fly sftp shell -a pixivflow-scheduler
+# 读回来逐字节比对（put 拒绝覆盖已存在的路径，所以先落到新名字）
+fly ssh console -a pixivflow-scheduler -C "mv /app/data/production.json.new /app/data/production.json"
+fly logs -a pixivflow-scheduler --no-tail | grep -n "configuration snapshot activated"   # 热重载证据
+```
+
+校验要点：改动前后字节数差必须与改动内容对得上（例如两个 target 各加一行 = +2×行字节数），
+回读文件与本地文件 `diff` 必须为空，`fly logs` 必须出现新的 generation。**回滚就是**
+`mv /app/data/production.json.bak-<tag> /app/data/production.json`——所以备份名必须写进
+`current-state.md` 的对应条目里。
 
 ## TelePost 策略更新
 
