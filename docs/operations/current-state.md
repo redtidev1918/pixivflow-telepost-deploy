@@ -2194,3 +2194,61 @@ Status: VERIFIED (release → pin → runtime) / EXTERNAL_ACCEPTANCE_REQUIRED (a
 
 * 作者行验收点不变：下一次 `bot1-daily`（10:00 CST）/`bot2-daily`（10:10 CST）投稿的
   note 必须出现 `🖌 作者：…` 行。观察到之前保持 `EXTERNAL_ACCEPTANCE_REQUIRED`。
+
+# 2026-09-27 投稿遮罩策略：默认不遮罩（`spoiler=false`）
+
+Status: VERIFIED (config → live volume → hot reload) / EXTERNAL_ACCEPTANCE_REQUIRED (下一次投稿的现场确认)
+
+## 1 现场问题与定性
+
+* 现象：审核群里的图片「默认带遮罩」。实测**不是审核群的默认行为**，而是继承 target 的
+  `spoiler` 投递字段：生产两个 delivery target（`bot1-submit` / `bot2-submit`）当时都是
+  旧版兼容值 `"{{spoiler}}"`（Pixiv 受限作品一律遮罩），而 bot1 近期的投稿恰好全部是
+  R-18/R-18G（只读探针：bot1 新 12 行全 `spoiler=1`；bot2 交替）。
+* 依据：`CHANGELOG.md:440-445`（1.8.3，2026-08-30）明确三种**显式**策略 ——
+  `false`（默认不遮罩）、`"{{spoiler}}"`（兼容旧版：受限作品自动遮罩）、`true`（全部遮罩）；
+  `CHANGELOG.md:428`（1.8.4）重申 `spoiler=false` 是独立频道策略；
+  示例 `pixivflow/config/fly-two-bots.example.json:107`/`:144` 早已是 `false`。
+  所以这是**配置选择**，不是代码缺陷（代码只按字段值行事）。
+* 仓库改动（commit `ca8a834`）：
+  * `pixivflow/config/production.json`：两个 target 的 `fields.spoiler` 由
+    `"{{spoiler}}"` → `false`。布尔值安全：`HttpMultipartDelivery.resolveFields` 对每个值做
+    `String(item)`，线上是字符串 `"false"`，TelePost `utils/api_server.py` 的
+    `_fields_bool` 解析为 `False`。
+  * `docs/concepts/delivery.md`：新增「遮罩（spoiler）是每个 target 的显式策略，不是自动
+    分级结论」小节（三值表 + 审核群与频道共用同一个值的说明）。
+  * sha256：`dfb32db460078ee9808df67c070d2a1f7ea40ff304fbf142751a3acc38e351a9`（10889 B，旧）
+    → `e63136af4057c5c71e94be07d4d012df22f5869314923aa6c6871992fc4ecdcf`（10873 B，新）。
+
+## 2 现场应用（卷配置）
+
+* 为什么必须改卷：`docker/pixivflow-scheduler-entrypoint.sh:11-12` 只在
+  `${PIXIVFLOW_DOWNLOADER_CONFIG:-/app/data/production.json}` 缺失/为空时才把镜像里的
+  `/app/config/pixivflow.production.json` 拷过去 —— 新镜像**不会**覆盖已存在的卷配置，
+  所以线上必须自己改（同 1843-1870 的 author 模板写法）。
+* 机器原本是设计状态 `stopped`（`fly ssh console` → `Error: app pixivflow-scheduler has no
+  started VMs.`）；`fly machine start 83d1650bd23948 -a pixivflow-scheduler` 后才可进入。
+* `/tmp/live-config-set-spoiler.py`（管道进 `python3 -`）先断言旧串恰好出现 2 次、反向替换
+  可还原原文、结果 JSON 可解析；备份 `/app/data/production.json.bak-spoiler`
+  （sha `dfb32db4…`，10889 B）；写 `.new` 后回读比对 `ROUNDTRIP_IDENTICAL True`，再
+  `os.replace`；输出 `LIVE_SHA256 e63136af… BYTES 10873 LIVE_CONFIG_UPDATED True`
+  —— 与仓库文件逐字节相同。
+* 热加载证据：`fly logs -a pixivflow-scheduler --no-tail` 出现
+  `Scheduler configuration snapshot activated {"generation":2,…}`，两个 schedule
+  （`bot1-daily` `0 10 * * *`、`bot2-daily` `10 10 * * *`）都在、无校验告警；
+  `/health` → `{"status":"ok","service":"pixivflow-scheduler-trigger","version":"3.0.2"}`。
+* 核对后 `fly machine stop 83d1650bd23948 -a pixivflow-scheduler` → `stopped`（恢复设计状态）。
+  回滚 = `cp /app/data/production.json.bak-spoiler /app/data/production.json`。
+
+## 运维教训
+
+* 审核群的遮罩不是审核群的设置：`spoiler` 是**每个 delivery target 的投递字段**，同一次投稿的
+  审核群预览与频道发布用的是**同一个值**。想只遮某一条，只能用审核卡上的「遮罩」按钮
+  （`services/review_service.set_spoiler`/`toggle_spoiler` 只翻存储标志，不会重新 staging）。
+* 卷配置是权威：镜像里的模板只在卷配置缺失时生效，任何模板改动都必须显式应用到卷。
+
+## Pending
+
+* 下一次 `bot1-daily`（10:00 CST）/`bot2-daily`（10:10 CST）投稿必须出现 `spoiler=0` 的
+  `pending_reviews` 行、且审核群图片不带遮罩；同时核对 note 的 `🖌 作者：…` 行。
+  观察到之前保持 `EXTERNAL_ACCEPTANCE_REQUIRED`。
