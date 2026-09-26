@@ -240,7 +240,7 @@ describe('telepress service topology', () => {
     // The package is the immutable runtime identity for this passthrough image.
     // A stale pin is how "latest release" and "running release" drift apart.
     expect(read('docker/telepress.Dockerfile')).toMatch(
-      /pip install[^\n]+"telepress\[api\]==0\.14\.1"/,
+      /pip install[^\n]+"telepress\[api\]==0\.16\.1"/,
     );
   });
 });
