@@ -873,6 +873,8 @@ interface DeliveryMedia {
 | EXTERNAL_ACCEPTANCE_REQUIRED | 用真实 `media_assets` payload（带有效 API token / 真实 PixivFlow 投稿）做生产 E2E，确认 201、DB 落库、`GET /api/v1/reviews/{id}` 读回 |
 | VERIFIED（代码） | PixivFlow 上游发送 `media_assets`：v2.43.0（c27c924c）`src/delivery/HttpMultipartDelivery.ts` 把 `request.mediaAssets` 序列化为 multipart `fields.media_assets`；`OutboxWorker`/`DeliveryService` 从 `artifact.mediaAssets` 透传 |
 | VERIFIED（代码） | TelePost multipart 子段解析 `media_assets`：2.57.0 `utils/api_server.py` multipart 路径 pop `media_assets` JSON 字符串字段并走同一 `_validate_media_assets`（JSON 与 multipart 共用同一校验/落库） |
+| VERIFIED（Release+Deploy） | 审核 staging 消费 `:novelcover` 资产：TelePost 2.68.0（4653a80）把显式小说封面作为 `staging_only` 的远程 URL 照片**先于 TXT** 发进审核群，不写入 `media_json`/`documents_json`，发布侧仍从 canonical asset 自建频道 root（本地文件路径与 `file_id` 路径都生效）；`/health` version=2.68.0、commit=4653a80，见 `docs/CONFIGURATION.md`「小说封面在审核群里同样可见」 |
+| EXTERNAL_ACCEPTANCE_REQUIRED | 下一次 `bot1-daily`/`bot2-daily` 的小说投稿必须在审核群先出现封面，且 `pending_reviews.review_message_ids` 由 1 变 2（`media_json` 仍为空、`documents_json` 仍为 1） |
 
 ---
 
