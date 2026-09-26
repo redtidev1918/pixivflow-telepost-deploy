@@ -7,6 +7,13 @@ name: schedule-watchdog
 # answers already_completed / already_running; if BOTH missed it, this run
 # creates the slot. 02:35Z is after the 02:00Z / 02:10Z occurrences and the
 # +2 min secondary, before the 90-minute grace window expires.
+#
+# A red run here is a MISSING SAFETY NET, not a cosmetic failure: while this
+# clock is broken the two production clocks are the only replay paths. That is
+# exactly how it went unnoticed for a week (2026-09-19..2026-09-26): the
+# workflow failed daily, nobody was looking, and a failed scheduled workflow is
+# silent by default. So a failure now also opens (or bumps) an issue, and a
+# later success closes it — an alert nobody has to remember to check.
 on:
   schedule:
     - cron: '35 2 * * *'
@@ -14,6 +21,9 @@ on:
 
 permissions:
   contents: read
+  # The alert channel. Scoped to this job only: the trigger step needs nothing
+  # but the network, and issues are the one write this workflow is allowed.
+  issues: write
 
 jobs:
   trigger:
@@ -46,3 +56,46 @@ jobs:
             fi
           done
           exit "$failed"
+
+      # Alert channel. Runs only on failure, so it can never make a healthy clock
+      # look red; a failure here is additive information about an already-red run.
+      - name: Open or bump the tertiary-clock issue
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -u
+          title='schedule-watchdog failed (tertiary clock)'
+          run_url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+          body=$(printf '%s\n\n%s\n\n%s\n' \
+            'The tertiary schedule clock could not replay the daily occurrence.' \
+            "Run: ${run_url}" \
+            'Until this is green again the two production clocks are the only replay paths. The usual cause is not the executor: check what the run actually reached (the log line `trigger origin` names it), then check the bearer token still matches.' )
+          existing=$(gh search issues --repo "$GITHUB_REPOSITORY" --state open \
+            --match title "$title" --limit 1 --json number --jq '.[0].number // empty')
+          if [ -n "$existing" ]; then
+            gh issue comment "$existing" --repo "$GITHUB_REPOSITORY" --body "$body"
+          else
+            gh issue create --repo "$GITHUB_REPOSITORY" --title "$title" --body "$body"
+          fi
+
+      # Self-healing signal: a green run closes the alert it opened. Housekeeping
+      # must never fake a clock failure, hence continue-on-error.
+      - name: Close the tertiary-clock issue once green
+        if: success()
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -u
+          title='schedule-watchdog failed (tertiary clock)'
+          existing=$(gh search issues --repo "$GITHUB_REPOSITORY" --state open \
+            --match title "$title" --limit 1 --json number --jq '.[0].number // empty')
+          if [ -z "$existing" ]; then
+            echo "no open clock issue; nothing to close"
+            exit 0
+          fi
+          gh issue close "$existing" --repo "$GITHUB_REPOSITORY" \
+            --comment 'The tertiary clock replayed the occurrence successfully; closing.'
