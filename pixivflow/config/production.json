@@ -162,7 +162,10 @@
             "date": "YESTERDAY",
             "topicDiscovery": {
                 "includeR18": true,
-                "relatedTags": "when_seed_insufficient"
+                "relatedTags": "when_seed_insufficient",
+                "tagRelations": {
+                    "deny": ["主题乙", "テーマ乙", "テーマ乙別名", "topic-beta"]
+                }
             },
             "excludeAI": true,
             "aiMetadataCheck": true,
@@ -208,7 +211,10 @@
             "date": "YESTERDAY",
             "topicDiscovery": {
                 "includeR18": true,
-                "relatedTags": "when_seed_insufficient"
+                "relatedTags": "when_seed_insufficient",
+                "tagRelations": {
+                    "deny": ["主题乙", "テーマ乙", "テーマ乙別名", "topic-beta"]
+                }
             },
             "languageFilter": "chinese",
             "languageCandidateLimit": 20,
@@ -247,7 +253,10 @@
             "date": "YESTERDAY",
             "topicDiscovery": {
                 "includeR18": true,
-                "relatedTags": "when_seed_insufficient"
+                "relatedTags": "when_seed_insufficient",
+                "tagRelations": {
+                    "deny": ["テーマ甲", "テーマ甲別名", "テーマ甲関連", "主题甲相关", "主题甲", "topic-alpha"]
+                }
             },
             "excludeAI": true,
             "aiMetadataCheck": true,
@@ -293,7 +302,10 @@
             "date": "YESTERDAY",
             "topicDiscovery": {
                 "includeR18": true,
-                "relatedTags": "when_seed_insufficient"
+                "relatedTags": "when_seed_insufficient",
+                "tagRelations": {
+                    "deny": ["テーマ甲", "テーマ甲別名", "テーマ甲関連", "主题甲相关", "主题甲", "topic-alpha"]
+                }
             },
             "languageFilter": "chinese",
             "languageCandidateLimit": 20,
