@@ -349,3 +349,22 @@ queued ──claim──▶ running ──▶ succeeded
 6. `grep` 断言：`/jobs` 面不出现 `refetch*` 字段名，且既有 `slot_name` 取值未被改写。
 7. 契约测试新增一条：把**真实产生的 Job 投影**用 `protocol/v1` 的 `$defs/Job` 校验通过（满足 `protocol/README.md` §2 第 1 条要求的「真实报文」部分）。
 
+
+### 11.4 D 阶段：事件与 Ack/对账的文件级映射（不要造第二套投递）
+
+现状（2026-09-28 核实）已经具备**至少一次 + 幂等键去重**的雏形，D 阶段要复用它而不是新建通道：
+
+| 协议义务 | 现有实现（复用点） | D 阶段要补的 |
+| --- | --- | --- |
+| 事件落库（append-only） | `delivery_events` 表（`src/storage/DatabaseMigration.ts:187-202`，`id INTEGER PRIMARY KEY AUTOINCREMENT` 单调）；写入 `OutboxRepository.recordEvent`（`src/storage/repositories/OutboxRepository.ts:397-412`，短 JSON、不存密钥） | 事件体要能投影成协议 `$defs/Event`（`event_id`/`job_id`/`type`/`at` + 可选 `progress`/`error`），因此需要 `slot_id → job_id` 与内部事件名 → 协议 `type` 的**映射表**（放 facade，不写进表） |
+| 事件读取 | `OutboxRepository.listEvents({executionId?, outboxId?, limit?})`（`:423-435`，`ORDER BY ts DESC, id DESC`，limit ≤ 500） | 增加按 `slot_id` 读取 + `after=<event_id>` 游标（升序），协议 `GET /jobs/{job_id}/events?after=` |
+| 终态回调（至少一次 + 去重） | `NotificationPolicy.noteRefetchOutcome`（`src/notification/NotificationPolicy.ts:267-323`）→ `DeliveryService.enqueueNotification(...)`（`:311-316`），幂等键 `refetch-outcome:<slotId>:<targetId>`（`:64`）；disposition 只有 `no_alternative` / `failed`（成功由投稿负载自带的 request id 关联） | 通用化为「job 事件投递」：同一个 outbox 通道，`callback_url` 来自 `Task`/能力协商，事件体是 `$defs/Event`；`refetchOutcomeUrl`（`src/config/types.ts:720`，校验 `src/config/validation.ts:432-437`）保留为 v1 shim |
+| Ack / 对账 | 无 | 消费者持久化 `(job_id, last_event_id)` 游标并显式 ack；`unacked=1` 或游标落后即可重放。**禁止**为 ack 新建第二套队列——它只是读游标 |
+| 死信可发现 | outbox 死信行 + `pixivflow outbox retry <id>`（`docs/CONFIG.md` refetch 段落） | 协议侧暴露「有终态 job 的最后一个事件仍是未确认」的计数（`doctor`/CLI 任一即可），不做自动重投 |
+
+约束：
+
+1. **不新增第二套投递系统**：事件通道就是既有 outbox + `delivery_events`；若某事件走不通（例如目标 `type !== 'httpMultipart'` 时 `noteRefetchOutcome` 直接 return，见 `NotificationPolicy.ts:276`），那是**能力声明**的问题（`/capabilities` 应如实说明回调可用性），而不是再写一条通路。
+2. **回调失败不改终态**：现有实现只 `logger.warn` 并依赖 outbox 重试；协议侧同理——事件投递失败只影响「消费者多快看到」，不影响 job 终态。
+3. **消费者不得靠「没收到回调」判定作业失败**：必须以 `GET /jobs/{id}` + 游标对账为准（这正是「重抓静默」的根因：回调丢了就永远没有下文）。
+4. 协议事件名与内部事件名的映射放 facade，**禁止**把 `delivery_events.event` 的字面量当协议枚举使用。
