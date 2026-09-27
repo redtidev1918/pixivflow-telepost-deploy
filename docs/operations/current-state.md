@@ -2928,6 +2928,18 @@ Status: IN_PROGRESS（协议 SSOT 与生产端 liveness 已落地并推送；两
   负例 `MODE=nolegacy` / `MODE=drifting` 实测会红。
 * 独立复核（非子代理自报）：TelePost 目标套件 108 passed / 全量 1139 passed, 1 skipped；PixivFlow `135 suites / 1486 tests` 全过且 `tsc --noEmit` 0；离线验收两条校验路径均 exit 0。
 
+### 3.4 第 12-17 轮：C/D 进入实现（2026-09-28，git 跟踪）
+
+* **C 阶段（消费侧切换）** 由子代理 `33f85071-6b64-42bd-b5aa-587df1ae3833` 实现：已改 `telepost/application/pixivflow_jobs.py`（+476/-23）
+  与 `tests/test_refetch.py`；`git status` 证明改动**只**落在端口文件与测试，仓库内除既有白名单（`recovery.py` v2 范围、
+  `refetch_state.py` 注释）外无任何新增 `/internal/targets/` 引用——边界纪律保持。
+* **D 阶段（事件）** 由子代理 `ba23a275-373e-4e8c-a940-ea3f31b74cae` 实现：已改 `src/storage/DatabaseMigration.ts` 与
+  `src/storage/repositories/OutboxRepository.ts`——ack 游标正按 §11.1 落在既有 `delivery_events`/outbox 上（不造第二套队列），
+  迁移即真实持久化（否则 `unacked` 就是假的）。
+* 两代理仍 `[running]`（写作时文件集已稳定若干轮，符合「写码 → 跑全量校验 → 修到绿」的收尾节奏）；尚未向我回报，未提交。
+* 部署侧已无可加的接缝：`--live` 的事件/ack/对账直到「ack 后 unacked 归零 + 重复 ack 幂等」全部由
+  `scripts/verify-protocol-v1.py` 编写完成，且 `mock-protocol-server.py` 已实现 events/ack 可先于 D 落地整条验收。
+
 ### 3.3 第 10-11 轮：让门自己会跑，把悬空决策钉死（2026-09-28）
 
 * **协议门接进 CI**：`scripts/validate.sh` 现在跑 `python3 scripts/verify-protocol-v1.py`，而 `.github/workflows/validate.yml` 跑
