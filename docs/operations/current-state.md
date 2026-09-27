@@ -2802,3 +2802,78 @@ Status: VERIFIED（2026-09-27，release → pin → 部署 → 运行时取证�
 * 顺延未清的仍是上一节的三条真实投稿外部验收（重复提醒 / 停滞收口 / 小程序禁用态）。
 
 
+
+## 2026-09-28 Workflow Protocol v1：把边界从「隐式约定」改成「显式协议」（进行中）
+
+Status: IN_PROGRESS（协议 SSOT 与生产端 liveness 已落地并推送；两端实现、发版、部署未完成）
+
+### 0 为什么是边界问题
+
+「审核重抓永久静默」的只读取证（本文件上一节 + `docs/architecture/refetch-silent-failure-cure.md` §9）确认：
+30 天里用户感知到的约 560 次「点了重抓没反应」**不是单点 bug**，而是两侧边界模糊 ——
+
+* TelePost 知道 PixivFlow 的槽位词表（`slot_name='审核群重抓'`）、`slotId`、`manual_request_id`，
+  并且用 PixivFlow 的内部状态字符串驱动自己的状态机；
+* PixivFlow 知道 TelePost 的审核流程（`refetchOutcomeUrl` 回报 `no_alternative`/`failed`，投稿负载塞 `refetch_request_id`）；
+* 两侧靠隐式约定通信，于是**任何一侧单独改动都不会被另一侧理解**，状态就开始错乱：一次实际提交可能既不产生结果、
+  也不产生失败、也不产生超时，调用方无法判断 job 是否还存在。
+
+因此目标不是「修 refetch」，而是抽出一套稳定的 Workflow Protocol：TelePost 只做内容工作流编排
+（Telegram/审核/队列/发布/用户交互/权限），PixivFlow 只做内容采集与处理引擎（搜索/tag 分析/下载/元数据/媒体处理/候选生成），
+两者之间只有 **Task / Job / Event / Result / Asset** 五种对象。规范与机器可校验资产见
+`docs/architecture/workflow-protocol.md`、`docs/protocol/README.md`。
+
+### 1 协议资产（SSOT + 可校验，已落地）
+
+| 资产 | 位置 | 校验方式 |
+| --- | --- | --- |
+| 规范（决定性文字） | `docs/architecture/workflow-protocol.md`（§2 对象 / §3 HTTP 面 / §4 状态机与预算 / §5+§5.1 错误码与映射 / §6 job_type 目录 / §7 事件 / §8 反耦合清单 / §11 阶段 B/C 文件级映射） | 人工评审 |
+| Schema | `docs/protocol/v1/protocol.schema.json`（JSON Schema 2020-12，入口是 `$defs`） | `scripts/verify-protocol-v1.py` |
+| 错误词表映射 | `docs/protocol/v1/error-mapping.json`（16 个封闭协议码 + `retryable` 缺省 + 生产者内部 19 个原因码 → 协议码） | 同上，含 `TargetOutcome.ts` union 覆盖率 |
+| 示例报文 | `docs/protocol/v1/fixtures/*.json`（7 个：task / job queued·running·succeeded / job failed / event succeeded·expired） | 同上，逐个用对应 `$defs` 入口校验 |
+| 同步机制 | `scripts/sync-protocol.sh`（写入两仓 `protocol/v1/` + `SOURCES.sha256`）；`--check` 只校验 | 两仓契约测试再校验一次哈希 |
+| 验收工具 | `scripts/verify-protocol-v1.py`（离线：schema/fixtures/params/词表/哈希/反耦合；`--live`：capabilities → POST /jobs → 幂等重放 → 轮询 → cancel） | 退出码 0/1/2 |
+
+实测（2026-09-28）：`./scripts/verify-protocol-v1.py` 在 `python3`（内置子集校验器）与
+`/tmp/tp-venv312/bin/python`（真实 `jsonschema` 4.26.0，额外做 meta-schema 校验）两条路径下均 exit 0 ——
+`错误词表与 schema enum 完全一致（16 个码）`、`TargetOutcome.ts: 19 个内部原因码全部映射到协议码`、
+`TelePost/PixivFlow vendored 副本与 SSOT 一致（9 文件 + manifest）`、反耦合断言通过。
+`--live` 已用 `MODE=ok/stuck/refetch/badcapabilities` 四个 mock 服务端到端演练过（含「泄漏 `refetch_request_id`」与
+「capabilities 缺 candidate_search」两类失败被正确判失败）。
+
+**错误词表的关键决定**：协议 `Error.code` 保持**封闭**，生产者内部 `TerminalReasonCode` **不进协议**，
+而是在 job facade 处映射（`error-mapping.json` 是机器可读的那份映射）。理由：把内部词表复制进共享协议，
+等于把刚拆掉的耦合以「共享枚举」的形式长回来；映射腐烂由验收脚本的 union 覆盖率检查兜住。
+调用方若拿到 payload 自带 `retryable` 则以 payload 为准，否则用映射表缺省；旧 `/refetch/status` 继续返回内部码用于诊断。
+
+### 2 生产端（PixivFlow）已落地：先让投影可信
+
+「协议建立在不可信的投影上没有意义」，所以先修 liveness（round A）：
+
+* `job_id` 级别的**真实活性投影**：`src/scheduler/JobProjection.ts` 输出
+  `createdAt/startedAt/updatedAt/heartbeatAt/leaseExpiresAt/leaseActive/claimed/attemptCount/terminalReasonCode/terminalReasonMessage/manualRequestId/idempotencyKey/correlationId`
+  （时间戳统一 epoch ms；SQLite 的无时区 `CURRENT_TIMESTAMP` 通过 `src/scheduler/ledger-time.ts` 转换，避免 8 小时错位）。
+* **不再有无限 RUNNING**：`src/scheduler/StallSweep.ts` 每 60 s 扫一次（下限 60 s / 单批 100 行），
+  先恢复被中断的 slot 再终结超预算的 slot；新增 `queued_too_long`（`schedulerRuntime.queuedTimeoutMs`，默认 30 min）
+  与 `stalled_no_heartbeat`（`stallTimeoutMs`，默认 15 min），交付侧新增 `delivery_abandoned`。
+  配置项非法只告警并回落默认（non-fatal）。
+* 文档同步：`docs/CONFIG.md`（两个新预算 + 扫掠语义）、`docs/SLOT_OUTCOME.md`（「不再有无限 RUNNING」章节 + 用户文案）。
+
+实测：`npx jest --silent` → 134 suites / 1470 tests 全绿（基线 130/1431，+4 suites/+39 tests 全为新用例）；
+`npx tsc --noEmit` → exit 0。
+
+### 3 消费端（TelePost）已落地：协议资产 + 端口收口（实现仍在进行）
+
+* `protocol/v1/` vendored 副本 + `tests/test_protocol_contract.py`（8 passed）：schema 合法性、fixture 回放、
+  `$ref` 解析、`SOURCES.sha256` 哈希一致、未知字段仍被接受（只增不改）、schema 不含业务词（按**词元**匹配，
+  `preview` 不会被 `review` 误伤）、封闭错误词表可映射。
+* 远程访问正在收口为**唯一可替换端口** `telepost/application/pixivflow_jobs.py`（`submit` / `get`），
+  心跳与状态机只依赖该端口、不再自己拼 HTTP 路径；切到 `POST /jobs` 时只动这一个文件。
+  当前工作树未提交（见「仍未完成」）。
+
+### 4 仍未完成
+
+* TelePost 持久化 job 生命周期（单写路径、启动恢复、终态必通知、`doctor` 监控、7 场景 + 1000 次压力）未提交。
+* PixivFlow job facade（`GET /capabilities`、`POST /jobs`、`GET /jobs/{id}`、`GET /jobs?idempotency_key=`、幂等 cancel）
+  正在实现（round B）；旧 refetch 端点将降级为兼容 shim，身份收敛为 `job_id=slotId`、`idempotency_key=manual_request_id`。
+* 消费侧切到通用 Job API；事件回调 + Ack/对账；发版（TelePost 2.71.0 / PixivFlow 3.3.0）、部署、现场验收。
