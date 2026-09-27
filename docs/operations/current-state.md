@@ -2993,3 +2993,58 @@ Status: IN_PROGRESS（协议 SSOT 与生产端 liveness 已落地并推送；两
   落地提交 `0b1b73a` `feat(protocol): consume job events via ingress endpoint and reconcile loop`（a57a7bb..0b1b73a），
   full suite 1175 通过 /1 跳过、`_apply_remote_terminal` 统一终态缝、网关离线 exit 0。
 * 发版（TelePost 2.71.0 / PixivFlow 3.3.0，由 release-please 按 `feat:` 提交驱动）、部署与现场验收（含「重抓不再静默」的真实故障复现）。
+* **发版已完成 ✅**：PixivFlow **3.4.0**（release-please PR #178，merge `5d231179a9b36ba5199d0c7c5fbf14013d43fb36`，
+  GitHub Release 已是 `Latest`）；TelePost **2.71.0**（release-please 在本仓会以
+  `There are untagged, merged release PRs outstanding - aborting` 中止，故 2.71.0 由人工按 release-please 形状落
+  `3f3d115 chore: release 2.71.0`：`.release-please-manifest.json` + `telepost/build_info.py` 的 `RELEASE_VERSION` + `CHANGELOG.md`，
+  两个 release 工作流均 success）。
+
+### 5 协议 v1.1（显式目标选择器）与现场验收（2026-09-28 已执行 ✅）
+
+* **第一次现场验收就打穿了协议 v1 的两个真实缺陷**（不是脚本问题）：
+  (a) TelePost 2.71.0 在通用面发 `params:{target_id}`，而协议 v1 要求 `params.query`
+  → `HTTP 400 invalid_params "params.query must be a JSON object"`；
+  (b) 通用面只能从配置解析目标，本部署有四个满足 `targetServesManualCandidateSearch` 的 target
+  （`bot1-illust-botefuku` / `bot1-novel-botefuku` / `bot2-illust-marunomi` / `bot2-novel-marunomi`）
+  而只有一个 Pixiv 账号 `default` → 必然 `HTTP 409 ambiguous_target`。
+  **现场先回滚**：`PIXIVFLOW_JOB_TRANSPORT='legacy'`（旧 URL 通道不受影响，提交 `f7504e8`），审核群重抓立即恢复。
+* **协议 v1.1（只增）**：`params.target_id` 成为对 `schedules[].targetIds` 的**选择器**
+  （404 `unknown_target` / 409 `ambiguous_target`，绝不覆盖投递接线与计划身份），`params.query` 变为可选
+  （缺省即该 target 自身的检索配置，与旧 refetch 语义等价），`/capabilities.features` 声明 `target_selector`。
+  SSOT 落地：`docs/protocol/v1/protocol.schema.json`、新 fixture `task.candidate_search.target_only.json`、
+  `docs/architecture/workflow-protocol.md` §3.2 + §11.1 + §2.2（`events_url` 绝对或相对）、
+  `scripts/verify-protocol-v1.py`（`--legacy-refetch-target` 的值同时写进 `params.target_id`）。
+  生产者侧：`CandidateSearchParams.ts`（`target_id?`，`query?` 改为可选，`tags` 为空即不覆盖目标自身的检索配置）、
+  `JobFacade.ts`（`parseTargetSelector`：非空字符串且 ≤200）、`ManualJobAdmission.ts`
+  （`resolveTarget` 把 `targetId` 与 `targetSelector` 当同一类选择器，未知/歧义逻辑共用）、`ManualJobService.ts`。
+  回归测试用**生产形状**的 `makeMultiTargetConfig()`（2 计划 / 4 target）与 TelePost 的逐字节请求体，断言 202、
+  `targetIds == ['bot2-novel-marunomi']`、选择器不进 `paramsJson`、无提示仍 409 且列出四个 id、未知选择器 404、
+  未接线 target 500、畸形选择器 400、旧 shim 与 `/jobs` 同一个 `job_id`。PixivFlow `136 suites / 1512 tests` + `tsc` 0；
+  业务端全量 `1175 passed, 1 skipped`。
+  提交：deploy `f7bdf3f fix(protocol): name the target explicitly in the generic job face`、
+  PixivFlow `aecd4cf feat(protocol): let candidate_search name its target`（`feat:` → 3.4.0 次版本）、
+  TelePost `ed8fed9 chore(protocol): re-vendor protocol v1.1 (target selector)`（只换 vendored 资产，零运行时改动）。
+* **部署顺序（先执行端）**：PixivFlow 3.4.0 pin `5d231179a9b36ba5199d0c7c5fbf14013d43fb36`（提交 `6023801`）
+  先上，`/health` 报 `"version":"3.4.0","commit":"5d231179a9b3"`；再把业务端切回协议通道
+  （`fly/deploy.telepost.toml` 的 `PIXIVFLOW_JOB_TRANSPORT='protocol'`，提交 `472c198`），现场核对 `T=[protocol]`、`/health` 2.71.0。
+* **`--live` 现场验收全绿（退出 0）**：capabilities（含 `target_selector` 与 `events`、预算三项为正）、
+  旧 shim → `/jobs` 同一 `job_id`（两个入口一个身份空间，双向）、`POST /jobs` 202、同键重放同一 job、
+  异参 409 `idempotency_conflict`、未知 job_type 400、cancel → `cancelled`/`cancelled_by_consumer`、
+  `/jobs` 投影无 `refetch*` 字段名、事件流可读/含终态事件/只含本 job/时间升序/ack 生效/重复 ack 幂等/ack 不改状态。
+  `doctor --all-bots` = `HEALTHY`，`18 OK / 0 WARN / 0 CRIT`，`Refetch: running: 0 stuck: 0 failed(last24h): 0`。
+* **顺手修掉的四个「工具」缺陷**（每一个都会把真缺陷误报成失败，或反过来掩盖真失败）：旧 shim 的 `requestId`
+  必须是真 UUID（生产者正则强制）；旧 shim 失败时 `error` 是**字符串**不是对象；`POST /jobs` 的成功体是 `{ job }` 包一层
+  （脚本直接在包装体取 `job_id` → `None` → 去探测 `GET /jobs/None` → 404 假失败，把真成功盖住）；
+  生产者 `events_url` 是**相对服务基址**的路径（样例 fixture 写成绝对 URL）。
+* **现场观测到真实的跨服务投递**：验收作业 `bot1-daily@manual-6a2af823-2ce9-4560-b297-ab0fea3a45b7` 在生产跑完 255 秒
+  （`Scheduled download plan finished`，target `#150141037` failed）并 `Refetch outcome enqueued`；
+  业务端 bot1 审计确有对应行 `review.refetch_dropped_replacement`（`error_class=refetch_attempt_unknown`、
+  `target_id=bot1-illust-botefuku`、`detail.request_id=6a2af823-…`）——即**生产者 → 消费者的投递路径是通的**，
+  且「丢弃必留痕」生效（未知 attempt 的替换稿被显式拒绝并记审计，而不是静默消失）。
+  验收期间创建的 9 个手动作业已全部收敛或取消（4 个 cancel → `cancelled`，其余终态），
+  生产者账本没有留下悬挂的 `pending`。
+* **仍未做（诚实声明）**：(a) **没有人工在审核群点一次重抓**——那需要真实审核群操作；本次用 TelePost 的逐字节请求体
+  直接打执行端，验的是同一个边界、同一个载荷，但不经过 Telegram 按钮与审核卡。(b) **事件推送通道在生产是关闭的**：
+  `TELEPOST_API_BASE_URL` 未配置 → Task 不带 `callback_url`，事件只走已实测可用的「补拉 + ack」路径；
+  要启用推送需在业务端配置该键（例如 `https://telesubmit-multi-bot.fly.dev`）并先做一次「回调不可达」回归。
+  (c)「打断回调目标后重抓仍恰好通知一次」的回归**未在现场执行**。
