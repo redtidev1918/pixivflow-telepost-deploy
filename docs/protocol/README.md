@@ -90,6 +90,8 @@ python3 scripts/verify-protocol-v1.py --live --pixivflow-url http://127.0.0.1:87
 
 ### 3.2 各仓契约测试现状（2026-09-28 实测）
 
+离线验收已接进 `scripts/validate.sh`（CI 的 `.github/workflows/validate.yml` 跑 `--examples`），所以协议门不是「记得才跑」：本地 `./scripts/validate.sh --examples` 与 CI 是同一条路径；缺哪个检出就 SKIP 哪一项，永远不假装通过。
+
 | 仓 | 文件 | 覆盖 | 结果 |
 |---|---|---|---|
 | TelePost | `tests/test_protocol_contract.py` | 8 项：资产存在（含 `error-mapping.json`）、schema 合法、12 个 fixture 全部校验通过、`$ref` 全解析、vendored 哈希一致、未知字段被接受（只增不改）、schema 无业务名词、封闭错误词表可映射（enum ↔ `protocol_codes` 双向一致 + `retryable` 缺省 + `producer_internal` 不悬空） | `8 passed` |

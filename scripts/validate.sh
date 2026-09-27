@@ -58,6 +58,15 @@ fi
 
 if python3 scripts/check_public_repo.py; then ok "public repository hygiene"; else fail "public repository hygiene"; fi
 
+# Workflow Protocol v1 离线验收：schema/fixtures、封闭错误词表、生产者协议码一致性、
+# 两仓 vendored 副本哈希、边界纪律（`/internal/targets/` 只允许出现在唯一端口）。
+# 无网络、无副作用；缺哪个检出就 SKIP 哪一项，从不假装通过。
+if python3 scripts/verify-protocol-v1.py; then
+  ok "workflow protocol v1 offline acceptance"
+else
+  fail "workflow protocol v1 offline acceptance"
+fi
+
 if command -v shellcheck >/dev/null; then
   if shellcheck scripts/*.sh proxy/docker-entrypoint.sh fly/scripts/*.sh; then ok "ShellCheck"; else fail "ShellCheck"; fi
 else
