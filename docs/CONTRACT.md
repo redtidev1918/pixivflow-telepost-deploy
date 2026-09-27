@@ -101,6 +101,26 @@ PixivFlow 默认 multipart 字段名即 `files` / `previews`（可经 operator �
 - 校验：`request_id` 必填；`disposition` 只能为 `no_alternative` 或 `failed`；未知 `request_id` → 404 `unknown_attempt`；源审核已被处理 → `obsolete`（不覆盖审核决定）。
 - 幂等：同一终态 verdict 重放返回 `replayed: true`，不重复通知。
 
+### 3.1 状态词汇：远端 cell → TelePost 阶段（TelePost 2.69.0）
+
+TelePost 2.69.0 把内部 attempt 状态换成了规范状态机（`telepost/domain/refetch_state.py`），
+但 **wire 契约未变**：本节 §3 的字段与字段名、`refetchOutcomeUrl` 的 disposition 取值、
+以及上文校验/幂等规则都没有因 2.69.0 改变；变的只是 TelePost 的内部词表与持久化，
+旧词表经 `to_legacy()`（`refetch_state.py:186-189`）继续对既有消费者（Mini App / OpenAPI）可用。
+
+执行端上报的 cell 状态集合，与它在 TelePost 侧**证明了什么**：
+
+| PixivFlow cell 状态 | TelePost 阶段 | 含义 |
+| --- | --- | --- |
+| `pending` | `SEARCHING` | slot 已存在，尚未选出作品 |
+| `selected` | `FILTERING` | 已选出作品，正在过滤（已看过 / 重复 / 无效） |
+| `artifact_ready` | `CANDIDATE_FOUND` | 已有可用候选，正在准备替换稿 |
+| `delivery_pending` | `CANDIDATE_FOUND` | 同上，进入投递准备 |
+| `submitted` / `no_candidate` / `duplicate` / `failed` | 不是阶段，是**结果** | 由 TelePost 按终态处理（`apply_outcome`），不映射成进度 |
+
+规则：**TelePost 不得发明它观测不到的进度**——远端状态读不出来（空串 / 未知值 / 传输失败）时只记「不可用」，
+不得据此推进阶段。完整状态机、看门狗闸门与 doctor 见 `docs/architecture/refetch-job-model.md`。
+
 ---
 
 ## 4. Schedule outcome（PixivFlow → TelePost，`scheduleOutcomeUrl`）

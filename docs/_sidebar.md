@@ -50,6 +50,7 @@
 - 架构设计
   - [社区参考定位](/architecture/community-reference-position.md)
   - [生态平台架构](/architecture/ecosystem-platform.md)
+  - [重抓作业模型](/architecture/refetch-job-model.md)
   - [TelePost RBAC 演进](/architecture/telepost-rbac-evolution.md)
   - [媒体代码演进计划](/development/media-code-evolution-plan.md)
 - English

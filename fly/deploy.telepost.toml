@@ -200,7 +200,27 @@ primary_region = 'iad'
     # restores the actionable card. The source review is never pre-rejected —
     # that would obsolete its own replacement. Rollback = the 2.68.0 line above
     # (release commit 4653a80).
-    TELEPOST_IMAGE = 'ghcr.io/redtidev1918/telepost:2.68.1'
+    # 2.69.0 (2026-09-27): the refetch job gets a canonical, durable lifecycle.
+    # The attempt state machine (REQUESTED/SEARCHING/FILTERING/CANDIDATE_FOUND →
+    # REPLACED | FAILED | TIMEOUT | NO_CANDIDATE | CANCELLED) has one authority and
+    # one write path, a per-attempt timeline (`refetch_events`) and candidate
+    # history; the review card shows 任务ID + stage + elapsed wait and repeats the
+    # progress reminder every 2 minutes; a stalled stage times out at 10 minutes,
+    # an unaccepted request at 20, the absolute ceiling at 30 — never an endless
+    # 「仍在处理中」. Also ships `python -m telepost.observability.cli doctor`, a
+    # read-only self-check (db integrity, stuck refetch, orphan reviews, stuck
+    # publishing, delivery outbox, recent audit; exit 0/1/2, never writes).
+    # Rollback = the 2.68.1 line above (release commit fa9323d's predecessor).
+    # 2.70.0 (2026-09-27): the Mini App's 审核详情 page renders the same job
+    # projection as the review card — 任务ID, the current stage and the elapsed
+    # wait — and keeps 重抓 disabled for every canonical active state (the check
+    # previously only knew the legacy vocabulary). The bundle ships inside this
+    # image (Dockerfile builds webapp/dist). Rollback = the 2.69.0 line above.
+    # 2.70.1 (2026-09-27): doctor no longer reports settled `delivery_ledger`
+    # history as an anomaly — the ledger records CONFIRMED posts, so its oldest
+    # row only ever grows; the age check now looks only at rows that never
+    # reached a terminal success (partial/uncertain/failed/error). Rollback = 2.70.0.
+    TELEPOST_IMAGE = 'ghcr.io/redtidev1918/telepost:2.70.1'
 
 [[mounts]]
   source = 'data'

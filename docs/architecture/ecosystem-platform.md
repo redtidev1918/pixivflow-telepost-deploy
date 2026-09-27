@@ -1032,6 +1032,20 @@ Recovery 应满足：
 * audit
 * operator-visible failure reason
 
+## 28.1 Refetch Job：所有权与投影（TelePost 2.69.0 / PixivFlow 3.1.0）
+
+重抓是「一个作业、两个所有者」，不是两套流程：
+
+| 事实 | 所有者 | 事实来源 |
+| --- | --- | --- |
+| 执行、durable slot cell 状态 | PixivFlow（Execution） | `GET /internal/targets/{target}/refetch/{request_id}` 返回的 `state`：`pending` / `selected` / `artifact_ready` / `delivery_pending` / `submitted` / `no_candidate` / `duplicate` / `failed` |
+| 审核（review）与作业投影 | TelePost（Review） | `refetch_attempts` + `refetch_events` + `refetch_seen_candidates`，投影为卡片 / API 的任务 ID、中文阶段与已等待时长 |
+
+* 两端靠同一个 `request_id`（UUID）对齐；2.69.0 只改了 TelePost 的内部词表与持久化，**wire 契约未变**（`docs/CONTRACT.md` §3）。
+* TelePost 只投影它观测得到的进度：远端 cell → 阶段的映射、状态机、看门狗闸门与 doctor 见 `docs/architecture/refetch-job-model.md`。
+* Tag 侧：PixivFlow 3.1.0 为每个解析出的 Tag 记录 `source`（`seed` / `cooccurrence` / `autocomplete` / `cooccurrence+autocomplete`）与 `weight`，并把关系过滤放在检索之前（`docs/TAG_RANKING.md`）。
+* 封面侧：内容类型（`custom` / `pixiv_generated` / `unknown`）由 PixivFlow 在获取阶段判定，`unknown` 默认 `skip`；TelePost 不做封面类型过滤（非目标）。
+
 ---
 
 # 29. PixivFlow WebUI
