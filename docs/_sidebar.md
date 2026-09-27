@@ -50,7 +50,10 @@
 - 架构设计
   - [社区参考定位](/architecture/community-reference-position.md)
   - [生态平台架构](/architecture/ecosystem-platform.md)
+  - [工作流协议 v1（PixivFlow ↔ TelePost）](/architecture/workflow-protocol.md)
+  - [协议契约资产与版本策略](/protocol/README.md)
   - [重抓作业模型](/architecture/refetch-job-model.md)
+  - [重抓永久静默根因与治愈方案](/architecture/refetch-silent-failure-cure.md)
   - [TelePost RBAC 演进](/architecture/telepost-rbac-evolution.md)
   - [媒体代码演进计划](/development/media-code-evolution-plan.md)
 - English
