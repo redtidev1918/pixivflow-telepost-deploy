@@ -196,3 +196,23 @@ docker compose up -d --no-deps --force-recreate stack
 **`latest` 只适合第一次看效果，下一次 `pull` 就会把版本换掉。** 它在首次试运行时省事，代价是
 「同一份配置在不同日子产生不同代码」。任何你要保留的部署都必须把引用换成不可变值：TelePost 用
 发布 tag，PixivFlow 用 40 位提交号。
+
+## 升级到协议 v1（TelePost 2.71.0 / PixivFlow 3.3.0）
+
+这一对版本把「审核重抓永久静默」按协议修掉，而不是继续堆业务字段。**升级顺序不可交换。**
+
+1. 版本号由 release-please 生成，**不要手改**：TelePost `telepost/build_info.py:11` 的 `RELEASE_VERSION`、
+   PixivFlow `package.json` / `.release-please-manifest.json`，以及 PixivFlow `src/version.ts`（生成物，文件头写明
+   do not edit manually）。本次两仓各自只需要一个 `feat:` 级别的提交（`feat(refetch): redesign refetch as
+   persistent job workflow`、`feat(protocol): introduce the PixivFlow↔TelePost workflow protocol`），minor 号由发布 PR 决定。
+2. 进门槛（本地全绿再谈部署）：`python3 scripts/verify-protocol-v1.py` 退出 0；TelePost 全量 pytest；
+   PixivFlow `npx jest --runInBand` + `npx tsc --noEmit`；两仓契约测试。
+3. **先升执行端 PixivFlow（3.3.0），后升业务端 TelePost（2.71.0）**。理由：新版给执行端**新增** `/jobs` 面，并把旧
+   `POST /internal/targets/{t}/refetch` 降级为**同一个受理核心**的 shim——旧入口仍可用，所以先升执行端不改变业务行为；
+   反过来先升业务端，它的默认传输会指向还不存在的 `/jobs`。
+4. 业务端升级后核对：`telepost doctor --all-bots` 出现 `Refetch: running: N stuck: N failed(last24h): N` 一行，
+   `stuck>0` 即 CRIT/退出 1；历史 12 行只算 legacy，不改变退出码。
+5. 回滚：业务端把传输切回旧入口即可（`PIXIVFLOW_JOB_TRANSPORT=legacy`），执行端不需要回滚——shim 还在。
+   本轮两仓的库表变更都是**只增**的（TelePost 六列 + 只回填 `notify_count>0` 终态行的选择性 backfill；
+   PixivFlow `params_json` + 受保护的部分唯一索引），回滚到旧镜像时这些列/索引保持无害。
+6. 现场验收清单见 `docs/operations/refetch-production-verification.md` 的「2026-09-28」节。
