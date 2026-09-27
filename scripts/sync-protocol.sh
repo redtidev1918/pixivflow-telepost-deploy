@@ -36,9 +36,19 @@ fi
 
 # Relative paths that make up a vendored copy. Keep sorted for a stable manifest.
 rel_paths=("protocol.schema.json" "error-mapping.json")
-while IFS= read -r f; do
-  rel_paths+=("fixtures/$f")
-done < <(cd "$source_dir/fixtures" && ls -1 *.json | LC_ALL=C sort)
+# Globs, not `ls`: a filename with a dash or a space must not change the manifest
+# (shellcheck SC2012/SC2035). The `-e` guard keeps a missing/empty fixture dir
+# from yielding a literal '*.json' entry.
+fixture_names=()
+for fixture in "$source_dir"/fixtures/*.json; do
+  [ -e "$fixture" ] || continue
+  fixture_names+=("$(basename "$fixture")")
+done
+if [ ${#fixture_names[@]} -gt 0 ]; then
+  while IFS= read -r f; do
+    rel_paths+=("fixtures/$f")
+  done < <(printf '%s\n' "${fixture_names[@]}" | LC_ALL=C sort)
+fi
 
 hash_file() {
   if command -v shasum >/dev/null 2>&1; then
