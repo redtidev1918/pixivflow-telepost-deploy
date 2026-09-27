@@ -124,6 +124,8 @@ def fixture_entry(name: str) -> str:
         "event": "Event",
         "result": "Result_CandidateSearch",
         "capabilities": "Capabilities",
+        "jobpage": "JobPage",
+        "eventpage": "EventPage",
     }[prefix]
 
 
@@ -415,6 +417,38 @@ def check_live(args) -> None:
         fail(f"/jobs 投影仍暴露 refetch* 字段名：{sorted(set(forbidden))}")
     else:
         ok("/jobs 投影没有 refetch* 字段名（旧 shim 与新面未混用）")
+
+    # 事件流：终态作业必须留下可对账的事件，否则消费者除了「没收到回调」以外没有任何依据（静默的根因）。
+    events_url = terminal.get("events_url") or f"{base}/jobs/{job_id}/events"
+    status, page = request("GET", events_url, token)
+    if status != 200 or not isinstance(page, dict):
+        fail(f"GET 事件流 → HTTP {status}（{page}）")
+        return
+    errors = validate_against(schema, "EventPage", page)
+    if errors:
+        fail(f"事件信封不符合 $defs/EventPage：{errors[0]}")
+        return
+    events = page.get("events") or []
+    if not events:
+        fail("作业已终态但事件流为空 —— 回调/对账没有依据，等于静默")
+        return
+    ok(f"事件流可读：{len(events)} 条，unacked={page.get('unacked')}")
+    types = [item.get("type") for item in events]
+    expected_type = f"job.{terminal_status}"
+    if expected_type in types:
+        ok(f"事件流含终态事件 {expected_type}")
+    else:
+        fail(f"事件流缺少终态事件 {expected_type}（实得 {types}）")
+    foreign = [item for item in events if item.get("job_id") != job_id]
+    if foreign:
+        fail(f"事件流混入其它 job 的事件：{foreign[0].get('job_id')}")
+    else:
+        ok("事件流只含本 job 的事件")
+    times = [int(item.get("at") or 0) for item in events]
+    if times != sorted(times):
+        fail(f"事件未按时间升序，不能直接当对账游标：{times}")
+    else:
+        ok("事件按时间升序（可直接用作对账游标）")
 
 
 def main() -> int:

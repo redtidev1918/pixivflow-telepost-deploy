@@ -135,9 +135,9 @@ Related: `refetch-silent-failure-cure.md`（触发本协议的重抓静默故障
 | `GET` | `/capabilities` | 能力发现：协议版本、job 类型与 schema、资产类型/质量枚举、限额 | 200 |
 | `POST` | `/jobs` | 提交 Task（幂等） | `202 { job }`，重复键返回同一 Job（200/202 均可，body 必须相同语义） |
 | `GET` | `/jobs/{job_id}` | Job 投影（§2.2 全字段） | 200 / 404 |
-| `GET` | `/jobs?idempotency_key=…&correlation_id=…&status=…&limit=…` | 查询与对账 | 200 `{ jobs: [...] }` |
+| `GET` | `/jobs?idempotency_key=…&correlation_id=…&status=…&limit=…` | 查询与对账 | 200 `$defs/JobPage`（`{ jobs, next_cursor?, server_time? }`）；分页只能用**不透明游标**，禁止暴露生产者表 id |
 | `POST` | `/jobs/{job_id}/cancel` | 取消（尽力，返回最终投影） | 200 |
-| `GET` | `/jobs/{job_id}/events?unacked=1` | 事件历史与对账（消费者补拉未 Ack 事件） | 200 |
+| `GET` | `/jobs/{job_id}/events?after=…&unacked=1` | 事件历史与对账（消费者补拉未 Ack 事件） | 200 `$defs/EventPage`（`{ job_id, events, next_after?, unacked?, server_time? }`，按时间**升序**，`next_after` 直接回传当游标）|
 | `POST` | `{callback_url}` | 事件投递（生产者 → 消费者），消费者返回 2xx 即 Ack | 2xx |
 
 约定：
