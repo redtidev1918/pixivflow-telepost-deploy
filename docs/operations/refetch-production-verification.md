@@ -255,3 +255,50 @@ python -m telepost.observability.cli reviews inspect <review_id> --bot 1
 * ⚠️ 「打断回调后仍必须恰好通知一次」的回归**未在本次现场执行**（它属于业务端 + 审核群动作，见
   上一节「现场重抓」的第 3 条）。
 
+## 2026-09-28 三处现场缺陷（A/B/C）修复后的复验（已执行 ✅）
+
+参与版本：PixivFlow **3.4.1**（`d2e9c9e`）+ TelePost **2.71.1**（`ff286e7`）；pin 与部署见
+`current-state.md` §6.4。
+
+### A 消费者取消：真打断 + 准入不卡死
+
+* ✅ **真打断**：对在跑作业 `POST /jobs/{id}/cancel`，执行端日志 `.474Z Download cancellation requested: 任务已被取消`
+  → `.484Z Scheduled job was cancelled`，**约 10ms** 内停止在跑的下载循环（同一秒内 `system_error … "Request aborted"`）。
+* ✅ **准入不卡死**（原症状的回归测试）：取消后**立刻**对**同一个 target / 同一个计划**再发 `POST /jobs` →
+  `HTTP 202`；被取消作业 1 秒内收敛为 `cancelled`（对比该计划的 1800 秒超时）。
+* 两半在**不同运行**里各自证明（取消那次作业已在跑；准入那次作业从未启动），如实记录。
+
+### B 原因码：`failure_code` 只收闭集码，`terminal_reason` 有界
+
+* ✅ 在生产容器内用真 `POST /api/v1/refetch/outcomes` 投一次（`reason` = 220 字符多行 nginx 502 HTML、
+  `reason_code="remote_error"`）→ `failure_code = "remote_error"`（`^[a-z][a-z0-9_]{0,63}$` 形状），
+  `terminal_reason` 单行、无 `<`/`>`、≤200 字符且**不含**原始 HTML。
+* ✅ 生产端侧（PixivFlow 3.4.1）同一窗口的日志给出闭集码：`"terminal_reason_code":"internal_error"`,
+  `"terminal_reason_message":"内部错误"`，原始 503 HTML 只出现在日志文本里。
+
+### C 终态通知：恰好一次
+
+* ✅ 首次投递认领 `terminal_notified_at`（时钟写入一次）；**同一请求体重投** →
+  `{"attempt_state":"failed","replayed":true}`，状态与时钟都不变，**不再通知**。
+* ✅ **换一个判决重投**（`no_alternative`）→ 终态 attempt 拒绝迁移
+  （`拒绝非法的重抓状态迁移: … 'failed' → 'searching'`），同样不通知。
+* ✅ 审计行 `review.refetch_failed` 同时带 `reason_code`（闭集）与 `reason`（人读）。
+
+### 仍未做（诚实声明）
+
+* 仍未**人工在审核群点一次重抓**；复验走的是与生产逐字节相同的载荷与真实处理器，但不经过 Telegram 按钮与审核卡。
+* 上游 Pixiv 在整个窗口持续 502/503，未走到「成功终态 + 替换稿入库」；事件推送通道仍关闭（只走补拉 + ack）。
+* 复验发现的另外两处（D 取消判决被覆盖、E 作业等下一次 tick 才准入）已记入 `current-state.md` §6.6，**未修**。
+
+### 复验命令（可重跑）
+
+```bash
+# A：真打断 + 准入不卡死（对生产执行端）
+/tmp/tp-venv312/bin/python /tmp/acct/fixa.py
+
+# B + C：在生产容器内用真实产物 + 一次性服务令牌走真实入口
+B64=$(base64 -i /tmp/acct/fixc.py | tr -d '\n')
+fly ssh console -a telesubmit-multi-bot -C \
+  "python -c \"import base64;exec(base64.b64decode('$B64').decode())\""
+```
+

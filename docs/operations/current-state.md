@@ -2803,9 +2803,9 @@ Status: VERIFIED（2026-09-27，release → pin → 部署 → 运行时取证�
 
 
 
-## 2026-09-28 Workflow Protocol v1：把边界从「隐式约定」改成「显式协议」（进行中）
+## 2026-09-28 Workflow Protocol v1：把边界从「隐式约定」改成「显式协议」（✅ 已收口；遗留 D/E 见 §6.6）
 
-Status: IN_PROGRESS（协议 SSOT 与生产端 liveness 已落地并推送；两端实现、发版、部署未完成）
+Status: DONE（协议 v1/v1.1 SSOT、两端实现、PixivFlow 3.4.1 + TelePost 2.71.1 均已发版并部署，现场复验见 §5/§6；§6.6 的 D/E 为 OPEN）
 
 ### 0 为什么是边界问题
 
@@ -3048,3 +3048,99 @@ Status: IN_PROGRESS（协议 SSOT 与生产端 liveness 已落地并推送；两
   `TELEPOST_API_BASE_URL` 未配置 → Task 不带 `callback_url`，事件只走已实测可用的「补拉 + ack」路径；
   要启用推送需在业务端配置该键（例如 `https://telesubmit-multi-bot.fly.dev`）并先做一次「回调不可达」回归。
   (c)「打断回调目标后重抓仍恰好通知一次」的回归**未在现场执行**。
+
+### 6 三处现场缺陷（A/B/C）的修复、发版、部署与现场复验（2026-09-28 已执行 ✅）
+
+v1.1 现场验收之后，业务面又暴露三处**真缺陷**（都在执行端/边界，不是脚本问题）。三处全部修复、发版、部署并现场复验。
+
+#### 6.1 A：消费者取消不能打断在跑的计划，且会把该计划卡住
+
+* **现象**：审核群重抓后取消，执行端进程仍在跑（取消只写账本，不碰运行时）；同一计划的下一次准入被判
+  `reason:"scheduler_busy"`，作业长时间停在 `queued`（现场 14:38:56 取消 → 14:50:30 仍在跑）。
+* **根因**：`cancelConsumerJob()` 只做一次数据库事务（cell 记 `failed` + 终态原因 `cancelled_by_consumer`、
+  取消可执行的 outbox、释放租约），**从不通知运行时**；`SchedulerConfig.requestCancel` 全仓唯一调用点是
+  `Scheduler.ts:293` 的**超时**分支。
+* **修复**（PixivFlow `b59a434 fix(scheduler): let a consumer cancel interrupt the in-flight run`）：`CancelOrigin` 增
+  `'consumer'`，`SchedulerCommand` 的 `onCancel` 接到 `runtime.cancelSlot(...)`；取消仍**先写账本**再打断运行；
+  `shouldTerminaliseAbortedSlot()` 对 `consumer` 返回 false（取消的终态由账本给出，不让 abort 路径再写一次）；
+  `DownloadManager.cancel()` 每次都 abort 在飞请求，`isCancelled` 传进 pipeline 让后续候选立刻停手。
+  重复释放租约是 owner-guarded 的 `UPDATE … WHERE lease_owner = @owner`，天然幂等。
+
+#### 6.2 B：`failure_code` 列会写进上游原始文本（HTML/多行）
+
+* **现象**：上游 502/503 的整页 HTML 被当作原因写进 `failure_code`（CODE 列）。
+* **两条泄漏路径**：(1) 端口 `_error_code()` 在旧通道把 `error` 字符串**原样**返回（旧 shim 的
+  `{"status":"error","error":"requestId must be a UUID"}` 正是这个形状）；(2) 重抓结果入口把上游 `reason` 直接落库。
+* **修复（收口到唯一咽喉）**：`telepost/domain/refetch_state.py` 新增 `sanitize_terminal_reason()`（去标签、折叠空白、
+  单行、≤200）与 `normalize_failure_code()`（`^[a-z][a-z0-9_]{0,63}$` 之外一律落 `remote_failure`），
+  `apply_transition_on()` 统一过一遍；`_error_code()` 用同一正则做纵深防御。生产端按协议码传递：
+  `NotificationPolicy.noteRefetchOutcome` 用 `terminalReasonFor(outcome)` + `protocolErrorCodeForTerminalReason()`
+  投影出 `reasonCode`（闭集）+ 有界人读 `reason`，`HttpMultipartDelivery` 在 outcome 专用 JSON 体里带 `reason_code`
+  （目标 `fields` 映射不参与 outcome，故**无需改生产配置**）。
+
+#### 6.3 C：`/api/v1/refetch/outcomes` 绕过共享通知缝，终态通知会重复
+
+* **现象**：该入口自己 `send_message`，不认领 `terminal_notified_at` 时钟，重投会再通知一次；措辞也与轮询/对账缝不一致。
+* **修复**：抽出共享缝 `handlers/review.py:919 apply_refetch_outcome_and_notify(...)`（先 `apply_outcome`，已在终态即返回
+  `changed=False` 且**不通知**；否则经 `_refetch_terminal_notify` 认领时钟并附 `任务ID：…`），入口、恢复扫描、
+  轮询/对账三条路都走它；措辞收口到 `_refetch_outcome_text()` 一处。
+
+#### 6.4 发版、pin 与部署（顺序：先执行端）
+
+* PixivFlow `b59a434` + `4584f46 fix(delivery): ship a normalized reason code in refetch outcomes` → release-please PR **#179**
+  → **v3.4.1** merge `d2e9c9e338bd0e24762ef678bf1fe296c7f7adb9`（GitHub Release `Latest`）。
+* TelePost `d8b23a5 fix(refetch): keep the terminal reason code-shaped and claim the one-shot notify`（+450/−90，新增
+  `tests/test_refetch_reason_normalization.py` 6 例）→ release-please 仍以 `There are untagged, merged release PRs
+  outstanding - aborting` 中止，故 **v2.71.1** 由人工按 release-please 形状落 `ff286e7 chore: release 2.71.1`
+  （manifest + `RELEASE_VERSION` + CHANGELOG；tag 与 Release 由 Release 工作流产出）。该工作流第一次跑挂在**既有**的性能
+  压力测试（`test_thousand_attempts_all_reach_a_reported_terminal_state`：`stress run took 67.9s (target < 30s)`），
+  `gh run rerun --failed` 后通过。
+* pin：deploy `97613e9 chore(deploy): pin PixivFlow 3.4.1 and TelePost 2.71.1`
+  （`PIXIVFLOW_REF=d2e9c9e…` / `PIXIVFLOW_VERSION=3.4.1`、`TELEPOST_IMAGE=…:2.71.1`）。
+* 部署：PixivFlow 先上（`/health` `"version":"3.4.1","commit":"d2e9c9e338bd"`），TelePost 后上
+  （`/health` `"version":"2.71.1","commit":"ff286e73b3ca…"`，两个 bot `review_queue.pending 0`）。
+* 本地闸门：PixivFlow `136 suites / 1514 tests` + `tsc` 0；TelePost 全量 `1181 passed, 1 skipped`。
+
+#### 6.5 现场复验结果（真实生产，2026-09-28）
+
+* **B + C 已现场证明 ✅**（在容器内用生产 bot1 进程 + 一次性 `tp_` 服务令牌，走真实 `POST /api/v1/refetch/outcomes`）：
+  以 220 字符多行 nginx 502 HTML 作 `reason`、`reason_code="remote_error"` 投一次 → `failure_code = "remote_error"`
+  （code 形状）、`terminal_reason` 单行/无标记/≤200 且**不含**原始 HTML、时钟**恰好认领一次**（`terminal_notified_at`）；
+  **同一请求体重投** → `{"attempt_state":"failed","replayed":true}`，时钟与状态都不变（**不重复通知**）；
+  **换一个判决重投** → 终态 attempt 直接拒绝（`拒绝非法的重抓状态迁移: … 'failed' → 'searching'`）；
+  审计行 `review.refetch_failed` 同时带 `reason_code` 与原始 `reason`。
+* **A 已现场证明 ✅**（两半在不同运行里各自证明）：(1) 对在跑作业 `POST /jobs/{id}/cancel`，日志
+  `.474Z Download cancellation requested` → `.484Z Scheduled job was cancelled`，**约 10ms 内**真打断；
+  (2) 取消后**立刻**对**同一个 target/计划**再发一个 `POST /jobs` → `HTTP 202` 准入成功（**这正是原症状的回归测试**，
+  准入没被卡住），且被取消作业的终态是 `cancelled`（1 秒收敛，对比计划的 1800 秒超时）。
+* **`--live` 协议验收**：除最后一项「作业在 240s 内进入终态」外**全部通过**（capabilities/协议版本、旧 shim 与
+  `/jobs` 同一 `job_id`、202、同键重放、异参 409、未知 job_type 400、20 个内部原因码全部映射）。
+  该项失败是**工具预算**问题：同一计划 `bot1-daily` 上被连发两个手动作业，计划串行执行，前一个跑了 117 秒
+  （上游 Pixiv 当时持续返回 502/503），240 秒预算被前一个吃掉。
+
+#### 6.6 复验中新发现、**尚未修复**的两处（OPEN）
+
+* **D：消费者取消的判决会被随后的「按目标失败」写入覆盖。** 现场：`POST /jobs/{id}/cancel` 返回 `status=cancelled` +
+  `error.code=cancelled_by_consumer`；10 秒后 `GET /jobs/{id}` 变成 `status=failed` + `error.code=internal_error`
+  （`updated_at` 都没变），而事件流里 `job.cancelled` 的**内嵌快照**已经写着 `failed/internal_error`。机制：取消写账本后
+  运行被 abort，落到正常的「按目标结果」收尾，`SlotCoordinator` 无条件 `setCellTerminalReason(...)` 又写了一遍
+  （`shouldTerminaliseAbortedSlot` 只管 abort 路径，管不到这里）；并且**为一个被取消的作业发出了 `disposition: failed`
+  的 refetch outcome**。业务面影响有限（TelePost 把 `cancelled`/`expired` 一并折成 `failed`，用户仍看到「重抓失败」），
+  但协议自洽性被破坏（同一作业两个终态、`internal_error` 归因错误、多一条业务结果信号）。
+  **未修原因**：修它需要先定一个跨仓设计问题——「操作员取消」是否要成为消费者可见的独立结果（要改 TelePost 的投影与文案），
+  不是执行端单方面能定的。
+* **E：通用面提交的作业只在下一次计划 tick 时才被准入。** 现场日志
+  `Cannot recover slot: its schedule could not be admitted {"reason":"scheduler_busy"}`，随后由
+  `Starting scheduled Pixiv download job (execution #549/#550)` 这类**周期触发**才把它 `Slot resumed`。
+  作业是耐久的（有 `deadline_at`，最终会被 `queued_timeout_ms=1800000` 收口），生产路径（TelePost 心跳重触发）
+  下不明显；但一个**没有消费者再触发**的第三方 `POST /jobs` 可能长时间停在 `queued`。属既有行为（3.4.0 相同），
+  记为观测，不是本轮回归。
+
+#### 6.7 诚实边界
+
+* 本次仍未**人工在审核群点一次重抓**（Telegram 按钮/审核卡）；复验走的是与生产逐字节相同的载荷与真实处理器。
+* 上游 Pixiv 在整个复验窗口持续对生产下载器返回 502/503，因此**没有**走到「成功终态 + 替换稿入库」那一段
+  （该段在 3.4.0 验收时以 `review.refetch_dropped_replacement` 观测过投递通路是通的）。
+* 事件推送通道在生产仍关闭（`TELEPOST_API_BASE_URL` 未配置），只走「补拉 + ack」。
+* 复验产生的业务端测试数据已清理（3 条 `pending_reviews` + 2 条 `refetch_attempts` 删除、服务令牌已吊销），
+  执行端作业均已终态。
