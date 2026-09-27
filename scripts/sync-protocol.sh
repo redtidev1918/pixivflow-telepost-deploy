@@ -7,7 +7,7 @@
 #   scripts/sync-protocol.sh --check         # verify vendored copies, write nothing
 #
 # The protocol spec itself lives in docs/architecture/workflow-protocol.md; this script
-# only distributes the machine-checkable half (schema + fixtures).
+# only distributes the machine-checkable half (schema + fixtures + error mapping).
 set -euo pipefail
 
 repo_dir=$(cd "$(dirname "$0")/.." && pwd)
@@ -29,9 +29,13 @@ if [ ! -f "$source_dir/protocol.schema.json" ]; then
   echo "missing protocol source: $source_dir/protocol.schema.json" >&2
   exit 1
 fi
+if [ ! -f "$source_dir/error-mapping.json" ]; then
+  echo "missing protocol source: $source_dir/error-mapping.json" >&2
+  exit 1
+fi
 
 # Relative paths that make up a vendored copy. Keep sorted for a stable manifest.
-rel_paths=("protocol.schema.json")
+rel_paths=("protocol.schema.json" "error-mapping.json")
 while IFS= read -r f; do
   rel_paths+=("fixtures/$f")
 done < <(cd "$source_dir/fixtures" && ls -1 *.json | LC_ALL=C sort)
@@ -87,12 +91,9 @@ for target in "${targets[@]}"; do
     continue
   fi
 
-  mkdir -p "$dest/fixtures"
-  cp "$source_dir/protocol.schema.json" "$dest/protocol.schema.json"
   for rel in "${rel_paths[@]}"; do
-    case "$rel" in
-      fixtures/*) cp "$source_dir/$rel" "$dest/$rel" ;;
-    esac
+    mkdir -p "$dest/$(dirname "$rel")"
+    cp "$source_dir/$rel" "$dest/$rel"
   done
 
   : > "$dest/SOURCES.sha256"
