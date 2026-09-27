@@ -2559,13 +2559,19 @@ Status: VERIFIED（release → pin → 部署 → 运行时取证全部完成，
   `file:<abs>?mode=ro`（`doctor.py:125`、`cli.py:38`），只跑 PRAGMA/SELECT，缺表缺列 → `SKIP`；8 项检查（`doctor.py:52-61`）；
   退出码 **2 = 无法验证 > 1 = 有 CRIT > 0 = HEALTHY**（`doctor.py:931-936`）；`refetch_stuck` 15 分钟 WARN / 30 分钟 CRIT（`:66-68`）。
 * **验证（本机复跑，2026-09-27，`/tmp/tp-venv312/bin/python -m pytest`）**：
-  `pytest -q -p no:cacheprovider --no-cov` → `1107 passed, 1 skipped, 20 warnings in 48.76s`（exit 0）；
+  `pytest -q -p no:cacheprovider --no-cov` → `1110 passed, 1 skipped, 20 warnings in 48.86s`（exit 0）；
   四个重抓套件 `tests/test_refetch.py tests/test_refetch_card_state.py tests/test_refetch_replacement.py
-  tests/test_identity_provenance.py` → `61 passed in 2.53s`（exit 0；连续复跑 5 次均 61 passed，
+  tests/test_identity_provenance.py` → `62 passed in 2.60s`（exit 0；早期基线连续复跑 5 次均 61 passed，
   中途出现过一次无法复现的单例失败——同一次全量 run 全绿，暂按环境级偶发记录，未定位到具体用例）；
-  `tests/test_doctor.py` → `29 passed in 0.23s`。
+  `tests/test_doctor.py` → `31 passed`。
+  第 62 例是 2026-09-27 补的**连续重抓 A→B→C 回归测试**
+  `test_chained_refetch_a_to_b_to_c_keeps_one_active_generation`（`tests/test_refetch_replacement.py`）：
+  第二次重抓的源是上一轮的替换结果，固化「同一条链 + 代数 0/1/2 + 只有最新一代 ACTIVE +
+  `111→222→333` 的 `replaced_by` 因果 + 两次 attempt 各自 `replaced`」。
   上一版文档按 `grep -c "def test_"` 记的 53 与 28 是漏数了 `test_identity_provenance.py` 的 8 例与
   `test_doctor.py` 里 parametrize 展开的 1 例。
+  该测试提交（`c3944ca`，合并 `017bb1e`）位于生产镜像 2.70.1 之后，只含测试与 `AGENTS.md`，
+  不改变运行时行为，因此**不需要发版**：生产 pin 仍是 TelePost 2.70.1 / `f57d161`。
 
 ## 1.1 TelePost 2.70.0（3e1950c，Mini App 投影）
 

@@ -123,6 +123,13 @@ auto-wake 与鉴权，不能证明「按钮 → 替换」。上一小节才是�
 
 上面两行的差异必须在下次有 pytest 的环境里消掉：要么复跑并写上真实输出，要么删掉引用。
 
+**已消掉（2026-09-27，本机 `/tmp/tp-venv312` 复跑）**：全量 `1110 passed, 1 skipped, 20 warnings in 48.86s`
+（exit 0）；四个重抓套件 `62 passed in 2.60s`（exit 0，含新增的连续重抓 A→B→C 回归测试
+`test_chained_refetch_a_to_b_to_c_keeps_one_active_generation`）；`tests/test_doctor.py` `31 passed`。
+此前「只找到 3 个重抓测试文件」是漏了 `tests/test_identity_provenance.py`（8 例），
+`grep -c "def test_"` 也漏掉 parametrize 展开，故 53/61 都低估——以 `pytest` 输出为准（见
+`docs/operations/current-state.md` §1）。
+
 ### 只读自检（doctor）
 
 ```console

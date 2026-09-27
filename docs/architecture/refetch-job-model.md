@@ -140,6 +140,11 @@ telepost/storage/sqlite/refetch.py:200-279
   `generation / candidate_id / source / request_id / outcome / reason / decided_at / replaced_by`）。
 * 语义要点：链与代（`review_chain_id` / `generation` / `supersedes_review_id`）是既有机制，
   2.69.0 补的是**因果**，不是链本身。
+* 连续重抓（A→B→C）由 `test_chained_refetch_a_to_b_to_c_keeps_one_active_generation`
+  （`tests/test_refetch_replacement.py`）固化：第二次重抓的源是上一轮的替换结果，断言
+  同一条链、代数 `0/1/2`、只有最新一代 `pending`（其余 `superseded`）、
+  `111 --replaced_by--> 222 --replaced_by--> 333`、两次 attempt 各自终态 `replaced` 且
+  `result_review_id` 指向自己的结果代。
 
 ---
 
