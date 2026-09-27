@@ -426,6 +426,20 @@ def _error_code(body) -> str:
     return ""
 
 
+def _job_of(payload) -> dict:
+    """从 ``POST /jobs`` 的确认体里取出 Job 对象（§11.1 固定了响应体形状）。
+
+    ``POST /jobs`` 把 Job 包一层 ``{"job": …}``，而 ``GET /jobs/{job_id}`` /
+    ``cancel`` 返回**裸** Job。直接在包装体上取 ``job_id`` 会静默得到 ``None``，
+    接着就会去探测一个不存在的作业（``GET /jobs/None`` → 404），把验收
+    误导成产品缺陷。此处按规范解包，同时容忍裸 Job 以便复用。
+    """
+    if not isinstance(payload, dict):
+        return {}
+    job = payload.get("job")
+    return job if isinstance(job, dict) else payload
+
+
 def check_legacy_shim_equivalence(base: str, token: str, args, task: dict) -> None:
     """旧 refetch 端点与 POST /jobs 必须共享同一个身份空间（§11.1）。
 
@@ -480,7 +494,7 @@ def check_legacy_shim_equivalence(base: str, token: str, args, task: dict) -> No
     reverse_task = json.loads(json.dumps(task))
     reverse_task["idempotency_key"] = reverse_key
     status, job = request("POST", f"{base}/jobs", token, reverse_task)
-    reverse_id = (job or {}).get("job_id") if isinstance(job, dict) else None
+    reverse_id = _job_of(job).get("job_id") or None
     if status not in (200, 201, 202) or not reverse_id:
         fail(f"通用面提交失败（反向验证的基准）：HTTP {status}（{job}）")
         return
@@ -549,11 +563,13 @@ def check_live(args) -> None:
                     "target id（配置里 schedules[].targetIds 的取值），不要用 delivery target 名")
         fail(f"POST /jobs → HTTP {status}（{job}）{hint}")
         return
-    job_id = job.get("job_id") or job.get("id")
+    admitted = _job_of(job)
+    job_id = admitted.get("job_id") or admitted.get("id")
     ok(f"POST /jobs → HTTP {status}，job_id={job_id}，status={job.get('status')}")
 
     status, replayed = request("POST", f"{base}/jobs", token, task)
-    if isinstance(replayed, dict) and (replayed.get("job_id") or replayed.get("id")) == job_id:
+    replayed_job = _job_of(replayed)
+    if isinstance(replayed, dict) and (replayed_job.get("job_id") or replayed_job.get("id")) == job_id:
         ok("同一 idempotency_key 重放返回同一 job_id（幂等）")
     else:
         fail(f"重放未返回同一 job（HTTP {status}，{replayed}）")
@@ -618,7 +634,11 @@ def check_live(args) -> None:
         ok("/jobs 投影没有 refetch* 字段名（旧 shim 与新面未混用）")
 
     # 事件流：终态作业必须留下可对账的事件，否则消费者除了「没收到回调」以外没有任何依据（静默的根因）。
-    events_url = terminal.get("events_url") or f"{base}/jobs/{job_id}/events"
+    events_url = str(terminal.get("events_url") or "") or f"/jobs/{job_id}/events"
+    if not events_url.startswith(("http://", "https://")):
+        # §11.1 只规定 `events_url` 是 string；现场生产者返回的是相对路径，
+        # 样例 fixture 里写的是绝对 URL。两种都要能对账，按服务基址解析。
+        events_url = base + "/" + events_url.lstrip("/")
     status, page = request("GET", events_url, token)
     if status != 200 or not isinstance(page, dict):
         fail(f"GET 事件流 → HTTP {status}（{page}）")

@@ -225,8 +225,10 @@ primary_region = 'iad'
     # state machine tracks from the remote status, accelerated by the events
     # channel (POST /api/botN/v1/jobs/events ingress + reconcile loop, idempotent
     # by event_id, exactly-once terminal notification); callback_url is only sent
-    # when TELEPOST_API_BASE_URL is set. Requires PixivFlow >= 3.3.0. Rollback =
-    # 2.70.1 (with PIXIVFLOW_JOB_TRANSPORT=legacy for the executor call path).
+    # when TELEPOST_API_BASE_URL is set. Requires PixivFlow >= 3.4.0 on the
+    # protocol transport: 3.3.0's generic face cannot express this deployment's
+    # targets (see the PIXIVFLOW_JOB_TRANSPORT note below). Rollback = 2.70.1
+    # (with PIXIVFLOW_JOB_TRANSPORT=legacy for the executor call path).
     TELEPOST_IMAGE = 'ghcr.io/redtidev1918/telepost:2.71.0'
 
 [[mounts]]
@@ -270,16 +272,16 @@ primary_region = 'iad'
   # Review-group refetch reaches the sleeping PixivFlow executor through Fly's
   # HTTPS proxy; PIXIVFLOW_REFETCH_TOKEN is a separate shared Secret.
   PIXIVFLOW_REFETCH_BASE_URL = 'https://pixivflow-scheduler.fly.dev'
-  # EMERGENCY ROLLBACK — 2026-09-27 现场验收发现协议通道无法表达本部署的重抓。
-  # TelePost 2.71.0 在协议通道上向 POST /jobs 发送 {"params":{"target_id":...}}，
-  # 但协议 v1 要求 params.query（否则 HTTP 400 "params.query must be a JSON
-  # object"），且通用面只从配置解析目标——本部署有四个满足
-  # targetServesManualCandidateSearch 的 target，于是必然 HTTP 409
-  # ambiguous_target。协议 v1 没有任何目标选择器字段。
-  # 在生产者侧支持显式目标选择之前，先走旧的目标在 URL 里的通道；该通道已实测
-  # 可用（POST /internal/targets/{id}/refetch → 202，GET …/{requestId} → 200）。
-  # 生产者侧修复发布后删除本行即可回到 protocol。
-  PIXIVFLOW_JOB_TRANSPORT = 'legacy'
+  # 2026-09-27 现场验收先在旧通道上恢复服务；生产者侧修复（PixivFlow 3.4.0，
+  # 协议 v1.1）发布并部署后，本行恢复为协议通道（也是 TelePost 的默认值）。
+  # 背景：协议 v1 要求 params.query，且通用面只从配置解析目标——本部署有四个
+  # 满足 targetServesManualCandidateSearch 的 target，于是 2.71.0 的请求体必然
+  # 被 HTTP 409 ambiguous_target 拒绝（旧 URL 通道不受影响，所以缺陷是协议面的）。
+  # v1.1 把 params.target_id 变成合法**选择器**、让 params.query 可选（缺省即
+  # 该目标自身的检索配置，与旧 refetch 语义等价），并让 /capabilities 声明
+  # `target_selector`。现场验收（§2026-09-28，--live --legacy-refetch-target）通过。
+  # 再次回滚：把本行改成 'legacy'（旧 URL 通道在 executor 上仍然保留）。
+  PIXIVFLOW_JOB_TRANSPORT = 'protocol'
   # Telegram Mini App surface. dist/ is served same-domain at /app/ by the
   # TelePost webhook server (2.21.1); MINIAPP_SESSION_SECRET is a separate
   # shared Secret (≥32 chars, never the bot token). Rollback: set back to false.

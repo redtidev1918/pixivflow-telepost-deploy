@@ -167,32 +167,91 @@ python -m telepost.observability.cli reviews inspect <review_id> --bot 1
   一个真正停滞的阶段应以「重抓超时未完成」收口而不是无限 `SEARCHING`；小程序「审核详情」在重抓进行中按钮为禁用态。
 * 判定标准沿用上一节：`HTTP 200 / Machine started / Slot exists / /app 200` **一律不算业务成功**；
   Refetch 只有走到终态（`REPLACED` / `NO_CANDIDATE` / `FAILED` / `TIMEOUT` / `CANCELLED`）才算收敛。
-## 2026-09-28 协议化改造后的现场验收（待执行）
+## 2026-09-28 协议化改造后的现场验收（已执行）
 
 本轮不再给重抓加字段，而是把边界协议化：执行端只做「内容采集与处理引擎」，业务端只做「工作流编排」。
 判据不变：**只有走到终态且带原因、且终态通知确实发出**才算收敛；「没消息」永远不算成功。
 
+### 参与版本
+
+| 服务 | 版本 | commit |
+| --- | --- | --- |
+| PixivFlow 执行端 | 3.4.0 | `5d231179a9b3` |
+| TelePost 业务端 | 2.71.0 | `3f3d1151db556c667bb2556e94182a17cc7df9f8` |
+
 ### 本地前置证据（已完成）
 * 离线验收 `python3 scripts/verify-protocol-v1.py` 退出 0，含边界纪律（`/internal/targets/` 只允许出现在唯一端口
   `telepost/application/pixivflow_jobs.py`）、生产者的 `ProtocolErrors.ts` 词表与 schema enum 一致、两仓 vendored 副本哈希一致。
-* TelePost 全量 pytest `1139 passed, 1 skipped`；PixivFlow `135 suites / 1486 tests passed` 且 `npx tsc --noEmit` 退出 0。
+* 业务端全量 pytest `1175 passed, 1 skipped`；执行端 `136 suites / 1512 tests passed` 且 `npx tsc --noEmit` 退出 0。
+
+### 现场发现的执行端缺陷（由协议 v1.1 修复）
+
+第一次现场验收时通用面**完全不可用**——两个真实缺陷，都不是验收脚本的问题：
+
+1. `POST /jobs` 被 400 拒绝：`{"error":{"code":"invalid_params","message":"params.query must be a JSON object","retryable":false}}`。
+   协议 v1 要求 `params.query`，而 2.71.0 的业务端只发 `params.target_id`（见
+   `telepost/application/pixivflow_jobs.py:_protocol_submit`）。
+2. 通用面无法指名目标：本部署有四个满足 `targetServesManualCandidateSearch` 的 target
+   （`bot1-illust-botefuku` / `bot1-novel-botefuku` / `bot2-illust-marunomi` / `bot2-novel-marunomi`）、
+   只有一个 Pixiv 账号 `default`，于是必然 `409 ambiguous_target`；协议 v1 没有任何目标选择器字段。
+
+处置：先把业务端回滚到 `PIXIVFLOW_JOB_TRANSPORT=legacy`（旧 URL 通道不受影响，现场立即恢复），
+然后发布协议 **v1.1**（`docs/architecture/workflow-protocol.md` §3.2：`params.target_id` 是**选择器**、
+`params.query` 可选、`/capabilities` 声明 `target_selector`），执行端先升到 3.4.0，再把业务端切回协议通道。
 
 ### 部署后（只读核对）
-1. `curl -H "Authorization: Bearer $TOKEN" .../capabilities` → `protocol_versions:["1"]`，`candidate_search` 的
-   `queued_timeout_ms`/`stall_timeout_ms`/`default_deadline_ms` 均为正；`features` 里**没有** `events` 就是本轮确实没有事件面
-   （诚实声明——不要按「有事件面」写验收，事件面属于后续版本）。
-2. `python3 scripts/verify-protocol-v1.py --live --pixivflow-url <执行端> --pixivflow-token <t> --legacy-refetch-target bot1-submit`
-   必须退出 0，其中包含「旧 refetch 端点已转成 Job」「旧端点提交的作业在通用面上可见且 job_id 一致」
-   「通用面提交的 Job 被旧入口解析回同一个 job_id（两个入口一个身份空间）」。
-3. `telepost doctor --all-bots` → `Refetch: running: N stuck: N failed(last24h): N`，`stuck=0`，退出码 0；
-   不应存在「非终态且 `heartbeat_at` 早于 20 分钟」的行，也不应有终态缺 `terminal_reason` 的新行。
-4. 旧入口调用计数应为 0（端口默认已切到 `POST /jobs`）；非 0 说明仍有路径绕过端口。
+
+1. ✅ `GET /capabilities` → `protocol_versions:["1"]`，`candidate_search` 的 `queued_timeout_ms=1800000` /
+   `stall_timeout_ms=900000` / `default_deadline_ms=1800000` 全为正，`features` 为
+   `["events","progress","cancel","idempotency","exclude","tag_expansion","target_selector"]` —— **含** `events`，
+   事件面确实存在（本节早期版本写的「没有事件面」已过时）。
+2. ✅ `python3 scripts/verify-protocol-v1.py --live --pixivflow-url https://pixivflow-scheduler.fly.dev
+   --legacy-refetch-target bot1-illust-botefuku` 退出 0；实测判定行包含「旧 refetch 端点已转成 Job」
+   「旧端点提交的作业在通用面上可见且 job_id 一致」「通用面提交的 Job 被旧入口解析回同一个 job_id
+   （两个入口一个身份空间）」「同一 idempotency_key 重放返回同一 job_id」「同键不同参数 → 409
+   `idempotency_conflict`」「未知 job_type → 400」「终态 cancelled（`cancelled_by_consumer`）」
+   「/jobs 投影没有 refetch* 字段名」以及事件流的「可读 / 含终态事件 / 只含本 job / 时间升序 /
+   ack 生效 / 重复 ack 幂等 / ack 不改变 Job 状态」。
+   **`--legacy-refetch-target` 必须给 schedule target id**（`schedules[].targetIds` 的取值）；本文档早期版本
+   写的 `bot1-submit` 是**投递目标名**，旧 shim 会返回 404（且两个入口的对照验证会直接失败）。
+3. ✅ `telepost doctor --all-bots` → `HEALTHY`，`检查 18 项：18 OK / 0 WARN / 0 CRIT / 0 SKIP`，退出 0；
+   `Refetch: running: 0 stuck: 0 failed(last24h): 0｜超预算 0｜轮询重试中 0｜终态缺原因（新代码路径）0`
+   （legacy 历史行单独计数，不计入不变量）。
+4. ✅ 业务端已切回协议通道（`PIXIVFLOW_JOB_TRANSPORT='protocol'`，见 `fly/deploy.telepost.toml`），
+   旧入口只在对照验证里被显式调用；现场核对 `T=[protocol]`。
+
+### 验收中修掉的**工具**缺陷（`scripts/verify-protocol-v1.py`）
+
+这四个都会把产品缺陷误报成失败，或反过来掩盖真实失败：
+
+1. 旧 shim 的 `requestId` 必须是真 UUID（`src/scheduler/ScheduleTriggerServer.ts:485` 的正则），脚本却拼了
+   `-shim` / `-rev` 后缀 → HTTP 400 `requestId must be a UUID`。改为两个方向都用 `str(uuid.uuid4())`。
+2. 旧 shim 失败时 `error` 是**字符串**，脚本按对象读 → `AttributeError: 'str' object has no attribute 'get'`。
+   新增 `_error_code()` 容错提取。
+3. `POST /jobs` 的成功体是 `{ job }` 包一层（§11.1），脚本直接在包装体上取 `job_id` → `None` → 接着去探测
+   `GET /jobs/None` → 404，于是真缺陷（`target_id` 被接受）反而被这条假失败盖住。新增 `_job_of()` 统一解包
+   （幂等重放判定同样改用它）。
+4. 现场生产者的 `events_url` 是**相对路径** `/jobs/{job_id}/events`（样例 fixture 为可读性写成绝对 URL），
+   脚本直接当 URL 用 → `ValueError: unknown url type`。脚本改为按服务基址解析；§2.2 的字段说明也改为
+   「绝对 URL 或相对服务基址的路径，消费者必须按 base 解析，不得假定其中一种」。
 
 ### 现场重抓（业务面）
-* 点一次重抓：任务 ID 沿用 `refetch-<review>-<epoch秒>`，中文阶段可读，已等待时长在走。
-* 等待中至少看到**一条重复**的进度提醒；真正停滞的阶段必须以「重抓超时未完成」收口，而不是无限搜索。
-* **关键回归（针对本次故障）**：把回调目标打成不可达（或断开投稿 token）后再点一次重抓——
-  作业仍必须走到终态，终态通知仍必须恰好发一次（发不出去则落到 `submitter_notifications` 的
-  `kind='refetch_terminal'` 待补发），**绝不能**回到「永久静默」。
-* 若出现静默，按此顺序查：`GET /jobs/{job_id}` 的 `status`/`error` → 执行端账本里该作业的终态与原因 →
-  `submitter_notifications` 的待补发记录 → `doctor` 的 `Refetch` 行。
+
+* ⚠️ **没有执行**「人工在审核群点一次重抓」的完整闭环：那需要真实审核群操作。本次用 `--live` 以业务端
+  的**逐字节请求体**（`{protocol_version, job_type, idempotency_key, params:{target_id}}`）打执行端，
+  验证的是同一个边界与同一个载荷，但不经过 Telegram 按钮与审核卡。
+* ✅ 执行端**确实执行**手动作业（不是只入账）：`bot1-daily@manual-6a2af823-2ce9-4560-b297-ab0fea3a45b7`
+  在 14:36:54 收口（`Scheduled download plan finished (took 255s)`），该 target `#150141037` **failed**，
+  随后 `Refetch outcome enqueued for report {"disposition":"failed"}`。
+* ✅ 手动作业被调度器**串行**执行：其余作业被 60 秒一次的 recovery sweep 以
+  `reason:"scheduler_busy"` 跳过并留在 `pending`（`Recovered interrupted slots {"stale_slots_found":7,
+  "reclaimed":1,"skipped":6}`）——同一时刻只跑一个计划是设计，不是卡死。
+* ⚠️ 这些验收作业的 outcome 回到业务端时用的是验收方自己生成的 `refetch_request_id`，业务端按设计把
+  **未知 attempt** 的替换稿拒绝为 HTTP 400 并记一条 `review.refetch_dropped_replacement`；本次未核对审计行。
+* ⚠️ **事件推送通道在生产是关闭的**：`TELEPOST_API_BASE_URL` 未配置 → `consumer_callback_url()` 返回空 →
+  Task 里不带 `callback_url`，事件只走「消费者补拉 + ack」这条**已实测可用**的路径（`GET /jobs/{id}/events`
+  可读、有序、ack 幂等且不改状态）。要启用推送侧需要在业务端配置 `TELEPOST_API_BASE_URL`
+  （例如 `https://telesubmit-multi-bot.fly.dev`），并先做一次「回调不可达」的回归。
+* ⚠️ 「打断回调后仍必须恰好通知一次」的回归**未在本次现场执行**（它属于业务端 + 审核群动作，见
+  上一节「现场重抓」的第 3 条）。
+
