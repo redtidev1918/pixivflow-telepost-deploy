@@ -359,7 +359,7 @@ queued ──claim──▶ running ──▶ succeeded
 | 事件落库（append-only） | `delivery_events` 表（`src/storage/DatabaseMigration.ts:187-202`，`id INTEGER PRIMARY KEY AUTOINCREMENT` 单调）；写入 `OutboxRepository.recordEvent`（`src/storage/repositories/OutboxRepository.ts:397-412`，短 JSON、不存密钥） | 事件体要能投影成协议 `$defs/Event`（`event_id`/`job_id`/`type`/`at` + 可选 `progress`/`error`），因此需要 `slot_id → job_id` 与内部事件名 → 协议 `type` 的**映射表**（放 facade，不写进表） |
 | 事件读取 | `OutboxRepository.listEvents({executionId?, outboxId?, limit?})`（`:423-435`，`ORDER BY ts DESC, id DESC`，limit ≤ 500） | 增加按 `slot_id` 读取 + `after=<event_id>` 游标（升序），协议 `GET /jobs/{job_id}/events?after=` |
 | 终态回调（至少一次 + 去重） | `NotificationPolicy.noteRefetchOutcome`（`src/notification/NotificationPolicy.ts:267-323`）→ `DeliveryService.enqueueNotification(...)`（`:311-316`），幂等键 `refetch-outcome:<slotId>:<targetId>`（`:64`）；disposition 只有 `no_alternative` / `failed`（成功由投稿负载自带的 request id 关联） | 通用化为「job 事件投递」：同一个 outbox 通道，`callback_url` 来自 `Task`/能力协商，事件体是 `$defs/Event`；`refetchOutcomeUrl`（`src/config/types.ts:720`，校验 `src/config/validation.ts:432-437`）保留为 v1 shim |
-| Ack / 对账 | 无 | 消费者持久化 `(job_id, last_event_id)` 游标并显式 ack；`unacked=1` 或游标落后即可重放。**禁止**为 ack 新建第二套队列——它只是读游标 |
+| Ack / 对账 | 无（生产现状：`pixivflow/config/production.json` 的 `delivery.targets.bot1-submit` 就是 `type:"httpMultipart"` + `refetchOutcomeUrl: ${TELEPOST_API_BASE_URL}/api/bot1/v1/refetch/outcomes`，bot2 同形） | 消费者持久化 `(job_id, last_event_id)` 游标并显式 ack；`unacked=1` 或游标落后即可重放。**禁止**为 ack 新建第二套队列——它只是读游标 |
 | 死信可发现 | outbox 死信行 + `pixivflow outbox retry <id>`（`docs/CONFIG.md` refetch 段落） | 协议侧暴露「有终态 job 的最后一个事件仍是未确认」的计数（`doctor`/CLI 任一即可），不做自动重投 |
 
 约束：
