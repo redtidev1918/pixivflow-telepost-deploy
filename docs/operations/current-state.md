@@ -3154,11 +3154,13 @@ Status:
 
 * #2 主题 Tag 联想（生产配置）—— `VERIFIED`（仓库改好 + 两层校验通过 + **卷上运行副本已就地应用**：
   sha256 回读一致、调度器热重载到 generation 2；见 §1）
-* #4 封面探测失败策略 —— `IMPLEMENTED_NOT_VERIFIED`（分支 `fix/novel-cover-probe-failed` 未提交、未发布）
+* #4 封面探测失败策略 —— `IMPLEMENTED_NOT_VERIFIED`（PR redtidev1918/PixivFlow#181：已提交已推送，
+  未发布、未部署）
 * #1 重抓卡死 / #3 卡片不更新 —— `VERIFIED`（生产库只读取证 + 运行镜像代码 + release 时间线三者互证：
   历史真问题，当前 2.71.1 已修）
 * 遮罩 (b)「默认不糊 + 遮罩由审核员发布前决定」—— `IMPLEMENTED_NOT_VERIFIED`
-  （分支 `fix/review-group-mask`：审核群预览改为**恒不遮罩**，频道发布仍取存储行值；未提交、未发布，见 §4）
+  （PR redtidev1918/TelePost#242：审核群预览改为**恒不遮罩**，频道发布仍取存储行值；已提交已推送，
+  未发布、未部署，见 §4）
 
 ## 1 #2 主题 Tag 联想：生产 target 显式开 `relatedTags: when_seed_insufficient`
 
@@ -3297,7 +3299,7 @@ Status:
   `:408`，原为 `spoiler=command.spoiler`）。于是投稿者在私聊按过「🔞 剧透」、或 API 调用方传
   `spoiler: true` 时，**审核群看到的预览就已经被遮罩**；而 Telegram 无法对已发送的消息反向解除遮罩，
   审核员恰好看不到自己要审的内容。
-* 改动（TelePost，分支 `fix/review-group-mask`，**未提交、未发布**）：`review_queue.py` 两处 staging
+* 改动（PR redtidev1918/TelePost#242，叠在未合并的 `fix/incident-140-data-class` 之上）：`review_queue.py` 两处 staging
   调用改为 `spoiler=False`，并加注释说明「遮罩是审核员发布前的频道决策，不是可继承的投稿设置」；
   `pending_reviews.spoiler` 仍写 `command.spoiler`（`:548`），存储语义不变。
 * 结果语义（两个界面从此分开）：
@@ -3312,7 +3314,7 @@ Status:
   未改写时发布取 `spoiler=True`。全量 `.venv/bin/python -m pytest -q --maxfail=0 --no-cov`：
   修复前 **1178 passed / 2 skipped**（64.55s）→ 修复后 **1179 passed / 2 skipped**（61.42s），
   +1 = 新用例。
-* 诚实边界：这是**代码级**收口，尚未提交 / 未发布 / 未上线；线上当前仍把投稿者的值透传给审核群预览。
+* 诚实边界：这是**代码级**收口，已提交且 PR 已开，但**未发布 / 未上线**；线上当前仍把投稿者的值透传给审核群预览。
   设计上保留的残余：投稿者声明 `spoiler: true` 而审核员直接点通过、不碰遮罩按钮时，频道发布仍会遮罩 ——
   「遮罩由审核员发布前决定」体现在审核员**能够**在发布前改写，而不是系统强制改写。
 * 随之失效的旧口径（已在上文就地改正）：`docs/CONTRACT.md:56` 与
