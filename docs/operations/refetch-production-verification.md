@@ -108,3 +108,52 @@ auto-wake 与鉴权，不能证明「按钮 → 替换」。上一小节才是�
 - 凭据未入库、未入日志、未回显；`PIXIVFLOW_REFETCH_TOKEN` 只在两端 Fly secrets。
 - 执行端 outbox 现存 2 条 `dead`：均为 2.20.0 时代 `notificationUrl` 死信（历史证据，
   不再重试）；2.20.2 起无新增死信，无永久 pending outbox。
+
+## 2026-09-27 作业状态机改造后的验证基线
+
+本小节是 TelePost `2.69.0`（`69849e2` + `266017d`）之后的验证基线。**只写实际运行过的命令与结果**，
+未运行的写 `待执行`，无法复跑的写 `待确认`。
+
+### 测试命令
+
+| 命令 | 结果 | 状态 |
+|---|---|---|
+| `cd TelePost && pytest -q` | `1107 passed, 1 skipped` | **待确认** — 该数字出自提交 `69849e2` 的提交信息；本机两个 Python（系统 python3.9、`/opt/homebrew/bin/python3.12`）都没有 pytest，仓库内也没有 `.venv`/`uv`/`poetry`，本轮**未能复跑** |
+| 四个重抓套件（`tests/test_refetch.py`、`tests/test_refetch_card_state.py`、`tests/test_refetch_replacement.py`、…） | `61 passed` | **待确认** — 提交信息未携带该数字，且仓库内只找到 3 个重抓测试文件（`tests/test_refetch.py` 32 个 `def test_`、`test_refetch_card_state.py` 12、`test_refetch_replacement.py` 9，共 53） |
+
+上面两行的差异必须在下次有 pytest 的环境里消掉：要么复跑并写上真实输出，要么删掉引用。
+
+### 只读自检（doctor）
+
+```console
+python -m telepost.observability.cli doctor --bot 1 --bot 2 --json   # 或 --all-bots
+python -m telepost.observability.cli doctor --now <epoch>             # 固定时间点复现
+python -m telepost.observability.cli reviews inspect <review_id> --bot 1
+```
+
+退出码契约（`telepost/observability/doctor.py:9-13`、`:931-936`）：
+
+* `0` = HEALTHY；`1` = 至少一项 CRIT；`2` = 无法验证（数据库缺失/不可读，或 `integrity_check` 不是 ok）。
+  **2 优先于 1**：不知道比知道坏了更严重。
+* 所有连接都是只读 URI `file:<abs>?mode=ro`（`doctor.py:125`、`cli.py:38`），只跑 PRAGMA/SELECT；
+  缺表缺列降级为 `SKIP`，不写库、不打印 token。
+* 8 项检查与阈值见 `docs/architecture/refetch-job-model.md` §9。
+
+### 随下一次部署要做的只读核对
+
+**2026-09-27 已全部执行完毕（证据见 `docs/operations/current-state.md` §4），结果如下：**
+
+* `已执行` — `GET /health`：TelePost `2.70.1` / commit `f57d1617ef639eeccdbb749adb80f479c45a841b`（此前 2.70.0/`31d88fb` 也是同一路径）；
+  PixivFlow `3.1.0` / commit `583a74c98ef7`。
+* `已执行` — `./scripts/verify-images.sh` exit 0：pin 的 `telepost:2.70.1` 与线上上报一致，pin 的 `583a74c98ef7` 被执行端上报。
+* `已执行` — 两个 bot 上 `doctor --all-bots`：`HEALTHY`，`16 OK / 0 WARN / 0 CRIT / 0 SKIP`，退出码 `0`
+  （2.70.0 时同一命令报 `2 WARN`——那是 doctor 自身对账本历史行的误报，见 §1.2，已修）。
+* `已执行` — 容器内只读确认：`/app/telepost/domain/refetch_state.py` 存在（9903 B）、
+  `/app/handlers/review.py:92-105` 五个闸门默认值 2/10/20/12/30、`/app/telepost/observability/doctor.py` 含
+  `最旧未确认记录` / `ledger_oldest_unresolved_age_seconds`；PixivFlow 侧 `selectWalkedTags` / `seedTier` / `allowSources` /
+  `classifyNovelCover` / `coverDeliveryDecision` / `PIXIV_GENERATED_COVER_WIDTH` 均在 `dist` 内；
+  Mini App bundle `/app/webapp/dist/assets/index-B8NVYagl.js` 含 `refetch-` 与 `搜索候选`。
+* `待执行（仅剩业务面）` — 现场点一次重抓：任务 ID `refetch-<review>-<epoch秒>` + 中文阶段 + 已等待时长；等待中至少看到**一条重复**的进度提醒；
+  一个真正停滞的阶段应以「重抓超时未完成」收口而不是无限 `SEARCHING`；小程序「审核详情」在重抓进行中按钮为禁用态。
+* 判定标准沿用上一节：`HTTP 200 / Machine started / Slot exists / /app 200` **一律不算业务成功**；
+  Refetch 只有走到终态（`REPLACED` / `NO_CANDIDATE` / `FAILED` / `TIMEOUT` / `CANCELLED`）才算收敛。

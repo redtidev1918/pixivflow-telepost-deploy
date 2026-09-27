@@ -196,8 +196,19 @@ kill_timeout = 60
     # when_seed_insufficient | never, default always = unchanged behaviour), so
     # a related tag such as 丸吞 can no longer be substituted for the seed tag
     # such as 西瓜肚. Rollback = the a0e5f0be line above.
-    PIXIVFLOW_REF = 'b01a93d49e63454dec0033301231f38db250a2bb'
-    PIXIVFLOW_VERSION = '3.0.3'
+    # 583a74c = v3.1.0 (released 2026-09-27). Two upstream capability slices:
+    # (1) every resolved topic tag carries provenance (seed / cooccurrence /
+    # autocomplete) and a weight, so `topic resolve` / `topic test` can explain
+    # why a work was recalled, and a topic target can rank its own 原始 Tag first
+    # (`topicDiscovery.seedTier: on`) or restrict which tag sources may be walked
+    # (`topicDiscovery.tagRelations.{allowSources,allow,deny}`, deny wins);
+    # (2) a novel cover is classified by content type (custom / pixiv_generated |
+    # 640x900 / unknown) from its header bytes and delivery is gated by
+    # `download.novelCover.unknown` (skip | keep), fail-open. Defaults keep the
+    # pre-3.1.0 behaviour (relatedTags always, seedTier off, translated-name
+    # matching off). Rollback = the b01a93d line above.
+    PIXIVFLOW_REF = '583a74c98ef708223d100abbd9b255b26976218e'
+    PIXIVFLOW_VERSION = '3.1.0'
 
 [[mounts]]
   source = 'pixivflow_data'

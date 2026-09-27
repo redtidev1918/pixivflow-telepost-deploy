@@ -2509,4 +2509,181 @@ Status: VERIFIED (release → pin → runtime) / EXTERNAL_ACCEPTANCE_REQUIRED（
   仍应是 `media=0 docs=1`，`review_message_ids` 长度只有 1——封面预览那条不再出现），
   而作者真封面仍为 2；③ 主题目标的 `[TopicRecall]` 日志与 `searchedTags` 能证明主题 Tag
   先被搜（默认 `always` 行为不变，改配置的目标才走 seed-first）。
+* 本节的未验收项已顺延到下方 2026-09-27 架构级改造节的 `## Pending`。
+
+# 2026-09-27 架构级改造 P0/P1：重抓作业状态机 + Tag provenance + 封面内容类型
+
+Status: VERIFIED（release → pin → 部署 → 运行时取证全部完成，见 §4）
+遗留：EXTERNAL_ACCEPTANCE_REQUIRED（下一轮真实投稿的现场形状：重复提醒 / 停滞收口 / 小程序禁用态）
+
+## 0 现场问题与根因映射
+
+审计（`docs/architecture/refetch-tag-cover-architecture-audit.md` §1–§3）把四个现场现象映射为四层缺失的模型，
+本轮把其中两层（P0 重抓作业、P1 Tag 关系）落地：
+
+* **重抓点击后长时间无反馈、超时无结论** ⇒ 状态是自由字符串：5 处写入、2 处绕过仓储，没有迁移表、没有逐次时间线、提醒只发一次
+  （`refetch-tag-cover-architecture-audit.md:45`、§3 R1）。→ TelePost 2.69.0。
+* **Tag 联想跑偏（相关热门 Tag 顶掉原始 Tag）** ⇒ 只有「相关度」没有「关系类型与权重」（§3 R2）。→ PixivFlow 3.1.0。
+* **卡片上「拒绝」与「重抓」语义纠缠、答不出「上一个候选被谁换掉」** ⇒ 以记录为中心而不是以会话为中心（§3 R3）。
+  本轮补的是候选因果（`refetch_seen_candidates` 的 `outcome/reason/decided_at/replaced_by`），**独立会话读模型仍未做**。
+* **默认封面被当成封面投递** ⇒ 媒体资产没有内容类型维度（§3 R4）。→ PixivFlow 3.1.0（第二批；第一批是 3.0.3 的 `182694d`）。
+
+## 1 TelePost 2.69.0（69849e2 + 266017d）
+
+* 发布：`fa9323d chore: release 2.69.0`（只动 `.release-please-manifest.json` / `CHANGELOG.md` / `telepost/build_info.py`）；
+  功能提交 `69849e2 feat(refetch): unify the refetch lifecycle and make progress observable`（11 个文件，+1197/-280）
+  与 `266017d feat(observability): add a read-only telepost doctor self-check`。
+* **单一状态机**：新增 `telepost/domain/refetch_state.py`（254 行）。9 个规范状态 `:41-49`；
+  `ALLOWED` 迁移表 `:90-111`（每个活动态可到任一终态、活动态只能向前、终态无出边）；`assert_transition`/`can_transition`/
+  `IllegalRefetchTransition` `:156-231`；旧词表映射 `:59-84`（`admitted→searching`、`no_alternative→no_candidate`、
+  `obsolete→cancelled`、`TIMEOUT→failed`）；中文阶段标签 `:114-124`。
+* **唯一写入口**：`apply_transition_on`（`telepost/storage/sqlite/refetch.py:200-279`）校验迁移、写 `updated_at`/`finished_at`/
+  `terminal_reason`、追加 `refetch_events`；`failure_code` **只**在 `FAILED`/`TIMEOUT` 写（`:248-250`）；
+  「什么都没变就不写」（`:241-242`），否则停滞阶段会被刷新成看起来在动。两个历史绕过点已收口：
+  `telepost/storage/sqlite/reviews.py:222-229`、`telepost/application/review_queue.py:612-621`
+  （注释 `# No bypass write: the attempt state machine owns this transition`）。
+* **持久化**：`refetch_attempts` 增 `last_remote_state`/`notify_count`（`database/db_manager.py:302-303`）；
+  启动迁移就地归一化旧状态字符串并**重建**部分唯一索引
+  `WHERE state IN ('requested','searching','filtering','candidate_found')`（`:333-353`）；
+  新表 `refetch_events`（`:364-377`）；`refetch_seen_candidates` 增 `request_id`/`outcome`/`reason`/`decided_at`/`replaced_by`（`:406-418`）。
+* **看门狗四道闸门**（`handlers/review.py:489-714`）：周期提醒 `REFETCH_PROGRESS_REMIND_MINUTES`（默认 2，`:88-90`）；
+  阶段停滞/远端不可读 `REFETCH_STAGE_TIMEOUT_MINUTES`（10）→ `timeout(stalled_no_progress)` /
+  `timeout(remote_state_unknown)`；未被受理 `REFETCH_STALE_TIMEOUT_MINUTES`（20）→ `timeout(admission_timeout)`
+  （该分支 `:586` 的 `continue` 正是修掉「原因被硬超时分支覆盖」的关键）；绝对上限 `REFETCH_HARD_TIMEOUT_MINUTES`（30）→
+  `timeout(stalled_after_hard_timeout)`；幂等唤醒 `REFETCH_WAKE_MINUTES`（12）复用同一 request UUID。
+* **用户可见面**：任务 ID `refetch-<source_review_id>-<epoch秒>`（`telepost/application/refetch.py:289-297`、
+  `handlers/review.py:538`）；卡片阶段文案 `当前阶段` / `已等待约 N 分钟` / `任务ID`（`telepost/telegram/review_keyboard.py:116-138`）；
+  `GET /api/v1/reviews/{id}/refetch`（`utils/api_server.py:2308-2326`，路由 `:2533`）在无活动 attempt 时回退
+  `find_latest_by_chain`（`application/refetch.py:242`），所以**终态仍可查询**。
+* **doctor**：`python -m telepost.observability.cli doctor [--bot N|--all-bots|--json|--now T]`；每个连接都是只读 URI
+  `file:<abs>?mode=ro`（`doctor.py:125`、`cli.py:38`），只跑 PRAGMA/SELECT，缺表缺列 → `SKIP`；8 项检查（`doctor.py:52-61`）；
+  退出码 **2 = 无法验证 > 1 = 有 CRIT > 0 = HEALTHY**（`doctor.py:931-936`）；`refetch_stuck` 15 分钟 WARN / 30 分钟 CRIT（`:66-68`）。
+* **验证（本机复跑，2026-09-27，`/tmp/tp-venv312/bin/python -m pytest`）**：
+  `pytest -q -p no:cacheprovider --no-cov` → `1107 passed, 1 skipped, 20 warnings in 48.76s`（exit 0）；
+  四个重抓套件 `tests/test_refetch.py tests/test_refetch_card_state.py tests/test_refetch_replacement.py
+  tests/test_identity_provenance.py` → `61 passed in 2.53s`（exit 0；连续复跑 5 次均 61 passed，
+  中途出现过一次无法复现的单例失败——同一次全量 run 全绿，暂按环境级偶发记录，未定位到具体用例）；
+  `tests/test_doctor.py` → `29 passed in 0.23s`。
+  上一版文档按 `grep -c "def test_"` 记的 53 与 28 是漏数了 `test_identity_provenance.py` 的 8 例与
+  `test_doctor.py` 里 parametrize 展开的 1 例。
+
+## 1.1 TelePost 2.70.0（3e1950c，Mini App 投影）
+
+* 功能提交 `3e1950c feat(miniapp): show the refetch task id, stage and elapsed wait`（5 个文件，+458/-9），
+  发布提交 `ba349a7 chore: release 2.70.0`（合并 `5bf6d8c docs: refresh download page (v2.69.0)` 后为 `31d88fb`）。
+* 小程序「审核详情」页渲染与审核卡同一份作业投影：`任务ID`（`attempt.progress.task_id` / `task_id`）、
+  阶段标签（`attempt.label`，回退到规范态→旧态标签表）、`已等待 X 分 Y 秒`（`attempt.progress.elapsed_seconds`，
+  `formatElapsed()`）、失败/终止原因；`webapp/src/pages/ReviewDetail/ReviewDetailPage.tsx`。
+* **修掉一个真实可点性缺陷**：旧禁用条件只认 `requested`/`admitted`，而服务端在规范态
+  `searching`/`filtering`/`candidate_found` 时的 wire `state` 仍是 `admitted`（`to_legacy`），
+  因此进行中的重抓在小程序里**看起来仍可点击**；现在按 `ACTIVE_REFETCH_STATES`（含 5 个活动态）禁用。
+* 契约：`api/openapi.yaml` 的 `GET /reviews/{review_id}/refetch` 补上 `canonical_state`/`stage`/`label`/
+  `task_id`/`terminal_reason`/`last_remote_state`/`notify_count`/`finished_at`/`progress` 与 `events`，
+  `state` 保持旧词表并写明映射（wire 兼容不变）；`webapp/src/api/generated/schema.d.ts` 重新生成
+  （顺带补回此前漂移未生成的 `/posts/hot`）。
+* **验证**：`webapp` 内 `npm run typecheck` exit 0；`npx eslint src` 0 error（2 条既有
+  `react-refresh/only-export-components` warning，均在未改动文件）；`npx vitest run` → `11 files / 50 tests passed`；
+  `npm run build`（含 `generate:api`）exit 0；远端 `Mini App CI` run `36298324905` 三个 job 全 success。
+
+## 1.2 TelePost 2.70.1（95ddc64，doctor 恒定误报修正）
+
+* 现场核对时发现：`doctor` 的 `delivery_outbox` 检查对整张 `delivery_ledger` 取 `MIN(created_at)` 判年龄，
+  但该表是「**已确认发布**」的幂等账本（`telepost/storage/sqlite/ledger.py:1-5`），历史行只会越来越老 ⇒ 两个 bot 恒定报
+  `WARN delivery_ledger 最旧记录已 24108.1 分钟`（bot2 23545.9）——恒定的噪声告警会掩盖真实积压，属实现缺陷而非现场问题。
+* 修正（`telepost/observability/doctor.py` `_check_delivery_outbox`）：年龄只统计**未确认**行
+  （`FAILED_LEDGER_STATUSES = ('partial','uncertain','failed','error')`，`:78`），新增且恒定输出
+  `details.ledger_oldest_unresolved_age_seconds`，消息文案改为「最旧未确认记录已 N 分钟」；
+  `delivery_outbox` 队列表保持整表年龄（那里一行就代表待处理工作）。`docs/CONFIGURATION.md:310` 同步说明。
+* 测试：`tests/test_doctor.py` 31 passed（新增 `test_published_ledger_history_never_warns_on_age`、
+  `test_stale_unresolved_ledger_row_is_warn`）；`tests/test_doctor.py tests/test_observability.py
+  tests/test_observability_lifecycle.py` → 45 passed。
+* 发布：`95ddc64 fix(observability): stop the doctor from warning about settled ledger history` +
+  手工发布提交 `f57d161`（release 2.70.1），Release run `36299841574` success。
+* 现场复验：容器内 `doctor --all-bots` → `HEALTHY / 16 OK / 0 WARN`，`DOCTOR_EXIT=0`。
+
+## 2 PixivFlow 3.1.0（661964c + d23fed2）
+
+* 发布：`583a74c chore(master): release 3.1.0 (#175)`（只动 `.release-please-manifest.json` / `CHANGELOG.md` / `package.json` / `package-lock.json`）；
+  功能提交 `d23fed2 feat(topic): carry provenance and weight through tag expansion`（12 文件，+1080/-40）
+  与 `661964c feat(novel): classify the cover content type and gate delivery by policy`（10 文件，+354/-33）。
+* **Tag provenance**：`TagSource = 'seed'|'cooccurrence'|'autocomplete'|'cooccurrence+autocomplete'`（`src/topic/types.ts:21`），
+  `ResolvedTag` 增可选 `source`/`weight`（`:35`/`:37`）；seed 的 score/weight = 1（`src/topic/TopicResolver.ts:118-121`）；
+  autocomplete-only 权重 `AUTOCOMPLETE_ONLY_SCORE = 0.27`（`src/topic/TopicTagScorer.ts:54`）；cooccurrence 的 `weight` 就是 `score`
+  （`:124`、`:131`）。
+* **新配置全部可选、默认 = 旧行为**（默认值是「字段缺失」，不是字面量）：`topicDiscovery.seedTier`（默认 `'off'`；`:219` 只在 `'on'`
+  时把带 seed Tag 的作品排在热度之前）、`topicDiscovery.tagRelations.{allowSources,allow,deny}`（deny 优先 `:104-109`；
+  seed 不会被 allow/allowSources 丢掉 `:80-81`/`:117-118`）、`topicDiscovery.matchTranslatedNames`（默认 `false`，`:209`）。
+* **关系过滤发生在任何检索之前**（`src/topic/TopicPipeline.ts:210`；唯一检索调用在 `:226`）；`selection.resolvedTagCount`
+  改为统计被走到的 Tag（`:290`）；译名经 alias map 保证同一 Tag 对一篇作品只计一次（`:128-141`、`:413`、`:418-419`）。
+* **诊断**：`topic resolve` 输出 `name/translated/source/weight/score/seed/searched`（`src/commands/TopicCommand.ts:92`）；
+  `topic test` 输出 `searchedTags=`（`:143`）。
+* **封面内容类型**：`src/domain/media/NovelCoverPolicy.ts`（84 行）`classifyNovelCover()` → `custom` / `pixiv_generated`（恰好 640x900）/
+  `unknown`（`:35`、`:43-44`、`:66-73`）；`coverDeliveryDecision()`（`:77-84`）：`pixiv_generated` **无条件** `skip`，
+  `unknown` 由 `download.novelCover.unknown` 决定（默认 `skip`，`:56`）；探测失败记 `probe_failed` 并**保留**封面
+  （`src/download/NovelDownloader.ts:465`）。尺寸只读头部字节（`src/utils/imageDimensions.ts`，97 行，3.0.3 的 `182694d`），失败即返回 `undefined`。
+* **默认行为被测试钉住**：`src/__tests__/topic/TopicRecall.test.ts:86-95`（默认仍是全空间检索 + 热度排序）、
+  `src/__tests__/topic/TopicFeature.test.ts:247-280`（`RANKING IS POPULARITY-ONLY`）。
+* **验证（本机复跑，2026-09-27；本地工作树 HEAD `d23fed2`，比发布提交 `583a74c` 落后 1 个提交）**：
+  `node_modules/.bin/jest --silent` → `Test Suites: 129 passed, 129 total` /
+  `Tests: 1424 passed, 1424 total` / `Snapshots: 0 total`；`node_modules/.bin/tsc --noEmit` → exit 0（无输出）。
+  该仓库没有本地 ESLint。
+
+## 3 文档
+
+* 本仓库新增 `docs/architecture/refetch-job-model.md`（重抓作业的权威参考：状态机 / 唯一写入口 / 时间线 / 候选因果 /
+  远端 cell 投影 / 四道闸门 / doctor / 排障 / 禁止事项），并注册进 `docs/_sidebar.md`「架构设计」组。
+* `docs/architecture/refetch-tag-cover-architecture-audit.md`：`Status` 改为 P0/P1 IMPLEMENTED；新增 `## 0 实施结果（2026-09-27）`
+  对照表与「仍未完成」清单；§2/§3 中已被推翻的句子就地标注「改造前事实」（不删除历史证据）。
+* `docs/architecture/ecosystem-platform.md` 新增 §28.1（重抓作业所有权与投影）；`docs/CONTRACT.md` 新增 §3.1
+  （远端 cell → 阶段词汇表，并声明 wire 契约未变）；`docs/operations/refetch-production-verification.md` 追加 2.69.0 验证基线。
+* PixivFlow：新增 `docs/TAG_RANKING.md`（141 行：分值语义 / 来源分类 / 排名规则 / 配置 / 诊断），注册进 `docs/README.md:44`
+  与 `docs/_sidebar.md:9`；`docs/CONFIG.md` 增补 `seedTier` / `tagRelations` / `matchTranslatedNames` 与封面策略小节；
+  `CHANGELOG.md` 的 3.1.0 段落恰好列出两条 feature。
+
+## 4 现场核对（只读）
+
+Status: VERIFIED（2026-09-27，release → pin → 部署 → 运行时取证全部完成）
+
+* **pin（已提交，见本节末 commit）**：`fly/deploy.telepost.toml` `TELEPOST_IMAGE` = `ghcr.io/redtidev1918/telepost:2.70.1`；
+  `fly/deploy.pixivflow.toml` `PIXIVFLOW_REF` = `583a74c98ef708223d100abbd9b255b26976218e` / `PIXIVFLOW_VERSION` = `3.1.0`。
+* **release**：PixivFlow 3.1.0（release PR #175 squash 合并 → `583a74c`，tag `v3.1.0`，Release run `36297971345` success）；
+  TelePost 2.70.1（release-please 仍不产出发布提交 → 手工发布提交链 `ba349a7`(2.70.0) → `95ddc64`+`f57d161`(2.70.1)，
+  Release run `36299841574` success，镜像 `telepost:2.70.1`）。
+* **部署**（均须 `env -u HTTPS_PROXY -u HTTP_PROXY -u ALL_PROXY`，fly 走代理会 `EOF`）：
+  `fly deploy -c fly/deploy.pixivflow.toml --ha=false` → 镜像 `deployment-01M3GQ97EJ35QRT0KT05VR14A7`
+  （digest `sha256:e7c6c75a7ccd6a86bcbf8b9f42c9f62b2966c27edef376102099a6b5b43929fa`），机器 `83d1650bd23948` 部署后回到 `stopped`（设计态）；
+  `fly deploy -c fly/deploy.telepost.toml --ha=false --strategy rolling` → 镜像 `deployment-01M3GR35TE1WFX4W1B542E7MV1`，
+  机器 `683032ec6617e8` 1/1 checks passing。
+* **`/health`**：PixivFlow `{"status":"ok","version":"3.1.0","commit":"583a74c98ef7"}`；
+  TelePost `"version": "2.70.1"`, `"commit": "f57d1617ef639eeccdbb749adb80f479c45a841b"`, `build_date 2026-09-27T06:26:24Z`,
+  `telepress_version 0.16.1`, volume `159.8/973.7 MB`, `review_queue pending 0`。
+* **`./scripts/verify-images.sh` exit 0**：`[OK] 仓库固定的 TelePost 镜像：ghcr.io/redtidev1918/telepost:2.70.1`、
+  `[OK] 仓库固定的 PixivFlow 提交：583a74c98ef708223d100abbd9b255b26976218e`、`[OK] TelePost 线上镜像匹配 2.70.1`、
+  `[OK] 执行端报告的版本包含 583a74c98ef7`。
+* **`python -m telepost.observability.cli doctor --all-bots`（容器内）**：`HEALTHY`，`检查 16 项：16 OK / 0 WARN / 0 CRIT / 0 SKIP`，
+  `DOCTOR_EXIT=0`；两库 `PRAGMA integrity_check = ok`、无活跃重抓、无孤儿审核、无卡 publishing。
+* **运行时取证（只读 grep，证明代码真的在容器里）**：
+  PixivFlow `/app/dist/topic/TopicPipeline.js` `selectWalkedTags` ×3 / `seedTier` ×4 / `allowSources`；`/app/dist/config/validation.js` `Unknown tag source`；
+  `/app/dist/domain/media/NovelCoverPolicy.js` `classifyNovelCover` / `coverDeliveryDecision` / `PIXIV_GENERATED_COVER_WIDTH`，`/app/dist/download/NovelDownloader.js` 引用 `classifyNovelCover`；
+  TelePost `/app/handlers/review.py:92-105` 五道闸门默认值 2/10/20/12/30，`/app/telepost/domain/refetch_state.py` 存在（9903 B），
+  `/app/telepost/observability/doctor.py` 含 `最旧未确认记录` + `ledger_oldest_unresolved_age_seconds`，
+  Mini App `/app/webapp/dist/assets/index-B8NVYagl.js` 含 `refetch-` 与 `搜索候选`。
+* **现场发现并当场修掉的缺陷（2.70.1）**：doctor 的 `delivery_outbox` 检查对**整张** `delivery_ledger` 取 `MIN(created_at)`，
+  而该表是「已确认发布」的幂等账本（行只会越来越老），于是两个 bot 恒定报
+  `delivery_ledger 最旧记录已 24108.1 分钟` / `23545.9 分钟`——恒定噪声会掩盖真实积压。
+  修正为只看未确认行（`partial`/`uncertain`/`failed`/`error`），并在消息里写明「未确认」（提交 `95ddc64`，发布 2.70.1）。
+  注意：本仓库 `docs/architecture/refetch-job-model.md:219` 描述的就是修正后的语义，即**文档是对的、代码是错的**。
+
+## Pending
+
+* **顺延（上一轮 2.68.1 / 3.0.3 的外部验收，仍未现场确认）**：① 点重抓后审核卡立刻变成「重抓中」形态，
+  且 2 分钟内有带已等待时长的进度提醒；② 小说投稿里 Pixiv 生成设计封面不再作为封面发出，而作者真封面仍为 2；
+  ③ 主题目标的 `[TopicRecall]` 日志与 `searchedTags` 能证明主题 Tag 先被搜。
+* **本轮外部验收（必须在真实投稿上做，本机/只读检查无法替代）**：① 真实点一次重抓，卡片/群消息必须带
+  `任务ID refetch-<review>-<epoch秒>` 与已等待时长，且进度提醒**重复**出现（默认每 2 分钟一次，不是只发一次）；
+  ② 让一个阶段真正停滞，必须以「重抓超时未完成」收口（`failure_code = stalled_no_progress`）而不是无限 `SEARCHING`；
+  ③ 小程序「审核详情」在重抓进行中显示任务ID/阶段/已等待，且「重抓」按钮为禁用态。
+* **本轮只读项已清零**：`/health`、`verify-images.sh`、`doctor --all-bots`、运行时 grep 均已现场通过（见 §4）。
+* **后续观察**：`delivery_ledger` 目前没有任何未确认行（两库皆 0），所以 2.70.1 之后 `delivery_outbox` 常绿是**真实结论**，
+  不是被规避；一旦出现 `partial`/`failed` 行且超 30 分钟，doctor 应立刻 WARN——这是下一轮现场投稿要顺带看的信号。
 
