@@ -75,7 +75,7 @@ Related: `refetch-silent-failure-cure.md`（触发本协议的重抓静默故障
 | `attempt` | int | 已尝试次数 |
 | `result` | Result? | 终态成功时 |
 | `error` | Error? | 终态失败时 |
-| `events_url` | string | 事件历史/对账入口 |
+| `events_url` | string | 事件历史/对账入口。可以是绝对 URL，也可以是相对服务基址的路径（现场生产者的实现返回 `/jobs/{job_id}/events`；样例 fixture 为可读性写成绝对 URL）。消费者必须按 `base` 解析后再请求，不得假定其中一种形式 |
 
 ### 2.3 Event（生命周期，生产者 → 消费者，至少一次）
 
