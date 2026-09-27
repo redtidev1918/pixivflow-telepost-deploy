@@ -220,7 +220,14 @@ primary_region = 'iad'
     # history as an anomaly — the ledger records CONFIRMED posts, so its oldest
     # row only ever grows; the age check now looks only at rows that never
     # reached a terminal success (partial/uncertain/failed/error). Rollback = 2.70.0.
-    TELEPOST_IMAGE = 'ghcr.io/redtidev1918/telepost:2.70.1'
+    # 2.71.0 (2026-09-27): refetch runs over the Workflow Protocol v1 Job API —
+    # a durable Job (heartbeat, backoff, restart recovery) whose terminality the
+    # state machine tracks from the remote status, accelerated by the events
+    # channel (POST /api/botN/v1/jobs/events ingress + reconcile loop, idempotent
+    # by event_id, exactly-once terminal notification); callback_url is only sent
+    # when TELEPOST_API_BASE_URL is set. Requires PixivFlow >= 3.3.0. Rollback =
+    # 2.70.1 (with PIXIVFLOW_JOB_TRANSPORT=legacy for the executor call path).
+    TELEPOST_IMAGE = 'ghcr.io/redtidev1918/telepost:2.71.0'
 
 [[mounts]]
   source = 'data'

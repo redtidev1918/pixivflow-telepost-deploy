@@ -207,6 +207,18 @@ kill_timeout = 60
     # `download.novelCover.unknown` (skip | keep), fail-open. Defaults keep the
     # pre-3.1.0 behaviour (relatedTags always, seedTier off, translated-name
     # matching off). Rollback = the b01a93d line above.
+    # ed16abe = v3.3.0 (released 2026-09-27). Land the PixivFlow side of the
+    # Workflow Protocol v1 boundary (protocol/v1 in this deploy repo): the
+    # executor exposes GET /capabilities (negotiates the protocol version and
+    # the `candidate_search` job kind), POST /jobs (admit a manual refetch as a
+    # durable slot job, idempotent by idempotency_key), GET /jobs?idempotency_key=
+    # and GET /jobs/:id (opaque correlation; slotId is not a status input), POST
+    # /jobs/:id/cancel, plus the events channel (event_callback via the existing
+    # outbox/delivery_events, ack via job_event_cursors). Internal 'refetch' ->
+    # candidate_search mapped at the facade; the old /internal/targets/:id/refetch
+    # route remains as a compatible shim, so TelePost may roll back with
+    # PIXIVFLOW_JOB_TRANSPORT=legacy. outcome_version bumped to 2 (no consumer).
+    # Rollback = the c195b90 line above.
     # c195b90 = v3.2.0 (released 2026-09-27). Ships `examples/onebot-adapter/`:
     # a zero-dependency, runnable OneBot v11 delivery adapter — the "thin
     # conversion process" docs/GATEWAY.md §5.3 only described. Contract message
@@ -222,8 +234,8 @@ kill_timeout = 60
     # real delivery runtime against a fake OneBot API. No behaviour change for
     # any existing route: PixivFlow still ships no platform connector.
     # Rollback = the 583a74c line above.
-    PIXIVFLOW_REF = 'c195b909063ca63fa7de88a745c9b933b41e4133'
-    PIXIVFLOW_VERSION = '3.2.0'
+    PIXIVFLOW_REF = 'ed16abe8e47318d4b64c312d8ff5d099cf0708fb'
+    PIXIVFLOW_VERSION = '3.3.0'
 
 [[mounts]]
   source = 'pixivflow_data'
