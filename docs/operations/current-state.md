@@ -2978,7 +2978,10 @@ Status: IN_PROGRESS（协议 SSOT 与生产端 liveness 已落地并推送；两
 * **D 阶段（事件，进行中）**：`GET /jobs/{job_id}/events` + `…/events/ack` + `callback_url` 投递（§11.1：复用 `delivery_events` + outbox，
   不造第二套队列）、`labels` 持久化、`GET /jobs` 的 `correlation_id`/`status`/游标过滤、逐 Job 强制 `deadline_ms`。
   只有上述真正可用后，`/capabilities.features` 才允许声明 `events`。
-* **E 阶段（消费侧事件入口，未开工）**：TelePost 侧需新增 `POST /api/bot<N>/v1/jobs/events`（裸 `$defs/Event`、`event_id` 唯一去重）
+* *** **发版前文案与 README 打磨（用户明确要求，2026-09-28 记入）**：施工阶段不碰用户可见文案；一旦 E 落地、功能收口，
+  把「推送、发版、部署」之前的最后一步定为**重写/优化两个仓的 README 与用户可见文案**（协议行为、能力声明、升级说明、
+  排障——尤其是「重抓不再永久静默」这件事要以人能读懂的方式写出来），再推送、发版并现场验收。
+E 阶段（消费侧事件入口，未开工）**：TelePost 侧需新增 `POST /api/bot<N>/v1/jobs/events`（裸 `$defs/Event`、`event_id` 唯一去重）
   与「按 `unacked=1` 补拉 → ack 回写」的对账循环；**待定**：消费者如何知道自己对外的回调基址（现有配置只有生产者的
   `delivery.targets.bot*-submit.refetchOutcomeUrl`，没有 TelePost 自己的公开基址键）——需在实现时就地确认，宁可新增显式配置键，
   也不要从旧业务回调地址反推。
