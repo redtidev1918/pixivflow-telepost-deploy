@@ -104,7 +104,7 @@ telepost/storage/sqlite/refetch.py:200-279
 | --- | --- |
 | `database/db_manager.py:328-332` | 启动迁移：回填 `updated_at`（`COALESCE(updated_at, finished_at, started_at, created_at)`） |
 | `database/db_manager.py:335-343` | 启动迁移：旧状态字符串就地归一化 |
-| `scripts/reconcile_legacy_refetch_attempts.py:133` | 运维脚本：历史 poisoned attempt 的一次性对账（带 audit） |
+| `TelePost/scripts/reconcile_legacy_refetch_attempts.py:133` | 运维脚本（在 **TelePost** 仓库，不属于本仓库）：历史 poisoned attempt 的一次性对账（dry-run 默认、`--apply` 才写，带 audit） |
 
 `RefetchRepository.bump_progress_notified()`（`refetch.py:382-396`，写 `:391`）只写
 `last_progress_notified_at`/`notify_count`，注释明确说明它**故意不碰 `updated_at`**——提醒的次数
