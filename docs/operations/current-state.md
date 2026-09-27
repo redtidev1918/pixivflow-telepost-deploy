@@ -2972,9 +2972,13 @@ Status: IN_PROGRESS（协议 SSOT 与生产端 liveness 已落地并推送；两
 
 ### 4 仍未完成
 
-* **C 阶段（消费侧切换，进行中）**：`telepost/application/pixivflow_jobs.py` 目前仍走旧 `POST /internal/targets/{t}/refetch`
-  （生产者已把它降级为同一 admission 核心的 shim）。正在把端口切到 `POST /jobs`（`job_type=candidate_search`）并用
-  `GET /jobs/{id}` 读状态，保留 `PIXIVFLOW_JOB_TRANSPORT=legacy` 回滚；切完后旧入口应无人调用（可加计数告警）。
+* **C 阶段（消费侧切换，已完成 ✅）**：`33f85071…` 落地并已测（**a57a7bb** `feat(protocol): switch TelePost refetch…`）。
+  端口 `pixivflow_jobs.py`（889 行）切到 `POST /jobs`（`job_type=candidate_search`）+ `GET /jobs?idempotency_key=` +
+  `GET /jobs/{id}`，`GET /capabilities` 先协商、失败即 loud 不回退；终态只由协议 `status` 推导（不再读 `labels.terminal`）；
+  `PIXIVFLOW_JOB_TRANSPORT`（默认 `protocol`，`legacy`=字节一致的旧路回滚）只在一处读取；修了快照解码器只认 legacy
+  camelCase 时间戳、会给活任务误判停摆的 bug（`_pick` 双拼写）。离线 gate exit 0（“内部路径只出现在端口模块 4 处”）；
+  全量 `1164 passed, 1 skipped`（基线 1139，增量恰为 +25、零回归）。旧入口已无人调用。cancelled/expired→`failed`、
+  recovery `/recover` 留 v2，均为文档化边界。
 * **D 阶段（事件，进行中）**：`GET /jobs/{job_id}/events` + `…/events/ack` + `callback_url` 投递（§11.1：复用 `delivery_events` + outbox，
   不造第二套队列）、`labels` 持久化、`GET /jobs` 的 `correlation_id`/`status`/游标过滤、逐 Job 强制 `deadline_ms`。
   只有上述真正可用后，`/capabilities.features` 才允许声明 `events`。
