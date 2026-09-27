@@ -2057,6 +2057,10 @@ submission observed so far predates it. The next `bot1-daily` (10:00 CST) /
 `bot2-daily` (10:10 CST) run is the acceptance point: the delivered note must carry
 the author line. Until that is observed: `EXTERNAL_ACCEPTANCE_REQUIRED`.
 
+**Resolved（2026-09-27 现场确认）**：下一轮投稿的 note 已带作者行 —— bot1 行 `136`、
+bot2 行 `104` 都是 `🖌 作者：…`，且旧模板里空的 `📅  ·` 槽位已消失。证据见文末
+「2026-09-27 现场验收」节。
+
 ## Pending
 
 * PixivFlow's next release must carry the CLI fix; then bump `PIXIVFLOW_REF` /
@@ -2069,6 +2073,7 @@ the author line. Until that is observed: `EXTERNAL_ACCEPTANCE_REQUIRED`.
 # 2026-09-27 PixivFlow 3.0.1 上线：CLI 失败可见
 
 Status: VERIFIED (release → pin → runtime) / EXTERNAL_ACCEPTANCE_REQUIRED (author line)
+—— Resolved by 2026-09-27 现场验收（文末节）
 
 上一节的 Pending（“修复只在 master，容器仍跑 `c43e4c3`”）已由本节关闭：修复已经过
 release → pin → runtime 三段路，并且在容器里现场复现。
@@ -2130,13 +2135,14 @@ release → pin → runtime 三段路，并且在容器里现场复现。
 
 ## Pending
 
-* 只剩一项：下一次 `bot1-daily`（10:00 CST）/ `bot2-daily`（10:10 CST）投稿的 note 必须
-  出现 `🖌 作者：…` 行（卷配置已就位、模板变量在 topic 模式下由下载器填充 `author`）。
-  观察到之前，本节状态保持 `EXTERNAL_ACCEPTANCE_REQUIRED`。
+* 作者行验收点：**已现场确认通过（2026-09-27 投稿）** —— bot1 行 `136`、bot2 行 `104`
+  的 note 都带 `🖌 作者：…`（同批还确认了 `spoiler=0` 与小说封面预览）；见文末
+  「2026-09-27 现场验收」节。
 
 # 2026-09-27 PixivFlow 3.0.2 上线：失败的契约字段存活
 
 Status: VERIFIED (release → pin → runtime) / EXTERNAL_ACCEPTANCE_REQUIRED (author line)
+—— Resolved by 2026-09-27 现场验收（文末节）
 
 ## 1 发布
 
@@ -2192,12 +2198,12 @@ Status: VERIFIED (release → pin → runtime) / EXTERNAL_ACCEPTANCE_REQUIRED (a
 
 ## Pending
 
-* 作者行验收点不变：下一次 `bot1-daily`（10:00 CST）/`bot2-daily`（10:10 CST）投稿的
-  note 必须出现 `🖌 作者：…` 行。观察到之前保持 `EXTERNAL_ACCEPTANCE_REQUIRED`。
+* 作者行验收点：**已现场确认通过（2026-09-27 投稿）** —— bot1 行 `136`、bot2 行 `104`
+  的 note 都带 `🖌 作者：…`；见文末「2026-09-27 现场验收」节。
 
 # 2026-09-27 投稿遮罩策略：默认不遮罩（`spoiler=false`）
 
-Status: VERIFIED (config → live volume → hot reload) / EXTERNAL_ACCEPTANCE_REQUIRED (下一次投稿的现场确认)
+Status: VERIFIED (config → live volume → hot reload → 投稿现场确认 2026-09-27)
 
 ## 1 现场问题与定性
 
@@ -2249,13 +2255,13 @@ Status: VERIFIED (config → live volume → hot reload) / EXTERNAL_ACCEPTANCE_R
 
 ## Pending
 
-* 下一次 `bot1-daily`（10:00 CST）/`bot2-daily`（10:10 CST）投稿必须出现 `spoiler=0` 的
-  `pending_reviews` 行、且审核群图片不带遮罩；同时核对 note 的 `🖌 作者：…` 行。
-  观察到之前保持 `EXTERNAL_ACCEPTANCE_REQUIRED`。
+* **已现场确认通过（2026-09-27 10:00/10:10 CST 投稿）**：新增的
+  `pending_reviews` 行 bot1 `135`/`136`、bot2 `103`/`104` 全部 `spoiler=0`
+  （含 R-18 作品）；note 的 `🖌 作者：…` 行也在同一批行上确认。见文末验收节。
 
 # 2026-09-27 TelePost 2.68.0 上线：审核群预览小说封面
 
-Status: VERIFIED (release → pin → runtime) / EXTERNAL_ACCEPTANCE_REQUIRED (下一次小说投稿的现场确认)
+Status: VERIFIED (release → pin → runtime → 小说投稿现场确认 2026-09-27)
 
 ## 0 现场问题与根因
 
@@ -2339,8 +2345,44 @@ Status: VERIFIED (release → pin → runtime) / EXTERNAL_ACCEPTANCE_REQUIRED (�
 
 ## Pending
 
-* **封面预览验收点**：下一次 `bot1-daily`（10:00 CST）/`bot2-daily`（10:10 CST）里
-  「有真实封面」的小说投稿，`pending_reviews` 行必须仍是 `media=0 docs=1` 但
-  `review_message_ids` 长度为 **2**，且审核群里先出现封面图再是 TXT。观察到之前保持
-  `EXTERNAL_ACCEPTANCE_REQUIRED`。
-* 作者行验收点（`🖌 作者：…`）与遮罩验收点（`spoiler=0`）不变，见上一节。
+* **封面预览验收点：已现场确认通过**（2026-09-27 投稿）：bot1 行 `136`、bot2 行 `104`
+  仍是 `media=0 docs=1`，但 `review_message_ids` 长度已是 **2**（`staging_only` 的封面
+  URL 照片 + TXT）。证据见文末验收节。
+* 作者行验收点（`🖌 作者：…`）与遮罩验收点（`spoiler=0`）**同样已确认**，见文末验收节。
+
+# 2026-09-27 现场验收：三处待验收全部通过（10:00/10:10 CST 投稿）
+
+Status: VERIFIED（只读现场核对）
+
+## 1 采集方式
+
+* 只读探针（`sqlite3 file:/app/data/botN/submissions.db?mode=ro`，只 SELECT）：
+  `fly ssh console -a telesubmit-multi-bot -C "sh -c 'python3 -'" < /tmp/accept-probe.py`，
+  采集时间 2026-09-27T10:16:30 CST（引擎时间约 02:16Z）。
+* 本轮两轮投稿都在：bot1 `bot1-daily@2026-09-27T1000`、bot2 `bot2-daily@2026-09-27T1010`；
+  新增行 bot1 `135`（illustration，pixiv `150123915`）/`136`（novel，pixiv `29229643`）、
+  bot2 `103`（illustration，pixiv `150132222`）/`104`（novel，pixiv `29230194`），
+  两轮都走完 `review.created → review.preview_staged → (media.prepared) →
+  review.control_created → review.pending → submission.accepted`。
+* 对照（修复前形状，同表历史行）：novel 行 bot1 `134/132/130`、bot2 `102/100/98` 全是
+  `media=0 docs=1 previews=1`，note 还是旧模板 `📅  · ⭐ …`（无作者行）。
+
+## 2 三条验收点
+
+* **遮罩默认不遮（`spoiler=false`）** —— 新行 `spoiler` 全为 `0`：
+  bot1 `135`=0、`136`=0；bot2 `103`=0、`104`=0。旧行里 `134`/`132`/`100`/`98` 是 `1`、
+  `102`/`99` 是 `0`，即遮罩本来就跟作品走；策略改成 `false` 后**全部不再遮罩**，
+  与 `CHANGELOG.md:440-445`（1.8.3 起的显式策略）一致。
+* **审核群预览小说封面** —— 两条 novel 行都是 `media=0 docs=1 previews=2`：
+  bot1 `136`、bot2 `104`。`media_json` 仍是 `[]`（封面是 `staging_only` 的 URL 照片，
+  预览多一条消息但审核记录不重复计数；发布侧仍从 canonical `:novelcover` asset 自建
+  频道 root）。illustration 行不受影响：bot1 `135` `previews=1` = 图片数 1、
+  bot2 `103` `previews=2` = 图片数 2。
+* **note 作者行 / 空日期槽** —— 新行 note 形如
+  bot1 `136`：`🖌 作者：诺克斯` / `⭐ 7 · 👁 103` / `🏷 ボテ腹 · Pixiv 分级：R-18`；
+  bot2 `104`：`🖌 作者：慕尼黑屠夫` / `⭐ 34 · 👁 529` / `🏷 丸呑み · Pixiv 分级：R-18`。
+  旧行的空 `📅  ·` 槽位已不再出现。
+
+## Pending
+
+* 无。三处验收点（`spoiler=0` / 小说封面预览 / 作者行）都在本轮现场投稿上确认通过。
