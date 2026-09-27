@@ -47,6 +47,7 @@
   - [Roadmap：多架构实现计划](/ROADMAP-MULTI-ARCH.md)
   - [事故：Pixiv 出口限流 2026-09-11](/incidents/2026-09-11-pixiv-egress-rate-limit.md)
   - [事故：定时触发漏跑 2026-09-13](/incidents/2026-09-13-schedule-trigger-miss.md)
+  - [事故：重抓静默取消 2026-09-27](/incidents/2026-09-27-refetch-silent-cancel.md)
 - 架构设计
   - [社区参考定位](/architecture/community-reference-position.md)
   - [生态平台架构](/architecture/ecosystem-platform.md)
