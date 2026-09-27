@@ -207,6 +207,20 @@ kill_timeout = 60
     # `download.novelCover.unknown` (skip | keep), fail-open. Defaults keep the
     # pre-3.1.0 behaviour (relatedTags always, seedTier off, translated-name
     # matching off). Rollback = the b01a93d line above.
+    # 5d23117 = v3.4.0 (released 2026-09-27). Workflow Protocol v1.1: the generic
+    # POST /jobs face can name its target again. v1 required the target to be
+    # discovered from configuration, but production configures FOUR manual-eligible
+    # targets (2 bots x illustration/novel) and one Pixiv account, so every real
+    # TelePost request was rejected 409 ambiguous_target while the legacy route kept
+    # working — the face was unusable for the only consumer that needed it.
+    # Additive fix: `params.target_id` is a SELECTOR over `schedules[].targetIds`
+    # (404 unknown_target, 409 ambiguous_target when unspecified and several are
+    # eligible; it never overrides delivery wiring or plan identity), `params.query`
+    # becomes optional so a selector-only job runs the target exactly as configured
+    # (the pre-protocol refetch semantics), and GET /capabilities declares the
+    # `target_selector` feature so consumers can negotiate it. Also fixes the deploy
+    # harness's shim-equivalence probe (non-UUID requestId -> 400, and the shim's
+    # string `error` read as an object). Rollback = the ed16abe line above.
     # ed16abe = v3.3.0 (released 2026-09-27). Land the PixivFlow side of the
     # Workflow Protocol v1 boundary (protocol/v1 in this deploy repo): the
     # executor exposes GET /capabilities (negotiates the protocol version and
@@ -234,8 +248,8 @@ kill_timeout = 60
     # real delivery runtime against a fake OneBot API. No behaviour change for
     # any existing route: PixivFlow still ships no platform connector.
     # Rollback = the 583a74c line above.
-    PIXIVFLOW_REF = 'ed16abe8e47318d4b64c312d8ff5d099cf0708fb'
-    PIXIVFLOW_VERSION = '3.3.0'
+    PIXIVFLOW_REF = '5d231179a9b36ba5199d0c7c5fbf14013d43fb36'
+    PIXIVFLOW_VERSION = '3.4.0'
 
 [[mounts]]
   source = 'pixivflow_data'
