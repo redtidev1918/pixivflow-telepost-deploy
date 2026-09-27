@@ -2500,7 +2500,8 @@ Status: VERIFIED (release → pin → runtime) / EXTERNAL_ACCEPTANCE_REQUIRED（
   -u HTTP_PROXY -u ALL_PROXY` 执行。
 * **Pixiv 生成设计封面 = 640x900 画布**：`novel-cover-master-default` 占位图已经不再是
   这套设计封面的特征；要区分只能用画布尺寸（作者真封面各有各的尺寸）。探测必须
-  fail open，否则一次网络抖动就会让真封面消失。
+  fail open，否则一次网络抖动就会让真封面消失。（该口径 2026-09-28 起被策略取代：
+  `download.novelCover.probeFailed`，默认 `skip`——见文末「2026-09-28 内容链路稳定化」§2。）
 * **「重抓」的可见反馈属于契约，不属于 UI 打磨**：现场时间线证明，等待 2 分钟内没有
   任何卡片变化时操作者一定会先做别的判断（这里是拒绝），而拒绝会让正在路上的替换稿
   按设计作废——反馈缺失会把正常竞态放大成「功能坏了」。
@@ -3155,14 +3156,15 @@ Status:
 * #2 主题 Tag 联想（生产配置）—— `VERIFIED`（仓库改好 + 两层校验通过 + **卷上运行副本已就地应用**：
   sha256 回读一致、调度器热重载到 generation 2；见 §1。本仓库 PR #169 已合并到 `main`
   （squash `39b0c56`）——**仓库改好 ≠ 线上生效**，线上生效靠的就是 §1 那次就地应用）
-* #4 封面探测失败策略 —— `IMPLEMENTED_NOT_VERIFIED`（PR redtidev1918/PixivFlow#181 已合并到 `master`
-  （squash `efb6762`）；release-please 随即开出的 PR #180 `chore(master): release 3.4.2` **仍开着**——
-  未合并发布、未部署，生产仍跑 pin 住的 3.4.1 镜像）
+* #4 封面探测失败策略 —— `VERIFIED`（PR redtidev1918/PixivFlow#181 已合并到 `master`（squash `efb6762`）；
+  release PR #180 合并（merge `4db0bf2`）→ tag `v3.4.2` + Release `v3.4.2`(Latest) + npm `pixivflow@3.4.2`
+  + ghcr `pixivflow:3.4.2`；执行端已换到该 pin，运行期核对（启动行 / `/health` / `verify-images.sh`）通过——
+  见文末「2026-09-28 发布 3.4.2 / 2.71.2」§1）
 * #1 重抓卡死 / #3 卡片不更新 —— `VERIFIED`（生产库只读取证 + 运行镜像代码 + release 时间线三者互证：
   历史真问题，当前 2.71.1 已修）
-* 遮罩 (b)「默认不糊 + 遮罩由审核员发布前决定」—— `IMPLEMENTED_NOT_VERIFIED`
-  （PR redtidev1918/TelePost#242 已合并（squash `05c7128`）到 `fix/incident-140-data-class`：
-  审核群预览改为**恒不遮罩**，频道发布仍取存储行值；该分支本身尚未进 `main`，未发布、未部署，见 §4）
+* 遮罩 (b)「默认不糊 + 遮罩由审核员发布前决定」—— `VERIFIED`
+  （PR #242（squash `05c7128`）与 #243（squash `ed10c1a`）已进 `main`，2.71.2 已发布并部署：
+  审核群预览改为**恒不遮罩**，频道发布仍取存储行值——见文末「2026-09-28 发布 3.4.2 / 2.71.2」§2）
 
 ## 1 #2 主题 Tag 联想：生产 target 显式开 `relatedTags: when_seed_insufficient`
 
@@ -3371,3 +3373,76 @@ Status: FAIL（线上可复现；未修复）
   规范化 `requestId`，形状不对就**在准入时** 400 说清楚，而不是落一个注定在投递端失败的键；(2) 投递模板在键不是
   规范 UUID 时**省略** `refetch_request_id` —— 手工触发的一次日常运行本来就没有可关联的重抓，空值才是真话，
   这样投递能正常完成。TelePost 侧那条校验保持不动：它是「存储值必须能匹配自身 attempt UUID」的不变量。
+
+---
+
+# 2026-09-28 发布 3.4.2 / 2.71.2 并把两个平面换到新 pin
+
+Status: `VERIFIED`（发布产物、pin 文件、部署结果与运行期自报四者互证；证据逐条见下）
+
+## 1 PixivFlow 3.4.2（执行端）
+
+* 触发链：PR #180 `chore(master): release 3.4.2` 合并（**merge commit** `4db0bf21a7853e478f699d68f3458acda8270900`，
+  2026-09-27T20:19:10Z）→ push `master` 触发 Release run `36347586000`：`release-please` / `build-plan` /
+  `build (ubuntu)` / `finalize` 全部 success。
+* 产物：tag `v3.4.2`（annotated 对象 `61c8bda39e668f6b0aed1d66b7196ff1fb407010`）指向
+  `4db0bf21a7853e478f699d68f3458acda8270900`；GitHub Release `v3.4.2` 于 2026-09-27T20:31:21Z 发布（Latest，
+  正文由流水线生成，post-release 的 deploy-docs / refresh-download-page 均 success）；
+  npm `pixivflow@3.4.2`（`dist-tags.latest = 3.4.2`）；ghcr `pixivflow:3.4.2`（匿名 manifest 200）。
+* 内容（`d2e9c9e..4db0bf2`）：`efb6762`（#181 封面探测失败 → 策略 `download.novelCover.probeFailed`，默认 `skip`）
+  + `80e2b02`（consumer cancel 的终态不再被覆盖：`SlotCoordinator.applyOutcome` 把 `CANCELLED_BY_CONSUMER`
+  当终态、`NotificationPolicy.noteRefetchOutcome` 不再发 `disposition:failed`，含 finding-D 回归测试）
+  + `0c07a11` 发版提交 + `4db0bf2` 合并提交。
+* pin：`fly/deploy.pixivflow.toml` 的 `PIXIVFLOW_REF = '4db0bf21a7853e478f699d68f3458acda8270900'`、
+  `PIXIVFLOW_VERSION = '3.4.2'`。**两行必须同时改**：镜像里的 `PIXIVFLOW_REVISION=${PIXIVFLOW_VERSION}+${PIXIVFLOW_REF}`
+  是 build-arg 字面量，而 `./deploy pf <40位提交>` 只写 `PIXIVFLOW_REF`（只有参数是 x.y.z tag 时才顺带写 VERSION）。
+* 部署与运行期核对：`./deploy deploy --platform fly --plane pixivflow` → 机器 `83d1650bd23948` 换到镜像
+  `registry.fly.io/pixivflow-scheduler:deployment-01M3J90G5HSBMZY2ER9P51DQB2`（上一版
+  `deployment-01M3HSAJE4VQZ2B2PZZ8N7MTE5`），收尾处于期望的 `stopped`；唤醒后启动行
+  `PIXIVFLOW_REVISION=3.4.2+4db0bf21a7853e478f699d68f3458acda8270900`，
+  `GET /health` → `{"status":"ok","service":"pixivflow-scheduler-trigger","version":"3.4.2","commit":"4db0bf21a785"}`，
+  `scripts/verify-images.sh` 的执行端项 `[OK]`。该次启动的 `Scheduler configuration snapshot activated`
+  报 `generation: 1`（新进程从 1 起算；9-27 那次 `generation: 2` 是卷上配置编辑后的热重载，两者不是一回事）。
+
+## 2 TelePost 2.71.2（业务端）
+
+* **为什么这次又得手工落版本提交**：push `main` 触发的 Release run `36347783067` 里 `release_please` 成功，
+  但 `build` 与 `finalize` 都是 **skipped** —— releasegraph 的 provider 预对账报 `TAG_CONFLICT`
+  （`v2.71.1` tag 指向 `ff286e73…`，期望 `d22a82ae071fc0498d4114a30f044b77ea3ebe1f`；`v2.64.0` 同样）
+  且 `Repair: unsafe`，release-please 自身则以 `There are untagged, merged release PRs outstanding - aborting`
+  中止（#240 仍挂 `autorelease: pending`）。按本文件「运维教训：本仓的发版提交可能得自己落」的先例
+  手工落 `7dae61f chore: release 2.71.2`（`.release-please-manifest.json` + `CHANGELOG.md` +
+  `telepost/build_info.py`，3 files +17/−2；**tag 出现前 revert 即可回滚**）。
+* 触发 run `36348134912`：`release-please` / `build-plan` / windows+ubuntu+macos `build` / `finalize` 全部 success；
+  tag `v2.71.2`（对象 `1170bab8ffaf6ddb8628b4f4f4d6cb27a2a06369`）→
+  `7dae61fbaa8ab02b983424b11da2bd7699093b61`；GitHub Release `v2.71.2` 于 2026-09-27T20:37:03Z 发布（Latest）；
+  ghcr `telepost:2.71.2`（匿名 manifest 200）。
+* pin 与部署：`TELEPOST_IMAGE = 'ghcr.io/redtidev1918/telepost:2.71.2'`；
+  `./deploy deploy --platform fly --plane telepost` → 机器 `683032ec6617e8` 换到 Fly release 237
+  `registry.fly.io/telesubmit-multi-bot:deployment-01M3J9G18GJ58H4C0X4Q9GCXD1`（上一版 release 236 =
+  `deployment-01M3HSFJTS9WBQY27MVJ8V3DG3`），smoke 与部署后健康检查通过；
+  `GET https://telesubmit-multi-bot.fly.dev/health` → `version 2.71.2`、
+  `commit 7dae61fbaa8ab02b983424b11da2bd7699093b61`。
+* 全量校验：`scripts/verify-images.sh` 四项 `[OK]`；`scripts/verify-production.sh` **退出码 0**（7 节里
+  只有缺凭据的 Telegram webhook 归属与 Cloudflare 时钟 `SKIP`，其余 `[OK]`，含「未授权的触发被拒（HTTP 401）」
+  与「执行端机器 restart.policy = no」）。
+
+## 3 本轮新查清的两件事（写下来免得下次再踩）
+
+* **发布后只剩最新一个 GitHub Release 对象**：两个代码仓的 `.release-policy.yml` 都设 `retention.stable = 1`
+  + `pruneStable = true`，而 `reusable-release.yml:505` 的步骤名就是「Publish, set Latest, audit, then prune
+  Release objects」⇒ 发 2.71.2 之后 `v2.71.1` 的 Release 对象已被删除（`gh release view v2.71.1` → 404；
+  tag 与 ghcr 镜像仍在）。**写回滚锚点时别声称「旧 Release 还在」。**
+* **`fly apps suspend` 不是流水线开关**（本轮复述，此处留档）：app 级 `suspended` 拦不住
+  `auto_start_machines`，外部时钟（cron-job.org / Cloudflare Worker / schedule-watchdog）照样能唤醒机器；
+  `fly apps list` 的 STATUS 列与 `fly apps list --json` 的 `Status` 字段不一致，以 `--json` 为准。
+  （补记：本轮部署之后 `pixivflow-scheduler` 的 app 级 `suspended` 标记已不存在——`fly apps list --json`
+  现在报 `deployed`，而机器仍是按设计处于 `stopped`；标记消失的具体原因未坐实，但这恰好再次说明它不是开关。）
+
+## 4 仍然未决（不在本轮范围）
+
+* TelePost 的 `v2.71.1` / `v2.64.0` `TAG_CONFLICT` **未对账** ⇒ 下一次发版仍需手工落版本提交；对账要人决策
+  （releasegraph 源码写死 “Tag conflicts are permanent: never move/force an existing tag.”，其 `AGENTS.md`
+  也写 “`TAG_CONFLICT` → stop and ask a human.”）。
+* §5 的 `invalid_refetch_provenance`（手动准入的键不是规范 UUID 时投递被永久拒绝）仍未修。
+* #2 的行为层验证窗口是下一次真实运行（每日 10:00 / 10:10 CST）。
