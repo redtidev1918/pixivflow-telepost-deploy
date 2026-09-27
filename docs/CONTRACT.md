@@ -14,12 +14,27 @@
 
 ## 目录
 
+0. Workflow Protocol v1（目标契约：Task / Job / Event / Result / Asset）
 1. 投稿 multipart 请求（PixivFlow → TelePost）
 2. 投稿响应（TelePost → PixivFlow）
 3. Refetch 终态 outcome（PixivFlow → TelePost）
 4. Schedule outcome（PixivFlow → TelePost）
 5. 富媒体预览链路（TelePress「/publish/rich-novel」→ Telegraph）
 6. 变更纪律（review checklist）
+
+---
+
+## 0. Workflow Protocol v1（目标契约，实施中）
+
+本文 1–5 节记录的是**今天的 HTTP 边界现状**，其中第 3 节（refetch 终态）、第 1/2 节的 `refetch_request_id` 字段、以及 PixivFlow 的 `slot_name='审核群重抓'`／`manual_request_id` 都属于**业务耦合面**：TelePost 的业务概念（review/refetch）直接长在 PixivFlow 的接口上。该边界的重定义由 Workflow Protocol v1 接管：
+
+- 规范（规范语义，SSOT）：[`architecture/workflow-protocol.md`](architecture/workflow-protocol.md)
+- 契约资产（机器可校验的 schema + fixtures + 版本策略）：[`protocol/README.md`](protocol/README.md)
+- 目标形态：消费者提交 `Task`（`job_type` + 不透明 `idempotency_key`/`correlation_id` + `params`）→ 生产者返回 `Job`（含 `created_at/started_at/updated_at/heartbeat_at/deadline_at/progress/error`）→ 终态以 `Event` 回调并 Ack/对账；`Result` 只描述候选与匹配依据（`matched_tags`），`Asset` 只描述类型/来源/质量，**是否发布、替换哪条审核、媒体策略一律由消费者决定**。
+- 兼容策略：现有 refetch 端点与 `refetchOutcomeUrl` 在 v1 期间保留为 **shim**（本文第 1–5 节继续有效），新代码不得再新增「某一侧专用接口 / 专用字段」的成对耦合；shim 在 v2 移除。
+- 两仓 vendored 副本由 `scripts/sync-protocol.sh` 同步，契约测试：TelePost `tests/test_protocol_contract.py`、PixivFlow `src/__tests__/protocol/contract.test.ts`。
+
+**改动纪律不变**：先改本文件与协议资产，再改两边代码（见第 6 节）。
 
 ---
 
