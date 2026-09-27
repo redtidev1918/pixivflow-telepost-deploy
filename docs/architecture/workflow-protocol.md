@@ -191,16 +191,35 @@ queued ──claim──▶ running ──▶ succeeded
 
 | code | 含义 | retryable |
 |---|---|---|
-| `no_candidate` | 搜完但没有可用候选（可能全是重复） | false |
-| `source_error` | 上游（Pixiv）错误 | true（可能） |
-| `auth_error` / `quota_exceeded` | 凭证/配额 | false / true |
-| `resource_busy` | 资源排队超时 | true |
-| `queued_too_long` / `stalled_no_progress` / `deadline_exceeded` | 超预算 | true |
+| `no_candidate` | 搜完但没有可用候选（可能全是重复/被排除） | true |
+| `source_error` | 上游（Pixiv）错误：网络、HTTP、下载、元数据 | true |
+| `auth_error` | 上游凭证失效，必须有人先处理 | false |
+| `quota_exceeded` | 限流/配额耗尽，退避后可再试 | true |
+| `resource_busy` | 资源竞争，本次没能开始执行 | true |
+| `queued_too_long` | 已准入但超出排队预算仍未开始 | true |
+| `stalled_no_progress` | 已开始后失去心跳（进程中断/卡死）超预算 | true |
+| `deadline_exceeded` | 整个 job 超过硬上限（含执行超时） | true |
 | `cancelled_by_consumer` | 消费者取消 | false |
-| `idempotency_conflict` / `unsupported_protocol_version` / `invalid_params` | 请求错误 | false |
-| `internal_error` | 生产者内部错误 | true |
+| `idempotency_conflict` | 同一 idempotency_key 用了不同参数 | false |
+| `unsupported_protocol_version` | 生产者不支持所请求的协议版本 | false |
+| `invalid_params` | 参数不满足 `capabilities` 声明的 `params_schema` | false |
+| `delivery_failed` | 结果已产出，但交给下游投递平台失败 | true |
+| `delivery_rejected` | 下游平台拒绝结果，契约或内容必须改变 | false |
+| `delivery_abandoned` | 投递意图已无可用重试，被生产者收敛为失败 | true |
+| `internal_error` | 生产者无法归类；诊断细节放 `detail` | false |
 
 **禁止**用 `message` 文本做跨边界判断（现状：TelePost 靠 `reason` 字符串识别 `refetch attempt is obsolete`）。
+
+### 5.1 封闭词表与生产者内部原因码的映射（阶段 B/C 的硬要求）
+
+协议的错误码是**封闭集合**：生产者的内部原因码必须在 job facade 处映射到这张表，**不得**把内部码原样透出给消费者；否则消费者又要去理解生产者的私有词汇（这正是今天 `refetch attempt is obsolete` 那类字符串判断的成因）。
+
+- 映射表是机器可读的：`protocol/v1/error-mapping.json` → `producer_internal`。`scripts/verify-protocol-v1.py` 会校验它：每个目标的协议码必须存在于 schema enum，且当生产者工作区可达时（`<repo>/src/scheduler/TargetOutcome.ts`），其 `TerminalReasonCode` 联合类型的**每个成员都必须被映射**——新增内部原因码而忘记给消费者语义会让验收脚本失败。
+- `protocol_codes` 必须与 schema enum 完全一致（多一个漏一个都算失败），每个码都要给出 `retryable` 默认值。
+- 载荷里带 `retryable` 时，**以载荷为准**；缺省时消费者回退到 `error-mapping.json` 的默认值。两者都不做「看 message 猜」。
+- 现状映射（PixivFlow `TerminalReasonCode`，19 个 → 16 个协议码；`filter_exhausted`/`duplicate_exhausted`/`no_candidate` 都并到 `no_candidate`，`stalled_no_heartbeat` → `stalled_no_progress`，`configuration_error` → `internal_error` 并在 `detail.internal_code` 里保留原名）。
+- 兼容期例外：**legacy `/refetch/status` 端点继续返回内部码**（诊断价值），只有 `GET /jobs/{job_id}` 走映射；这正是「shim 与协议面分离」的用意。
+- `Job.status` 的对应关系同理：生产者内部 `partial` 视为**成功但带警告**，映射为协议 `succeeded`，明细放 `progress`/`error`；内部 `claimed` 属生产者的记账细节（可由 `status != queued` 推出），facade 可以丢弃。
 
 ---
 

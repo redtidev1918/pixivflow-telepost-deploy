@@ -7,6 +7,7 @@ docs/protocol/
   README.md                 ← 本文件：版本策略、消费方式、契约测试要求
   v1/
     protocol.schema.json    ← JSON Schema 2020-12，$defs: Task/Job/Event/Result/Asset/Capabilities/Error
+    error-mapping.json      ← 封闭错误词表：协议码（含 retryable 默认值）+ 生产者内部原因码 → 协议码
     fixtures/               ← 双方契约测试共用的示例报文（必须能通过 schema 校验）
 ```
 
@@ -19,7 +20,7 @@ docs/protocol/
 
 ## 2 双方如何消费（契约测试）
 
-两个仓库都保留一份**vendored 副本**（`protocol/v1/…`），由本目录的 `scripts/sync-protocol.sh` 同步（脚本会写入 `protocol/v1/SOURCES.sha256`）。已同步：TelePost、PixivFlow 各 9 个文件（schema + 7 fixtures + 清单）。
+两个仓库都保留一份**vendored 副本**（`protocol/v1/…`），由本目录的 `scripts/sync-protocol.sh` 同步（脚本会写入 `protocol/v1/SOURCES.sha256`）。已同步：TelePost、PixivFlow 各 9 个文件（schema + error-mapping + 7 fixtures，另加清单）。
 
 ```bash
 ./scripts/sync-protocol.sh                       # 同步到 ../TelePost 与 ../PixivFlow
@@ -32,7 +33,8 @@ docs/protocol/
 1. **Schema 校验**：把本仓**真实产生/消费**的报文（生产者：`Job` 投影、`Event`、`Result`、`Asset`；消费者：`Task`、事件回调体）逐一用 `protov1` 的对应 `$defs` 入口校验通过。
 2. **Fixture 回放**：`fixtures/` 里每个示例报文都要能被本仓的解析器接受（不抛异常、必填字段可读），且本仓序列化出的等价报文能通过同一个 schema。
 3. **副本一致性**：`protocol/v1/SOURCES.sha256` 必须与本目录内容一致（`scripts/sync-protocol.sh --check`），防止一侧偷偷改了协议。
-4. **反耦合断言**：生产者的 schema/代码里不得出现消费者业务名词（`review`/`审核`/`refetch`/`替换`/`发布` 等），消费者的 `Task` 里不得出现生产者内部字段；已自动化——两仓契约测试各自断言协议资产的 `$defs`/`properties`/`enum` 不含业务词（按词元匹配），代码层按 `../architecture/workflow-protocol.md` §8 清单人工 + grep 复核。
+4. **错误码封闭**：`Error.code` 是封闭枚举，生产者必须在 job facade 处把自己的内部原因码映射进来（`error-mapping.json` 的 `producer_internal`）。验收脚本会校验「协议码 ↔ schema enum 完全一致」以及「生产者 `TerminalReasonCode` 的每个成员都有映射」，新增内部原因码却不给消费者语义会直接失败。
+5. **反耦合断言**：生产者的 schema/代码里不得出现消费者业务名词（`review`/`审核`/`refetch`/`替换`/`发布` 等），消费者的 `Task` 里不得出现生产者内部字段；已自动化——两仓契约测试各自断言协议资产的 `$defs`/`properties`/`enum` 不含业务词（按词元匹配），代码层按 `../architecture/workflow-protocol.md` §8 清单人工 + grep 复核。
 
 ## 3 校验方式
 

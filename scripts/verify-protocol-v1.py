@@ -27,6 +27,7 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parent.parent
 PROTOCOL_DIR = REPO / "docs" / "protocol" / "v1"
 SCHEMA_PATH = PROTOCOL_DIR / "protocol.schema.json"
+ERROR_MAP_PATH = PROTOCOL_DIR / "error-mapping.json"
 MANIFEST_PATH = PROTOCOL_DIR / "SOURCES.sha256"
 
 FAILURES: list[str] = []
@@ -151,7 +152,7 @@ VENDORED_DIRS: list[Path] = [REPO.parent / "TelePost", REPO.parent / "PixivFlow"
 
 def check_vendored_copies() -> None:
     """SSOT 不持有 manifest（它就是源），manifest 由 sync 脚本写在每个消费仓里。"""
-    rel_paths = ["protocol.schema.json"] + [
+    rel_paths = ["protocol.schema.json", "error-mapping.json"] + [
         f"fixtures/{p.name}" for p in sorted((PROTOCOL_DIR / "fixtures").glob("*.json"))
     ]
     source_hashes = {rel: hashlib.sha256((PROTOCOL_DIR / rel).read_bytes()).hexdigest() for rel in rel_paths}
@@ -186,6 +187,65 @@ def check_vendored_copies() -> None:
         skip("未发现 vendored 副本（--vendored 可指定其它仓库路径）")
 
 
+PRODUCER_REASON_SOURCES: list[tuple[Path, str]] = [
+    (REPO.parent / "PixivFlow" / "src" / "scheduler" / "TargetOutcome.ts", "TerminalReasonCode"),
+]
+
+
+def _reason_codes(path: Path, type_name: str) -> set[str] | None:
+    """The string-literal members of an exported string-union type, or None when absent."""
+    if not path.exists():
+        return None
+    text = path.read_text(encoding="utf-8")
+    match = re.search(rf"export type {type_name}\s*=(.*?);", text, re.S)
+    if not match:
+        return None
+    return set(re.findall(r"'([a-z0-9_]+)'", match.group(1)))
+
+
+def check_error_mapping() -> None:
+    """The protocol error enum is closed; a producer's internal codes must all map onto it."""
+    if not ERROR_MAP_PATH.exists():
+        fail(f"缺少 {ERROR_MAP_PATH.name}（封闭错误词表的映射表）")
+        return
+    schema = load_schema()
+    enum = schema["$defs"]["Error"]["properties"]["code"]["enum"]
+    mapping = json.loads(ERROR_MAP_PATH.read_text(encoding="utf-8"))
+    protocol_codes = mapping.get("protocol_codes") or {}
+    missing = [code for code in enum if code not in protocol_codes]
+    extra = [code for code in protocol_codes if code not in enum]
+    if missing:
+        fail(f"error-mapping.json 缺少协议码：{missing}")
+    if extra:
+        fail(f"error-mapping.json 定义了 schema enum 之外的码：{extra}")
+    if not missing and not extra:
+        ok(f"错误词表与 schema enum 完全一致（{len(enum)} 个码）")
+    for code, spec in protocol_codes.items():
+        if not isinstance(spec, dict) or not isinstance(spec.get("retryable"), bool):
+            fail(f"error-mapping.json: {code} 缺 retryable 默认值")
+    internal = {
+        key: value
+        for key, value in (mapping.get("producer_internal") or {}).items()
+        if not key.startswith("$")
+    }
+    dangling = sorted({value for value in internal.values() if value not in enum})
+    if dangling:
+        fail(f"producer_internal 指向未定义的协议码：{dangling}")
+    for path, type_name in PRODUCER_REASON_SOURCES:
+        codes = _reason_codes(path, type_name)
+        if codes is None:
+            skip(f"{path} 不在本机，跳过 {type_name} 覆盖率校验")
+            continue
+        unmapped = sorted(codes - set(internal))
+        stale = sorted(set(internal) - codes)
+        if unmapped:
+            fail(f"{path.name}: {type_name} 有未映射的内部原因码：{unmapped}")
+        else:
+            ok(f"{path.name}: {len(codes)} 个内部原因码全部映射到协议码")
+        if stale:
+            fail(f"error-mapping.json 映射了 {path.name} 中不存在的内部原因码：{stale}")
+
+
 def check_offline() -> None:
     schema = load_schema()
     try:
@@ -215,6 +275,7 @@ def check_offline() -> None:
             else:
                 ok(f"{path.name} 的 params 通过 $defs/CandidateSearchParams")
 
+    check_error_mapping()
     check_vendored_copies()
 
     surface: list[str] = list((schema.get("$defs") or {}).keys())

@@ -33,9 +33,12 @@
             "idempotency_conflict",
             "unsupported_protocol_version",
             "invalid_params",
+            "delivery_failed",
+            "delivery_rejected",
+            "delivery_abandoned",
             "internal_error"
           ],
-          "description": "Machine-readable. Consumers MUST branch on code, never on message text."
+          "description": "Machine-readable. Consumers MUST branch on code, never on message text. The enum is closed on purpose: a producer maps its internal reason ledger onto these codes (docs/protocol/v1/error-mapping.json) instead of leaking internal codes across the boundary."
         },
         "message": { "type": "string", "description": "Human readable only; never used for control flow." },
         "retryable": { "type": "boolean" },
