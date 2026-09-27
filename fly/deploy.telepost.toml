@@ -244,7 +244,21 @@ primary_region = 'iad'
     # or the doctor's failure composition. Additive wire field (`reason_code`);
     # best with PixivFlow >= 3.4.1, and an older producer degrades cleanly to
     # `remote_failure`. Rollback = 2.71.0.
-    TELEPOST_IMAGE = 'ghcr.io/redtidev1918/telepost:2.71.1'
+    # 2.71.2 (2026-09-28): two review-queue safety fixes. (1) "清理测试数据" can no
+    # longer delete real reviews: every row now carries an explicit data-class
+    # marker ('real' default / 'test'), the purge deletes ONLY rows marked test,
+    # and it refuses any chain that still carries a real row — the previous
+    # username-pattern cleanup is exactly what deleted the real review #140 on
+    # 2026-09-28. (2) Identity inheritance across a refetch replacement respects
+    # that boundary: when a test-typed source chain delivers a real candidate, the
+    # candidate keeps its own submitter identity and data class instead of
+    # inheriting the fixture's username/user_id. Alongside them the review-group
+    # preview no longer inherits the submitter's mask: `spoiler` is a publication
+    # decision the reviewer takes on the card, and Telegram cannot unmask a sent
+    # message, so the group always shows the unmasked media. Best with
+    # PixivFlow >= 3.4.2 (a failed cover probe now defaults to skipping the
+    # cover). Rollback = 2.71.1.
+    TELEPOST_IMAGE = 'ghcr.io/redtidev1918/telepost:2.71.2'
 
 [[mounts]]
   source = 'data'
