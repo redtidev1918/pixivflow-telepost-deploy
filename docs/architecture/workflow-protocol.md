@@ -318,7 +318,7 @@ queued ──claim──▶ running ──▶ succeeded
 | `POST /jobs` | 新 handler，复用 `SchedulerCommand` 的 admission（现 `src/commands/SchedulerCommand.ts:175-217`） | 请求体是 `Task`；`job_type` 未知 → `400 unsupported?`→ 用 `invalid_params`；目标不唯一 → `409`（沿用 `ambiguous target` 语义，但 body 为协议 `Error`） |
 | `GET /jobs/{job_id}` | `src/scheduler/JobProjection.ts`（A 阶段已建） | 投影即 Job；`job_id` 对消费者不透明（v1 实现上等于 slotId，但**禁止**在协议里暴露 `slot*` 语义字段名） |
 | `GET /jobs?idempotency_key=…` | `SlotRepository.findManualSlot` 一族 | 重放同一 `idempotency_key` 必须返回**同一个** job（幂等可视） |
-| `POST /jobs/{job_id}/cancel` | 一个事务：slot + cells → 终态 | 走既有 cell FSM，不新增 cell 状态：`failed` + `terminal_reason_code='cancelled_by_consumer'`，作业 `error.code='cancelled_by_consumer'` |
+| `POST /jobs/{job_id}/cancel` | 一个事务：slot + cells → 终态 | 走既有 cell FSM，不新增 cell 状态：`failed` + `terminal_reason_code='cancelled_by_consumer'`，作业 `error.code='cancelled_by_consumer'`。**取消是「作业已终结」而不是系统故障**：生产者必须把它记成可辨认的原因码（`cancelled_by_consumer` 同时是生产者内部原因码之一，映射到同名协议码），并且取消不得计入 alertable / `business_status=failed`，否则每次用户取消都会误告警 |
 | `GET /jobs/{job_id}/events?unacked=1` | 既有 `delivery_events` | 事件至少一次；`event_id` 去重；回调 POST 与 Ack/对账属 D 阶段（替代 `refetchOutcomeUrl` 的单次成功假设） |
 
 **身份（同时修掉 RC10）**：`job_id = slotId`、`idempotency_key = manual_request_id`；B 阶段新增迁移，给 `manual_request_id` 加**非空唯一索引**，老旧 refetch shim 把 `{requestId}` 翻译成 `Task{job_type:'candidate_search', idempotency_key:requestId, correlation_id}`，于是两个入口共用**同一身份空间**，同一请求不会铸出两个 slot / 两次投递。
@@ -326,6 +326,8 @@ queued ──claim──▶ running ──▶ succeeded
 **`candidate_search` 参数 → 既有配置**：`source.platform='pixiv'`；`source.account` → `pixiv-account:<accountId>` 资源键；`query.tags` → 该 target 的检索 tag 覆盖；`constraints.exclude` → 候选排除集合；`limit`/`scan_limit`/`work_types` → 既有扫描与类型开关。v1 的 `params` **只允许**覆盖检索与约束，不得覆盖投递目标、delivery 字段、计划身份。
 
 **B 阶段禁止**：新增 `refetch*` 前缀字段/端点；按 `slot_name='审核群重抓'` 之类的业务值分支；改动既有 `slot_name` 取值（历史行还在库里，迁移属于更后面的阶段）；给两个入口各写一套执行路径。
+
+**取消的落地顺序（已确认的坑）**：`TerminalReasonCode` 现有 19 个成员里**没有**任何「取消」语义，直接写 `terminal_reason_code='cancelled_by_consumer'` 会绕过 `OPERATIONAL_REASON_POLICY` 的类型约束并让消费者拿到未映射的内部码。因此 B 阶段要按顺序做：(1) 给 `TerminalReasonCode` + `OPERATIONAL_REASON_POLICY` 补上 `cancelled_by_consumer`（retryable=false，且**不计入** alertable/`business_status=failed`）；(2) 由 SSOT 侧在 `error-mapping.json` 的 `producer_internal` 补同一行（`cancelled_by_consumer` → `cancelled_by_consumer`）并同步两仓副本；(3) 之后 `scripts/verify-protocol-v1.py` 的 union 覆盖率检查才会重新变绿 —— 顺序反过来会先红后绿，属预期。
 
 ### 11.2 消费者（TelePost，C 阶段）
 
