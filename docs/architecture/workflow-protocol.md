@@ -372,3 +372,24 @@ queued ──claim──▶ running ──▶ succeeded
 2. **回调失败不改终态**：现有实现只 `logger.warn` 并依赖 outbox 重试；协议侧同理——事件投递失败只影响「消费者多快看到」，不影响 job 终态。
 3. **消费者不得靠「没收到回调」判定作业失败**：必须以 `GET /jobs/{id}` + 游标对账为准（这正是「重抓静默」的根因：回调丢了就永远没有下文）。
 4. 协议事件名与内部事件名的映射放 facade，**禁止**把 `delivery_events.event` 的字面量当协议枚举使用。
+
+## 12 已知耦合清单与收口计划（机器可校验）
+
+「只在一处知道对方内部路径」不能靠自觉，必须能被 CI 拒绝。`scripts/verify-protocol-v1.py` 的离线检查已加入两项静态门：
+
+| 门 | 规则 | 现状（2026-09-28 实测） |
+| --- | --- | --- |
+| `check_boundary_discipline()` | 扫描 TelePost 检出的 `**/*.py`，`/internal/targets/` 字面量只允许出现在**唯一端口** `telepost/application/pixivflow_jobs.py`；其它文件出现即 **FAIL**（打印 `文件:行号`） | 端口 4 处 OK；3 个文件命中但已进「已知耦合」白名单 → 只 SKIP，不 FAIL |
+| `check_producer_protocol_codes()` | `PixivFlow/src/scheduler/ProtocolErrors.ts` 的 `ProtocolErrorCode` 必须与 `$defs/Error.code.enum` **完全一致**（缺码或自造码都 FAIL） | 16 个码完全一致 |
+
+白名单（`BOUNDARY_KNOWN_LEAKS`，每条都要有出处与收口计划，**禁止**往表里新增而不写理由）：
+
+| 文件 | 事实 | 收口计划 |
+| --- | --- | --- |
+| `telepost/application/refetch.py:215-217,419-468` | 仍保留一个「handlers.review 不可导入」时的兜底提交器 `_default_submit_pixivflow_refetch`，**自己拼** `/internal/targets/{t}/refetch`（端口之外的第二套 HTTP 客户端） | C 阶段收口：提交/读取一律经端口（`handlers.review._refetch_client()` 或 `pixivflow_jobs_port`），删除该兜底器；如需无循环兜底则让它**委托端口**而不是重建 URL。删除后同步移出本白名单，门自动变紧 |
+| `telepost/application/recovery.py:229` | `POST /internal/targets/{target}/recover` —— 非 Job 面的 PixivFlow 内部命令 | 协议 v2：以 `/capabilities` 如实声明 + 或在 v1 内明确列为「非协议面」并停止扩张；本轮不动（不属 v1 范围，也不在本轮改造范围） |
+| `telepost/domain/refetch_state.py:130` | 仅注释里提到远端路径，无调用 | 无需处理（保留在表里以减少评审噪音） |
+
+反向验证（防止门本身失效）：在临时检出里放一个 `/internal/targets/` 新泄漏 → 实测 `[FAIL] 出现新的 PixivFlow 内部路径耦合：handlers/leak.py:2`，退出码 1。
+
+卫生要求：调试用的临时测试文件（如 `tests/test_zzprobe.py`）**不得提交**；端口收口完成后，`telepost/application/refetch.py` 必须从白名单移出。
