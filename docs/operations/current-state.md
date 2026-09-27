@@ -3535,6 +3535,56 @@ Status:
 
 ## 4 本轮未做
 
-* B1（备份导出脚本 + 一次真实恢复演练）并行进行中，完成后追加到本页。
+* B1（备份导出脚本 + 一次真实恢复演练）**已完成**，见本页下一节。
 * 其余未决与上一节相同：TelePost 的 `TAG_CONFLICT` 未对账（下次发版仍需人工落版本提交）、
   #2 的行为层验证窗口是下一次每日运行。
+
+# 2026-09-28 卷备份导出脚本 + 一次真实恢复演练（B1）
+
+Status:
+* 卷备份导出脚本 + 恢复演练：IMPLEMENTED_NOT_VERIFIED（脚本两卷实跑成功、恢复演练真实通过；完整生产恢复未演练）
+* 完整生产恢复演练：EXTERNAL_ACCEPTANCE_REQUIRED
+
+* **缺口**：两个卷的 `snapshot_retention` 都是 5（约 5 天），比静默损坏的发现周期短；Fly 之外没有
+  任何副本；此前既没有备份脚本、没有 `deploy backup` 子命令，也没有调度。
+* **新增**：`scripts/export-volume-backup.sh`（operator-run；只读生产：不写不删 `/app/data`，
+  不 start/stop 机器，机器 stopped 时 exit 3）。经 `fly ssh console -C "sh -s -- …"` 在容器
+  `/tmp/vb-<plane>-<ts>/` 搭中转树；每个 SQLite `*.db` 与其 `-wal`/`-shm` 在**同一个 tar 动作**里
+  原子拷走（`_meta/ATOMIC_TRIPLES.tsv` 记账）；运行配置 JSON 在**容器内**按键名/值规则脱敏后才打包
+  （只把脱敏前 sha256 记进 `_meta/SOURCE_SHA256.tsv`，未命中的 JSON 字节不变）；`fly sftp get` 拉回
+  本机后逐文件复核 size+sha256。输出默认在仓库之外：
+  `$HOME/.local/share/pixivflow-volume-backups/<UTC ts>/<plane>/{volume-backup.tar.gz,manifest.json,verification.txt,data/,_meta/}`；
+  `manifest.json` 只取机器字段白名单，**绝不整份落盘 `config.env`**。排除项全部带理由写进
+  `_meta/EXCLUDED.tsv`。退出码 0/2/3/4/5/6/7（7 只在显式 `--strict-integrity`）。
+* **实证**：
+  - `--plane telepost` exit 0：292 文件 / 165834144 B，tar 154620153 B，sha256
+    `b2554b29329860aeeaecedba73012df566ea235762cf728eaba0ef3297ed5fee`；11 个三件套 integrity 全 ok；
+    excluded=5（两个 `-refresh-token*` + 3 个日志）；redacted=5（`pixivflow/config.json` 的 3 个 pixiv
+    凭据 + 两条 `headers.Authorization`）；orphan_companions=0。
+  - `--plane pixivflow` exit 0（先 `fly machine start 83d1650bd23948`，跑完已 stop 回设计态并复查）：
+    310 文件 / 142902498 B，tar 137120364 B，sha256
+    `db9db8027137360a4e82a274dcb21525ace419a11eea2c7dbb65b9a4bbb794d4`；`pixivflow.db` 三件套
+    integrity ok；excluded=3；redacted=7（`production.json`，含此前未枚举到的两条
+    `richNovelPreview.headers.Authorization`）。
+  - 恢复演练（本机临时目录，未触碰任何生产路径）：bot1/bot2 三件套还原后 `PRAGMA integrity_check`
+    均 ok、`foreign_key_check` 0 行；计数 bot1 `pending_reviews 121 / refetch_attempts 11 /
+    refetch_events 10`，bot2 `94 / 3 / 0`；同一段只读查询跑还原副本与线上库（`file:…?mode=ro`）
+    逐字段无差异；`pixivflow.db` 还原后 integrity ok、18 张表（含 schedule_slots /
+    scheduler_executions / outbox / deliveries）。
+  - 保真度：181 个 JSON 里只有被脱敏的 `config.json` 字节变化，其余逐字节相同；导出树 79 个 JSON 的
+    残留凭据扫描只剩 2 处误报（`refetch_request_id`，20 字符请求 id）。
+  - 复跑（修掉 CI 报的 ShellCheck 之后）：`--plane telepost` exit 0，288 文件 / 165768608 B，tar sha256
+    `f2780ac98268371d47407c4b7c8469560ef2f628cfe15c4cf6f7a75de1b5886e`（与首跑不同的原因只是线上库
+    在两次之间又变了），`orphan_companions=0`、11 个三件套 integrity 全 ok（含各 `*.bak-*` /
+    `*.v4backup-*` 副本）。
+  - 本机没有 `shellcheck`（`validate.sh` 会静默跳过它），首次 CI 因此报了 `SC2317`：脚本里的
+    `warn()` 从未被调用。修法是把它用在真实异常上——导出树里出现孤儿 `-wal`/`-shm`
+    （找不到主库）时警告并指向 `_meta/ORPHANS.tsv`。**教训**：本仓的 shell 静态检查只有 CI 会跑，
+    新脚本必须等一次 CI 才算验证过。
+* **剩余边界**：operator-run、**无调度**（没人跑就没有新拷贝）；目的地是操作者本机、**无异地副本**；
+  三件套是「同一 tar 动作」不是点时刻快照；脚本不清理旧导出、无保留策略。完整生产恢复
+  （重建卷 → 拷贝回 `/app/data` → `/ready` 门禁 → Telegram webhook 归属 → 发布链端到端）**未演练**。
+* **顺带发现（未调查，另案）**：两个 Bot 的 `submissions` 表都是 0 行，而 `pending_reviews` 分别
+  121/94；telepost 卷根目录另有 0 字节 `submissions.db`（Sep 14）与 legacy `pixivflow/` 树
+  （含真凭据的 `config.json` 与 `.pixiv-refresh-token*`）——后者是历史残留，值得单独评估是否清理。
+
