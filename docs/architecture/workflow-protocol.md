@@ -158,13 +158,27 @@ Related: `refetch-silent-failure-cure.md`（触发本协议的重抓静默故障
 
 | 今天 | v1 等价 | 过渡策略 |
 |---|---|---|
-| `POST /internal/targets/{target}/refetch {requestId, correlationId}` | `POST /jobs {job_type:"candidate_search", idempotency_key:requestId, correlation_id:correlationId}` | 旧端点保留为 shim，内部转成 Job；响应字段 `slotId` 保留 |
+| `POST /internal/targets/{target}/refetch {requestId, correlationId}` | `POST /jobs {job_type:"candidate_search", idempotency_key:requestId, correlation_id:correlationId, params:{target_id:target}}` | 旧端点保留为 shim，内部转成 Job；响应字段 `slotId` 保留。**`{target}` 必须原样搬进 `params.target_id`**（v1.1）：映射表若丢掉目标，两个入口就不再落在同一个 Job 上 |
 | `GET /internal/targets/{target}/refetch/{requestId}` | `GET /jobs/{job_id}`（或 `?idempotency_key=`） | shim：旧路径按幂等键解析 Job 后返回**增强后**的投影（旧字段保留、新增字段） |
 | `refetchOutcomeUrl` + `disposition` | 事件回调 `job.failed` / `job.succeeded` + `error.code` | 同一持久义务机制；旧回调体在过渡期继续发送（双写），TelePost 优先读事件 |
 | 投递字段 `refetch_request_id = {{refetchRequestId}}` | 投递字段 `correlation_id` / `job_id` | 消费者兼容读旧字段；新配置只写通用字段 |
 | `slot_name='审核群重抓'` | `labels.origin`（不透明） | 停止使用业务名，生产端不得按名字分支 |
 | `manual_request_id` 列 | `jobs.idempotency_key` | 列保留（additive），语义通用化 |
 | `download.novelCover.unknown` | `Asset.quality` + 消费者策略 | 开关保留，默认 = 现行为 |
+
+### 3.2 v1.1 增量：显式目标选择器（`params.target_id`）
+
+v1 的通用面只能「从配置里发现**唯一**的可手动重抓 target」；而真实部署从不满足该前提（生产：4 个 target = 2 个 bot × 图文/小说），于是通用面只能回答 `409 ambiguous_target`。旧 refetch 把目标放在 **URL** 里，通用面却没有等价表达 —— 两个入口因此无法共享同一身份空间（§11.1 的映射表也随之把目标丢掉了）。这是**规范缺陷**，不是实现缺陷：照 v1 实现得再正确，也表达不出「给 bot1 的图文目标重抓一次」。
+
+v1.1 是**纯增量**，不改变任何既有语义（不带 `target_id` 的请求行为完全不变）：
+
+1. `$defs/CandidateSearchParams` 新增可选 `target_id`：`Task` 可以显式声明自己在**已配置**的 target 里跑哪一个。
+2. `$defs/CandidateSearchParams` 原 `required: ["query"]` 放宽：不带 `query` 时按该 target **自身配置**跑，与旧 refetch 语义完全等价。
+3. `/capabilities` 的 `features` 新增 `target_selector`；消费者据此协商，未声明该 feature 时退回「唯一 target」规则，不得盲发 `target_id`。
+4. 选择器只是**选择器**：目标必须已存在于 `schedules[].targetIds`，且必须通过手动重抓的投递接线上校验。它**不能**新建 target、**不能**改 delivery、**不能**改计划身份。未知 target → `404 unknown_target`；同一 id 命中多个计划 → `409 ambiguous_target`（与旧路径同一套规则）。
+5. `target_id` 属于**作用域**而非检索视图：admission 把它提升为 `CandidateSearchJobRequest.targetSelector`，落库的 `paramsJson` 里**不含**它 —— 只带选择器的作业因此与旧 refetch 一样「按配置跑」，也不会因为「有没有带 selection」而在幂等比较里自相冲突。
+
+**验收含义**：`scripts/verify-protocol-v1.py --live --legacy-refetch-target <真实计划目标 id>` 会把该值同时用作 (a) 旧 shim 的 URL 目标、(b) `/jobs` 的 `params.target_id`，从而真正验证两个入口落在同一个 Job 上。**注意该参数要填 `schedules[].targetIds` 里的计划目标 id（如 `bot1-illust-botefuku`），不是 `delivery.targets` 里的投递目标名（如 `bot1-submit`）** —— 后者在旧端点上根本不是合法目标。
 
 ---
 
@@ -326,7 +340,7 @@ queued ──claim──▶ running ──▶ succeeded
 | 协议元素 | 落到哪里 | 规则 |
 |---|---|---|
 | `GET /capabilities` | `src/scheduler/ScheduleTriggerServer.ts`（沿用现有 trigger/refetch token 鉴权） | 声明 `job_types:[candidate_search]` 与预算；预算值来自配置（`queuedTimeoutMs`/`stallTimeoutMs`），**不得**由调用方硬编码 |
-| `POST /jobs` | 新 handler，复用 `SchedulerCommand` 的 admission（现 `src/commands/SchedulerCommand.ts:175-217`） | 请求体是 `Task`；`job_type` 未知 → `400 invalid_params` + `detail.reason='unsupported_job_type'`（不新增枚举码，见 §3 约定）；目标不唯一 → `409`（沿用 `ambiguous target` 语义，但 body 为协议 `Error`） |
+| `POST /jobs` | 新 handler，复用 `SchedulerCommand` 的 admission（现 `src/commands/SchedulerCommand.ts:175-217`） | 请求体是 `Task`；`job_type` 未知 → `400 invalid_params` + `detail.reason='unsupported_job_type'`（不新增枚举码，见 §3 约定）；目标由 `params.target_id` 显式指定（v1.1，见 §3.2），**未指定且部署里有多于一个可手动重抓 target** → `409`（沿用 `ambiguous target` 语义，但 body 为协议 `Error`） |
 | `GET /jobs/{job_id}` | `src/scheduler/JobProjection.ts`（A 阶段已建） | 投影即 Job；`job_id` 对消费者不透明（v1 实现上等于 slotId，但**禁止**在协议里暴露 `slot*` 语义字段名） |
 | `GET /jobs?idempotency_key=…` | `SlotRepository.findManualSlot` 一族 | 重放同一 `idempotency_key` 必须返回**同一个** job（幂等可视） |
 | `POST /jobs/{job_id}/cancel` | 一个事务：slot + cells → 终态 | 走既有 cell FSM，不新增 cell 状态：`failed` + `terminal_reason_code='cancelled_by_consumer'`，作业 `error.code='cancelled_by_consumer'`。**取消是「作业已终结」而不是系统故障**：生产者必须把它记成可辨认的原因码（`cancelled_by_consumer` 同时是生产者内部原因码之一，映射到同名协议码），并且取消不得计入 alertable / `business_status=failed`，否则每次用户取消都会误告警 |
@@ -336,7 +350,7 @@ queued ──claim──▶ running ──▶ succeeded
 
 **身份（同时修掉 RC10）**：`job_id = slotId`、`idempotency_key = manual_request_id`；B 阶段新增迁移，给 `manual_request_id` 加**非空唯一索引**，老旧 refetch shim 把 `{requestId}` 翻译成 `Task{job_type:'candidate_search', idempotency_key:requestId, correlation_id}`，于是两个入口共用**同一身份空间**，同一请求不会铸出两个 slot / 两次投递。
 
-**`candidate_search` 参数 → 既有配置**：`source.platform='pixiv'`；`source.account` → `pixiv-account:<accountId>` 资源键；`query.tags` → 该 target 的检索 tag 覆盖；`constraints.exclude` → 候选排除集合；`limit`/`scan_limit`/`work_types` → 既有扫描与类型开关。v1 的 `params` **只允许**覆盖检索与约束，不得覆盖投递目标、delivery 字段、计划身份。
+**`candidate_search` 参数 → 既有配置**：`source.platform='pixiv'`；`source.account` → `pixiv-account:<accountId>` 资源键；`query.tags` → 该 target 的检索 tag 覆盖；`constraints.exclude` → 候选排除集合；`limit`/`scan_limit`/`work_types` → 既有扫描与类型开关；`target_id` → **在已配置 target 中选择**（v1.1，见 §3.2；是选择器，不是覆盖）。v1 的 `params` **只允许**覆盖检索与约束、并从既有配置里**挑选**目标；不得覆盖投递目标本身、delivery 字段、计划身份。
 
 **B 阶段禁止**：新增 `refetch*` 前缀字段/端点；按 `slot_name='审核群重抓'` 之类的业务值分支；改动既有 `slot_name` 取值（历史行还在库里，迁移属于更后面的阶段）；给两个入口各写一套执行路径。
 

@@ -19,6 +19,7 @@ import hashlib
 import json
 import re
 import sys
+import uuid
 import time
 import urllib.error
 import urllib.parse
@@ -360,7 +361,7 @@ def check_offline() -> None:
             fail(f"{path.name} 校验失败：{errors[0]}")
         else:
             ok(f"{path.name} 通过 $defs/{fixture_entry(path.name)}")
-        if path.name == "task.candidate_search.json":
+        if path.name.startswith("task."):
             param_errors = validate_against(schema, "CandidateSearchParams", payload.get("params") or {})
             if param_errors:
                 fail(f"{path.name} 的 params 校验失败：{param_errors[0]}")
@@ -413,6 +414,18 @@ def request(method: str, url: str, token: str | None, body=None, timeout: int = 
         return 0, str(exc)
 
 
+def _error_code(body) -> str:
+    """容错提取错误码：协议面是 ``error:{code}``，旧 shim 是 ``error:"...string..."``。"""
+    if not isinstance(body, dict):
+        return ""
+    err = body.get("error")
+    if isinstance(err, dict):
+        return str(err.get("code") or "")
+    if isinstance(err, str):
+        return err
+    return ""
+
+
 def check_legacy_shim_equivalence(base: str, token: str, args, task: dict) -> None:
     """旧 refetch 端点与 POST /jobs 必须共享同一个身份空间（§11.1）。
 
@@ -424,11 +437,15 @@ def check_legacy_shim_equivalence(base: str, token: str, args, task: dict) -> No
     legacy_url = f"{base}/internal/targets/{quote(target, safe='')}/refetch"
 
     # 方向一：旧入口 → 通用面
-    forward_key = f"{args.idempotency_key or 'protocol-acceptance'}-shim"
+    # 旧 refetch shim 用 UUID 正则校验 requestId，所以两个方向的键都必须是真 UUID
+    # （不能拼 '-shim'/'-rev' 后缀，那会被 shim 以 HTTP 400 拒绝）。
+    forward_key = str(uuid.uuid4())
     status, body = request("POST", legacy_url, token,
                            {"requestId": forward_key, "correlationId": args.correlation_id})
-    if status == 404 or (isinstance(body, dict) and (body.get("error") or {}).get("code") == "not_found"):
-        fail("旧 refetch 端点未实现为 shim —— 两个入口必须共享同一身份空间")
+    if status == 404 or (isinstance(body, dict) and _error_code(body) == "not_found"):
+        fail(f"旧 refetch 端点对 target={target!r} 未实现为 shim（HTTP {status}）—— "
+             "两个入口必须共享同一身份空间；若该值是 delivery target 名而非 "
+             "schedules[].targetIds 里的计划目标 id，请用真实 target id 重跑")
         return
     if status not in (200, 201, 202) or not isinstance(body, dict):
         fail(f"旧 refetch 端点提交失败：HTTP {status}（{body}）")
@@ -459,7 +476,7 @@ def check_legacy_shim_equivalence(base: str, token: str, args, task: dict) -> No
     ok("GET /jobs/{job_id} 能读到旧端点创建的 Job")
 
     # 方向二：通用面 → 旧入口（同一个键必须解析回同一个 Job，而不是第二个）
-    reverse_key = f"{forward_key}-rev"
+    reverse_key = str(uuid.uuid4())
     reverse_task = json.loads(json.dumps(task))
     reverse_task["idempotency_key"] = reverse_key
     status, job = request("POST", f"{base}/jobs", token, reverse_task)
@@ -512,6 +529,12 @@ def check_live(args) -> None:
                                                 for item in args.exclude]
     task["idempotency_key"] = args.idempotency_key
     task["correlation_id"] = args.correlation_id
+    # v1.1：通用面可以像旧路径那样显式指定目标（`params.target_id` 是**选择器**，
+    # 只在已配置的 target 中挑选，不能覆盖 delivery 或计划身份）。不指定时，
+    # 一个配置了多个可手动重抓 target 的部署只能回答 409 ambiguous_target ——
+    # 那是正确行为，但会让现场验收无法在真实生产上跑通。
+    if args.legacy_refetch_target:
+        task["params"]["target_id"] = args.legacy_refetch_target
 
     if args.legacy_refetch_target:
         check_legacy_shim_equivalence(base, token, args, task)
@@ -520,7 +543,11 @@ def check_live(args) -> None:
 
     status, job = request("POST", f"{base}/jobs", token, task)
     if status not in (200, 201, 202) or not isinstance(job, dict):
-        fail(f"POST /jobs → HTTP {status}（{job}）")
+        hint = ""
+        if isinstance(job, dict) and ((job.get("error") or {}).get("detail") or {}).get("reason") == "ambiguous_target":
+            hint = ("；该部署配置了多个可手动重抓的 target，请用 --legacy-refetch-target 指定真实 "
+                    "target id（配置里 schedules[].targetIds 的取值），不要用 delivery target 名")
+        fail(f"POST /jobs → HTTP {status}（{job}）{hint}")
         return
     job_id = job.get("job_id") or job.get("id")
     ok(f"POST /jobs → HTTP {status}，job_id={job_id}，status={job.get('status')}")
@@ -668,7 +695,9 @@ def main() -> int:
     parser.add_argument("--cancel-after", type=int, default=0, help=">0 时在该秒数后取消作业")
     parser.add_argument("--expect", default="", help="期望终态（可选）")
     parser.add_argument("--legacy-refetch-target", default="",
-                        help="给出目标 id 时，验证「旧 refetch 端点与 /jobs 共享同一身份空间」（shim 等价）")
+                        help="真实 **计划目标** id（配置里 schedules[].targetIds 的取值，不是 delivery target 名）。"
+                             "给出时：既验证「旧 refetch 端点与 /jobs 共享同一身份空间」（shim 等价），"
+                             "也把该值作为 params.target_id 放进 /jobs 请求体（v1.1 的显式目标选择器）")
     parser.add_argument("--vendored", nargs="*", default=[], help="要核对 vendored 副本的仓库路径（默认 ../TelePost ../PixivFlow）")
     args = parser.parse_args()
 
