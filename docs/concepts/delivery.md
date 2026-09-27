@@ -43,13 +43,15 @@ PixivFlow 把作品文件与模板字段渲染成一次标准的 `multipart/form
 
 | 取值 | 行为 |
 | --- | --- |
-| `false` | **默认不遮罩**：R-18/R-18G 作品照常原图发送（审核群与频道一致）。 |
+| `false` | **默认不遮罩**：R-18/R-18G 作品照常原图发送。 |
 | `"{{spoiler}}"` | 兼容旧版：所有 Pixiv 受限作品（`x_restrict > 0`）自动加 Telegram 遮罩。 |
 | `true` | 全部遮罩。 |
 
-同一份 `spoiler` 值同时决定**审核群预览**与**频道发布**的遮罩，二者不存在独立开关：
-想让 R-18 只进审核群不加遮罩、发布时再加遮罩，需要在 TelePost 侧做逐稿切换（审核卡“遮罩”按钮），
-而不是靠 delivery 配置。
+这个值决定的是**频道发布**的遮罩；**审核群预览自 2026-09-28 起恒不遮罩**——审核员必须看见被审媒体，
+而 Telegram 无法对已发送的消息反向解除遮罩（在此之前预览会继承投稿者的 `spoiler`）。
+想逐稿改变发布时的遮罩，用审核卡上的「遮罩」按钮：它改写审核记录的存储值（`pending_reviews.spoiler`），
+发布时以该值为准（`services/review_service.py`
+`current_spoiler = bool(row["spoiler"]) if spoiler is None else bool(spoiler)`）。
 
 ## 幂等：两种键，两个含义
 
