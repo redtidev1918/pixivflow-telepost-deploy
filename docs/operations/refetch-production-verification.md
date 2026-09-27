@@ -152,6 +152,9 @@ python -m telepost.observability.cli reviews inspect <review_id> --bot 1
 
 * `已执行` — `GET /health`：TelePost `2.70.1` / commit `f57d1617ef639eeccdbb749adb80f479c45a841b`（此前 2.70.0/`31d88fb` 也是同一路径）；
   PixivFlow `3.1.0` / commit `583a74c98ef7`。
+  （后续：执行端已随 pin 推进到 PixivFlow `3.2.0` / commit `c195b909063c`——3.2.0 只增 `examples/onebot-adapter/` 与文档/测试，
+  `examples/` 不进镜像，对运行中的 worker 与本文件的全部重抓结论**行为等价**，无需重跑本文件；见
+  `docs/operations/current-state.md` 的「2026-09-27 PixivFlow 3.2.0」节 §3。）
 * `已执行` — `./scripts/verify-images.sh` exit 0：pin 的 `telepost:2.70.1` 与线上上报一致，pin 的 `583a74c98ef7` 被执行端上报。
 * `已执行` — 两个 bot 上 `doctor --all-bots`：`HEALTHY`，`16 OK / 0 WARN / 0 CRIT / 0 SKIP`，退出码 `0`
   （2.70.0 时同一命令报 `2 WARN`——那是 doctor 自身对账本历史行的误报，见 §1.2，已修）。
