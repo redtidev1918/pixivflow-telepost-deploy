@@ -229,7 +229,22 @@ primary_region = 'iad'
     # protocol transport: 3.3.0's generic face cannot express this deployment's
     # targets (see the PIXIVFLOW_JOB_TRANSPORT note below). Rollback = 2.70.1
     # (with PIXIVFLOW_JOB_TRANSPORT=legacy for the executor call path).
-    TELEPOST_IMAGE = 'ghcr.io/redtidev1918/telepost:2.71.0'
+    # 2.71.1 (2026-09-27): a refetch terminal notification can no longer be
+    # missed. A verdict delivered straight from the executor
+    # (POST /api/v1/refetch/outcomes) bypassed the one-shot terminal seam, so it
+    # could neither notify nor claim `terminal_notified_at` — the same task could
+    # then be re-notified, or silently never notify. All four terminal sources
+    # (poll, event callback, restart recovery, direct outcome callback) now pass
+    # through one seam that claims the clock exactly once and always appends 任务ID;
+    # an already-terminal replay notifies nobody. Alongside it the executor's
+    # reason is normalized at the single write path: the CODE column keeps only
+    # the closed protocol/v1 vocabulary (`remote_failure` fallback) and the
+    # free-text column is bounded, single-line and markup-free, so a raw upstream
+    # HTML error page can no longer reach the review card, the Mini App state view
+    # or the doctor's failure composition. Additive wire field (`reason_code`);
+    # best with PixivFlow >= 3.4.1, and an older producer degrades cleanly to
+    # `remote_failure`. Rollback = 2.71.0.
+    TELEPOST_IMAGE = 'ghcr.io/redtidev1918/telepost:2.71.1'
 
 [[mounts]]
   source = 'data'

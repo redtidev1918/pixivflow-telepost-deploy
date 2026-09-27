@@ -207,6 +207,23 @@ kill_timeout = 60
     # `download.novelCover.unknown` (skip | keep), fail-open. Defaults keep the
     # pre-3.1.0 behaviour (relatedTags always, seedTier off, translated-name
     # matching off). Rollback = the b01a93d line above.
+    # d2e9c9e = v3.4.1 (released 2026-09-27). Two field-acceptance fixes.
+    # (1) A terminal refetch verdict shipped the raw upstream technical text
+    # across the boundary: a live acceptance run put a 220-char multi-line nginx
+    # 502 HTML page into TelePost's `failure_code` CODE column, and from there
+    # into the Mini App state view and the doctor's 24h failure composition. The
+    # producer now translates the outcome ONCE through its existing classifier
+    # (`terminalReasonFor` -> `protocolErrorCodeForTerminalReason` /
+    # `TERMINAL_REASON_MESSAGES`) and ships `reasonCode` (the closed protocol/v1
+    # `$defs/Error.code` vocabulary) plus a short business message; the wire form
+    # gains the additive `reason_code` field, which an older consumer ignores.
+    # (2) A consumer cancel only wrote the ledger and never interrupted the
+    # in-flight run, so cancelling a `@manual-` job left that schedule's
+    # admission wedged (runNow stayed false) until a process restart, and the run
+    # kept scanning to its own timeout. Cancel now reaches the running slot: the
+    # download manager aborts the in-flight request and stops scheduling new
+    # candidate attempts, and the slot lease is released owner-guarded, so the
+    # later `finally` release is a no-op. Rollback = the 5d23117 line above.
     # 5d23117 = v3.4.0 (released 2026-09-27). Workflow Protocol v1.1: the generic
     # POST /jobs face can name its target again. v1 required the target to be
     # discovered from configuration, but production configures FOUR manual-eligible
@@ -248,8 +265,8 @@ kill_timeout = 60
     # real delivery runtime against a fake OneBot API. No behaviour change for
     # any existing route: PixivFlow still ships no platform connector.
     # Rollback = the 583a74c line above.
-    PIXIVFLOW_REF = '5d231179a9b36ba5199d0c7c5fbf14013d43fb36'
-    PIXIVFLOW_VERSION = '3.4.0'
+    PIXIVFLOW_REF = 'd2e9c9e338bd0e24762ef678bf1fe296c7f7adb9'
+    PIXIVFLOW_VERSION = '3.4.1'
 
 [[mounts]]
   source = 'pixivflow_data'
