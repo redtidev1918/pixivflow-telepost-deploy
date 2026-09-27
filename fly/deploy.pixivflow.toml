@@ -265,8 +265,26 @@ kill_timeout = 60
     # real delivery runtime against a fake OneBot API. No behaviour change for
     # any existing route: PixivFlow still ships no platform connector.
     # Rollback = the 583a74c line above.
-    PIXIVFLOW_REF = 'd2e9c9e338bd0e24762ef678bf1fe296c7f7adb9'
-    PIXIVFLOW_VERSION = '3.4.1'
+    # 4db0bf2 = v3.4.2 (released 2026-09-28). Two fixes.
+    # (1) A failed novel-cover probe no longer ships the cover anyway. The catch
+    # used to return the normalized URL, and the URL a failed probe leaves
+    # behind is exactly the 640x900 Pixiv design cover the classifier exists to
+    # suppress — so whenever the probe request itself failed (network, auth),
+    # a novel still went out with a stock cover. The probe outcome is now a
+    # policy decision (`download.novelCover.probeFailed`, skip | keep, default
+    # `skip`) read at the single delivery decision point, next to the existing
+    # `unknown` policy.
+    # (2) A consumer cancel is no longer overwritten. cancelConsumerJob wrote
+    # the terminal cancelled_by_consumer verdict in one transaction, but the
+    # interrupted run then reached the normal per-target outcome path and
+    # re-wrote the cell with internal_error ~10s later, flipping the status
+    # from cancelled back to failed and emitting a disposition:failed refetch
+    # outcome. A cell already carrying CANCELLED_BY_CONSUMER is now final
+    # (SlotCoordinator.applyOutcome), and no failed outcome is emitted for a
+    # consumer-cancelled job (NotificationPolicy.noteRefetchOutcome).
+    # Rollback = the d2e9c9e line above.
+    PIXIVFLOW_REF = '4db0bf21a7853e478f699d68f3458acda8270900'
+    PIXIVFLOW_VERSION = '3.4.2'
 
 [[mounts]]
   source = 'pixivflow_data'
