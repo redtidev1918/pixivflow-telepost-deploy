@@ -2248,8 +2248,10 @@ Status: VERIFIED (config → live volume → hot reload → 投稿现场确认 2
 
 ## 运维教训
 
-* 审核群的遮罩不是审核群的设置：`spoiler` 是**每个 delivery target 的投递字段**，同一次投稿的
-  审核群预览与频道发布用的是**同一个值**。想只遮某一条，只能用审核卡上的「遮罩」按钮
+* 遮罩要分清「两个界面」：`spoiler` 是**每个 delivery target 的投递字段**，它决定的是**频道发布**
+  是否加遮罩；**审核群预览自 2026-09-28 起恒不遮罩**（不再继承投稿者的值 —— Telegram 无法对已发消息
+  反向解除遮罩，审核员必须看见被审媒体），见文末「2026-09-28 内容链路稳定化」§4。想只遮某一条，
+  仍然用审核卡上的「遮罩」按钮，它是在**发布前**改写存储标志
   （`services/review_service.set_spoiler`/`toggle_spoiler` 只翻存储标志，不会重新 staging）。
 * 卷配置是权威：镜像里的模板只在卷配置缺失时生效，任何模板改动都必须显式应用到卷。
 
@@ -2441,7 +2443,8 @@ Status: VERIFIED (release → pin → runtime) / EXTERNAL_ACCEPTANCE_REQUIRED（
   因此：`src/utils/imageDimensions.ts`（只读 JPEG/PNG/GIF 头拿尺寸，PixivFlow 不带
   图像解码器）+ `isPixivDesignCoverImage()`（精确 640x900）+
   `NovelDownloader.resolveCoverUrl()`——命中则 `cover_url: null` 且不发 `:novelcover`
-  asset，**探测失败一律保留封面**（fail open，网络/认证失败不能吃掉真封面）。
+  asset；探测失败（fail open）原本一律保留封面，2026-09-28 起改为策略
+  `download.novelCover.probeFailed`（默认 `skip`）——见文末「2026-09-28 内容链路稳定化」§2。
   两个消费端（TelePost 审核群预览与频道 root）因此同时被修好。
 
 ## 3 发布与部署（pin）
@@ -3144,3 +3147,224 @@ v1.1 现场验收之后，业务面又暴露三处**真缺陷**（都在执行�
 * 事件推送通道在生产仍关闭（`TELEPOST_API_BASE_URL` 未配置），只走「补拉 + ack」。
 * 复验产生的业务端测试数据已清理（3 条 `pending_reviews` + 2 条 `refetch_attempts` 删除、服务令牌已吊销），
   执行端作业均已终态。
+
+# 2026-09-28 内容链路稳定化：四个长期问题的收口
+
+Status:
+
+* #2 主题 Tag 联想（生产配置）—— `VERIFIED`（仓库改好 + 两层校验通过 + **卷上运行副本已就地应用**：
+  sha256 回读一致、调度器热重载到 generation 2；见 §1）
+* #4 封面探测失败策略 —— `IMPLEMENTED_NOT_VERIFIED`（PR redtidev1918/PixivFlow#181：已提交已推送，
+  未发布、未部署）
+* #1 重抓卡死 / #3 卡片不更新 —— `VERIFIED`（生产库只读取证 + 运行镜像代码 + release 时间线三者互证：
+  历史真问题，当前 2.71.1 已修）
+* 遮罩 (b)「默认不糊 + 遮罩由审核员发布前决定」—— `IMPLEMENTED_NOT_VERIFIED`
+  （PR redtidev1918/TelePost#242：审核群预览改为**恒不遮罩**，频道发布仍取存储行值；已提交已推送，
+  未发布、未部署，见 §4）
+
+## 1 #2 主题 Tag 联想：生产 target 显式开 `relatedTags: when_seed_insufficient`
+
+* 背景见上方「2026-09-27 四个现场 Bug 修复上线」§2：3.0.3 引入 `topicDiscovery.relatedTags`，
+  三种取值 `always`（默认 = 历史行为）/ `when_seed_insufficient` / `never`。**代码默认保持 `always`
+  是硬约束**（`src/__tests__/topic/TopicFeature.test.ts:247-278` 钉住纯热度排序语义），所以
+  「`西瓜肚` 目标被同级高权重相关 Tag（`丸吞`）占满 slot」在代码侧修不了，只能由**生产配置**显式选择。
+  生产事实：`bot1-*` 的主题是 `ボテ腹`、`bot2-*` 的主题是 `丸呑み`，四个 target 原先都只写了
+  `topicDiscovery.includeR18`，即全部落在默认 `always` 平铺召回上。
+* 本轮改动（本仓库）：`pixivflow/config/production.json` 四个 target
+  （`bot1-illust-botefuku` / `bot1-novel-botefuku` / `bot2-illust-marunomi` / `bot2-novel-marunomi`）
+  的 `topicDiscovery` 各加一行 `"relatedTags": "when_seed_insufficient"`（`:165`/`:211`/`:250`/`:296`）。
+  语义 = **先只搜主题 Tag，填不满 `limit` 才扩展相关 Tag**，且带主题 Tag 的作品排在热度之前
+  （`src/topic/TopicPipeline.ts:154`/`:219`/`:257`/`:278`；日志
+  `[TopicRecall] mode=… seedAccepted=… relatedTags=…` 可确认实际搜过哪些 Tag）。
+* 校验：`./scripts/validate.sh` → `[OK] pixivflow/config/production.json JSON`（仅剩 `.env` /
+  `data/pixivflow/config.json` 两个未 bootstrap 的既有 FAIL，与本改动无关）；PixivFlow 自己的
+  `node dist/index.js config validate pixivflow/config/production.json` → `✓ JSON format is valid` /
+  `✓ Download targets configured`（唯一 warning 是本机没配 refresh token，预期）。
+* sha256：`e63136af4057c5c71e94be07d4d012df22f5869314923aa6c6871992fc4ecdcf`（10873 B，旧 = 上方 spoiler
+  那次修完的同一份字节）→ `b09f8512dad5672a078f5ea41099c52083e0b447709d4e66df825d19877b33a2`（11101 B，新，
+  净增 4 行）。
+* **卷是权威，本轮已就地应用（`VERIFIED`）**：`docker/pixivflow-scheduler-entrypoint.sh` 只在卷配置缺失/
+  为空时才把镜像默认值拷过去（同上文 2229-2234），所以「仓库改好」≠「线上生效」——线上生效必须改卷。
+  本轮执行（2026-09-27T19:4xZ）：`fly machine start 83d1650bd23948` → `fly sftp put` 把工作树文件传为
+  `/app/data/production.json.new` → 容器内 Node 断言式校验（递归深比较，只允许
+  `/targets/<n>/topicDiscovery/relatedTags` 这一处差异，`DIFF_COUNT 4` / `ALL_DIFFS_ALLOWED true`）
+  → 备份 `/app/data/production.json.bak-relatedtags`（10873 B）→ `os.replace` 原子替换 → 回读
+  `b09f8512dad5672a078f5ea41099c52083e0b447709d4e66df825d19877b33a2`（11101 B，与仓库工作树一致）
+  → 运行中的调度器日志出现 `Scheduler configuration snapshot activated {"generation":2,…}`
+  （启动时是 generation 1）即热重载已生效 → `fly machine stop` 并清理 `.new` 与 `/tmp/apply-config.js`。
+  两个可复用的操作要点：(1) **不能用 `JSON.stringify(parsed) === text` 当门** —— 这份文件不是
+  `JSON.stringify(j, null, 2)` 的规范输出，工作树与 HEAD 都会判 false；门必须是「逐条列出差异且全部落在
+  白名单内」。(2) 机器起来后日志是
+  `External scheduler mode: internal cron disabled, awaiting authenticated schedule triggers`，
+  即起机器本身不会触发下载（cron 是 `0 10 * * *` / `10 10 * * *`，Asia/Shanghai）。
+* **纠错（此前判断有误，已就地改写）**：前文记的「要动卷必须先 resume app」不成立。`pixivflow-scheduler`
+  的 app 状态仍是 **suspended**（以 `fly apps list --json` 的 `Status` 字段为准；`fly apps list` 表格里的
+  suspended/deployed 列与它不一致，只是展示差异），但机器 `83d1650bd23948` 照旧能 `fly machine start`。
+  更关键的是 **`auto_start_machines = true` 让外部时钟能把机器唤醒**：`GET
+  https://pixivflow-scheduler.fly.dev/health` → 200
+  `{"status":"ok","service":"pixivflow-scheduler-trigger","version":"3.4.1","commit":"d2e9c9e338bd"}`，
+  机器随该请求由 `stopped` 变 `started`（`control-plane/wrangler.toml:34` 的
+  `PIXIVFLOW_TRIGGER_BASE_URL` 正是这个域名；`GET /` → 404）。∴ **app 挂起不是流水线的总开关**：
+  三级时钟（cron-job.org 主 / Cloudflare Worker `pixivflow-control-plane` +2min 次 / GitHub
+  `schedule-watchdog.yml` `35 2 * * *` 兜底）仍能在 10:00 CST 拉起机器并执行当日投稿。
+* 次生通道（诚实边界）：`candidate_inventory` 待发池是用**同一次 topic 扫描**里未投递的作品填充的
+  （`src/download/handlers/IllustrationTargetHandler.ts:290` / `NovelTargetHandler.ts:288`，
+  `src/download/inventory.ts:38 recordInventoryCandidates`），`always` 时代记下的 `丸吞` 行在
+  `maxAgeDays: 30` 内仍可能被 `tryInventoryFallback`（`IllustrationTargetHandler.ts:345-350` / `:382-431`）
+  补位发出。改配置只让**新增**扫描不再收这类行；要立刻清干净需在卷上处理
+  `candidate_inventory` 里对应 `topic`/`target_id` 的 `pending` 行（同样需要起机器）。
+
+## 2 #4 Pixiv 生成封面：`probe_failed` 由「一律保留」改为策略化（默认 `skip`）
+
+* 现场定性：3.0.3 `182694d` 已用「精确 640x900 画布」把 Pixiv 生成设计封面判成 `pixiv_generated` 并
+  **无条件跳过**（见上文 2437-2445），但**探测失败（网络 / 认证 / 限流）走的是 fail-open**：
+  `src/download/NovelDownloader.ts:461-469` 的 catch 直接 `return normalized`，原样保留封面 ——
+  于是生成封面照样进审核群与频道，是这条修复的残余泄漏。
+* 改动（PixivFlow，分支 `fix/novel-cover-probe-failed`，**未提交、未发布**）：
+  `src/domain/media/NovelCoverPolicy.ts` 新增 `probeFailed: 'skip' | 'keep'` 与
+  `export type NovelCoverOutcome = NovelCoverType | 'probe_failed'`；`coverDeliveryDecision()` 把
+  `probe_failed` 当策略处理（`classifyNovelCover` 仍只返回三种分类，签名未动）；
+  `DEFAULT_NOVEL_COVER_POLICY = { unknownCover: 'skip', probeFailed: 'skip' }`。
+  `NovelDownloader.ts:461-494` 的 catch 内问策略：默认 `skip` → 记 `coverType: 'probe_failed'` +
+  `policy` 的 warn 后 `return null`；`keep` → 保留旧行为（warn 文案标明 `novelCover.probeFailed=keep`）。
+  配置面 `src/config/types.ts:990-1003`、`src/config/validation.ts:733-741`、
+  `src/download/DownloadManager.ts:167`（键缺失即 `skip`）。文档 `docs/ARCHITECTURE.md` /
+  `docs/CONFIG.md` 里「探测失败一律保留封面」的旧口径已一并改掉。
+* 影响面：`textResponse.coverUrl` 全仓只有一个读者（`NovelDownloader.ts:247`），它的取值同时喂
+  `novelCoverAsset()` 与 manifest `cover_url`，所以返回 `null` 会让 `:novelcover` asset 与
+  `cover_url` 一起消失。
+* 验证：`npx jest src/__tests__/download src/__tests__/domain src/__tests__/config --silent` →
+  24 suites / 271 tests；全量 `npx jest --silent --runInBand` → **137 suites / 1524 tests 全通过**；
+  `npx tsc --noEmit` exit 0；新增 `src/__tests__/config/novelCover.test.ts` 与
+  `DownloadManager.test.ts:471-498` 的接线覆盖，`NovelDownloader.test.ts:429` 的旧 fail-open 测试
+  已翻面为「默认不保留」，并新增 `probeFailed: 'keep'` 用例。
+* 取舍（可回滚）：默认 `skip` = 宁可这一本没封面，也不把生成封面发出去；若更看重
+  「真封面不能被瞬时故障吃掉」，把 `download.novelCover.probeFailed` 设为 `keep` 即恢复旧行为。
+  仍可能发出生成封面的只剩：显式 opt-in（`probeFailed: keep` / `unknownCover: keep` 配上读不出头的格式），
+  以及 Pixiv 换成非 640x900 画布导致分类器漏判（那会落 `custom`）。
+
+## 3 #1 重抓卡死 + #3 卡片不更新：真机取证 =「历史上真的存在，2.71.1 已修」
+
+* 取证对象是**生产库**（`telesubmit-multi-bot` 卷上 bot1 的 `submissions.db`，只读探针，未写任何一行）。
+* 现场那条就是用户报的 #135：`refetch_attempts` id 9 = `chain-135`，`state='cancelled'`，
+  `failure_code=''`、`terminal_reason=''`、`notify_count=0`、`last_progress_notified_at` 与
+  `terminal_notified_at` **都是 NULL** —— attempt 建了、跑了 ≈140 秒（`created 1790481174.57` →
+  `finished 1790481318.92`）、然后**一声不响**地终止。`refetch_events` 里 chain-135 **一行都没有**；
+  `submitter_notifications` 只有 `manager_accepted`，没有任何 `refetch_terminal` 行（连排队都没排）。
+* 时间线（`audit_events`；注意该表列名是 `ts`，没有 `created_at`）：09-27 02:05:30 审核 135 创建
+  （actor `service:api_token:2`，pixiv_id `150123915`，slot `bot1-daily@2026-09-27T1000`）→
+  03:52:54 `review.refetch_requested`（actor `telegram_user:5073758941`，request `c78dd065-…`）→
+  03:52:59 `review.refetch_remote_accepted` → **03:54:40 `review.rejected`（同一用户自己驳回）** →
+  03:55:18 attempt 静默 `cancelled`。审核 136 于 04:15:39 被同一用户驳回。
+* 决定性对照：TelePost 的 tag 时间线 与 `git log -S'_refetch_terminal_notify'` —— 后者只命中
+  `6f2617f`（2026-09-27 08:06Z，"fix(refetch): redesign refetch as persistent job workflow"），
+  且 `git tag --contains 6f2617f` 只有 **v2.71.0 / v2.71.1**；单一咽喉 `source_review_resolved`
+  出自 `69849e2`（05:41Z）。**#135 发生在 03:52–03:55Z，早于 v2.68.1（05:02Z）与 v2.71.0（11:11Z）**，
+  当时线上 ≤ v2.68.0：既没有「点击就刷新卡片」（`60616f8`，首个带它的版本是 2.68.1），
+  也**根本不存在**终态通知函数。attempt 9 的 `terminal_reason` 为空，同样符合 2.69.0 之前的代码
+  （写 `terminal_reason` 的状态机出自 `69849e2`）。
+* ⇒ 结论：**#1/#3 是真问题，但不是当前线上问题**；#135 那行是修复前版本留下的历史行。当前运行镜像
+  `2.71.1`（`_release_version.py`：`RELEASE_VERSION 2.71.1` / `RELEASE_COMMIT ff286e73…`；
+  pin `fly/deploy.telepost.toml:247`）里：
+  * `handlers/review.py:1179-1199 _terminate()` —— CANCELLED / FAILED / TIMEOUT 三条终态在
+    `moved` 后都会调 `_refetch_terminal_notify(...)`；`:1201-1209` 的取消分支文案正是
+    「🔄 审核 #N 的重抓已取消：该审核已被处理（驳回/通过/过期），不会产生替换稿，当前稿件保持不变。」
+  * `telepost/storage/sqlite/refetch.py:200-279 apply_transition_on()` 是**唯一写入者**
+    （CAS 在它读到的 state 上 + `fsm.assert_transition` 拒绝非法迁移）；
+    `:675-722 apply_outcome()` 在源审核非 `pending` 时收敛到 CANCELLED / `source_review_resolved`；
+    `:609-673 commit_replacement()` 只在 supersede 的 CAS 恰好命中 1 行时才落 REPLACED。
+  * `handlers/review.py:923-962 apply_refetch_outcome_and_notify()` 是轮询、事件对账、重启补扫、
+    `POST /api/v1/refetch/outcomes` 四条入口**共用**的唯一终态咽喉（`changed == False` 时不发），
+    `:965-981 _refetch_outcome_text()` 是唯一文案映射（`no_alternative` / `obsolete` / `failed` / 兜底）。
+* 线上医生同证：`python3 -m telepost.observability.cli doctor --all-bots` → **HEALTHY 18/18**，
+  两个 bot `refetch_stuck` 无活跃 attempt、`终态通知待补发 0`；24 小时内只有 2 次重抓失败，
+  且都是上游 Pixiv 502（`notify_count 3` / `1`，`terminal_notified_at` 都已写）。
+* 附带取证（回应「#1 的**成功**终态从未真机走通」）：**成功终态在 2026-09-17 真机走过一次**。
+  `refetch_attempts` id 8（`chain-110`）：`state='replaced'`、`result_candidate_id 149732000`、
+  `created 1789610816.63`（09-17 02:06:56）→ `finished 1789610923.21`（02:08:43）；源审核 110
+  （pixiv_id 149727403）被置 `superseded`；替换稿作为 **review 112**
+  （`supersedes_review_id=110`、`generation=1`、pixiv_id `149732000`、`refetch_request_id c255e1c3-…`）
+  进入审核群，并于 02:10:42 被**人工驳回** —— 「重抓成功 → 替换稿入库 → 人审替换稿」三段都真实发生过
+  （旧代码路径）。该行 `notify_count=0` / `terminal_notified_at NULL` 属旧代码，不是 2.71.1 行为。
+  2.71.1 上的一次成功终态见 `refetch_events` chain-138（`requested` → `replaced`，actor `service:refetch`），
+  由验收循环驱动，同样落了替换稿行（`replaced_by 150168228`）。
+* 诚实边界：本次**没有人在审核群里真点一次**重抓按钮（当时那几条投稿已过期），结论建立在
+  「生产库只读取证 + 运行镜像里的代码 + tag/release 时间线」三者互证上，而不是点击复现。
+
+## 4 遮罩 (b)：审核群预览恒不遮罩，遮罩是发布前的审核决定
+
+* 现场口径偏差：2026-09-27 那次修的是**默认值**（生产 target `fields.spoiler: false`，见上文
+  「2026-09-27 投稿遮罩策略：默认不遮罩」），但**初始值仍沿用投稿者** —— TelePost 把
+  `command.spoiler` 直接透传给审核群预览的 staging（`telepost/application/review_queue.py:402` /
+  `:408`，原为 `spoiler=command.spoiler`）。于是投稿者在私聊按过「🔞 剧透」、或 API 调用方传
+  `spoiler: true` 时，**审核群看到的预览就已经被遮罩**；而 Telegram 无法对已发送的消息反向解除遮罩，
+  审核员恰好看不到自己要审的内容。
+* 改动（PR redtidev1918/TelePost#242，叠在未合并的 `fix/incident-140-data-class` 之上）：`review_queue.py` 两处 staging
+  调用改为 `spoiler=False`，并加注释说明「遮罩是审核员发布前的频道决策，不是可继承的投稿设置」；
+  `pending_reviews.spoiler` 仍写 `command.spoiler`（`:548`），存储语义不变。
+* 结果语义（两个界面从此分开）：
+  * **审核群预览**：恒不加遮罩 —— 审核员必须看见被审媒体，且遮罩不可事后补/撤。
+  * **频道发布**：仍由存储行决定 —— `services/review_service.py:833`
+    `current_spoiler = bool(row["spoiler"]) if spoiler is None else bool(spoiler)`；
+    审核员可在发布前用审核卡「🔇 遮罩」按钮改写该行（`handlers/review.py:1586 toggle_review_spoiler`
+    → `services/review_service.py:716 toggle_spoiler`，只翻存储标志、不重新 staging）。
+* 测试（TelePost，本机）：新增
+  `tests/test_review.py::test_review_group_preview_never_inherits_submitter_mask`，断言三件事 ——
+  媒体组每项 `has_spoiler is False` 且不降级为「单条遮罩发送」、存储行仍 `spoiler=1`、
+  未改写时发布取 `spoiler=True`。全量 `.venv/bin/python -m pytest -q --maxfail=0 --no-cov`：
+  修复前 **1178 passed / 2 skipped**（64.55s）→ 修复后 **1179 passed / 2 skipped**（61.42s），
+  +1 = 新用例。
+* 诚实边界：这是**代码级**收口，已提交且 PR 已开，但**未发布 / 未上线**；线上当前仍把投稿者的值透传给审核群预览。
+  设计上保留的残余：投稿者声明 `spoiler: true` 而审核员直接点通过、不碰遮罩按钮时，频道发布仍会遮罩 ——
+  「遮罩由审核员发布前决定」体现在审核员**能够**在发布前改写，而不是系统强制改写。
+* 随之失效的旧口径（已在上文就地改正）：`docs/CONTRACT.md:56` 与
+  `docs/concepts/delivery.md:50` 曾写「同一份 `spoiler` 值同时决定审核群预览与频道发布的遮罩」。
+
+## 5 新发现（阻断级，不在本轮四项范围内）：手动重抓的投递因 `refetch_request_id` 不是 UUID 被永久拒绝
+
+Status: FAIL（线上可复现；未修复）
+
+* 现场证据（`/app/data/pixiv-downloader.log`，只读取证）：execution #556 槽位
+  `bot1-daily@manual-1e22b55cb33e47289f30c62e8ee1e11f`（`trigger: "manual"`，
+  `occurrence_at 2026-09-27T16:16:17.870Z`，16:25:15 结束）终态 `status:"failed"` /
+  `business_status:"failed"` / `alertable:true` / `duration_ms 0`，`error` =
+  `permanent delivery failure: delivery endpoint HTTP 400:
+  {"ok":false,"error":{"code":"invalid_refetch_provenance","message":"refetch_request_id 必须是 UUID"}}`。
+  同一条终态里 `candidate_report {fetched:182, selected:16, rejected:166, reasons:[ai_filtered 147,
+  metadata_filtered 11, duplicate 8]}` —— 即**候选已经选出来了，替换件却永远投不出去**；用户侧看到的现象
+  就是卡片一直不更新（与 #1/#3 的表面症状同源，但这是另一条互不相干的原因）。
+* 根因（跨仓契约错配）：协议定义 `idempotency_key` 是**不透明字符串**
+  （`telepost/application/pixivflow_jobs.py:8`），而 PixivFlow 把它原样写进投递字段
+  `refetch_request_id`：`src/download/handlers/deliveryContext.ts:34`
+  `refetchRequestId: slotContext?.manualRequestId ?? ''` ← `src/scheduler/ManualJobAdmission.ts:409`
+  `manualRequestId: key`（`key` = `request.idempotencyKey`，`:128` 用它派生槽位
+  `${plan.id}@manual-${key.toLowerCase()}`）→ 字段名/占位符见 `ManualJobAdmission.ts:42-43`
+  → `src/delivery/HttpMultipartDelivery.ts:478`。而 TelePost 的投稿端点要求该字段是**规范带连字符的
+  小写 UUID**：`utils/api_server.py:706-715 _invalid_refetch_request_id`（`str(uuid.UUID(value)) == value`，
+  空值除外），违反即 400 `invalid_refetch_provenance`（`:1569-1572` 与 `:1748-1750` 两处，
+  由 `TelePost/tests/test_refetch.py:729`、`:739` 钉住）。该校验不是洁癖：存下的值之后必须能匹配重抓
+  attempt 自己的 `request_id`，否则 `commit_replacement` 找不到源 review，替换件无法 supersede。
+* 旁证：TelePost 自己生成的 key 也过不了自己的校验 —— `telepost/application/refetch.py:158`
+  `key = callback_key or f"api:{review_id}:{uuid.uuid4().hex}"`（带前缀 + 无连字符 hex）。
+* 线上旁证（只读查询 `bot1/submissions.db`）：`refetch_attempts` 最近 6 条的 `request_id` **全部是带连字符
+  的规范 UUID**（`b36c3a6c-3282-4182-b7d5-6d89f87d8b5e` / `e0f1edb9-c26f-4928-bc70-73aaf1827cf3` /
+  `c78dd065-60aa-4e7a-bba5-38275019217c` / `c255e1c3-…` / `ad4c7df1-…` / `b7e886d1-…`，callback_key 形如
+  `cb:137:accta59bdbf417694997bcb3`），而 TelePost 的两处提交点正是把这个 `request_id` 当 `idempotency_key`
+  送出去（`telepost/application/refetch.py:433`、`handlers/review.py:1637` —— `client.submit("refetch",
+  request_id, …)`，端口签名见 `telepost/application/pixivflow_jobs.py:343-353`）。
+  ∴ **审核卡「重抓」按钮这条现代路径尚未被证明会失败**；16:16 那条裸 hex 槽位不与任何一个 attempt id 对应。
+* 身份空间分叉（根因的形状）：同一个身份，PixivFlow **两条相邻路由的校验强度不同** ——
+  `POST /internal/targets/:targetId/refetch` 直接把它当不透明串透传
+  （`src/scheduler/ManualRefetchAdapter.ts:24-31` `idempotencyKey: requestId`，`ManualJobAdmission` 不校验形状），
+  而紧挨着的 `POST /internal/targets/:targetId/recover` 用严格正则要求 UUID，否则 400
+  `requestId must be a UUID`（`src/scheduler/ScheduleTriggerServer.ts:533`）。
+* 尚未定位（诚实边界）：那条裸 32 位 hex（`1e22b55cb33e47289f30c62e8ee1e11f`，既无 `api:<review_id>:`
+  前缀也无连字符）的**上游生成者仍未坐实**；已排除 TelePost 的 job port（它送的是虚线 UUID，见上一条），
+  剩余候选是 legacy `/refetch` 路由那个未校验的 `requestId`，或某个操作方/客户端自带的键。
+* 影响（按已证明的范围）：**任何**手动准入只要键不是规范 UUID，它的投递就会被永久拒绝（400 不可重试），
+  且失败发生在候选产出**之后** —— 现场已有一条（#556）。正常 cron occurrence 不走 manual 准入、不带该字段，
+  不受影响。
+* 修复方向（两处都很便宜，推荐同时做）：(1) PixivFlow 的 refetch 提交路由按 `recover` 路由已有的方式校验/
+  规范化 `requestId`，形状不对就**在准入时** 400 说清楚，而不是落一个注定在投递端失败的键；(2) 投递模板在键不是
+  规范 UUID 时**省略** `refetch_request_id` —— 手工触发的一次日常运行本来就没有可关联的重抓，空值才是真话，
+  这样投递能正常完成。TelePost 侧那条校验保持不动：它是「存储值必须能匹配自身 attempt UUID」的不变量。
