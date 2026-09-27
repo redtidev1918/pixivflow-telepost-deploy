@@ -270,6 +270,16 @@ primary_region = 'iad'
   # Review-group refetch reaches the sleeping PixivFlow executor through Fly's
   # HTTPS proxy; PIXIVFLOW_REFETCH_TOKEN is a separate shared Secret.
   PIXIVFLOW_REFETCH_BASE_URL = 'https://pixivflow-scheduler.fly.dev'
+  # EMERGENCY ROLLBACK — 2026-09-27 现场验收发现协议通道无法表达本部署的重抓。
+  # TelePost 2.71.0 在协议通道上向 POST /jobs 发送 {"params":{"target_id":...}}，
+  # 但协议 v1 要求 params.query（否则 HTTP 400 "params.query must be a JSON
+  # object"），且通用面只从配置解析目标——本部署有四个满足
+  # targetServesManualCandidateSearch 的 target，于是必然 HTTP 409
+  # ambiguous_target。协议 v1 没有任何目标选择器字段。
+  # 在生产者侧支持显式目标选择之前，先走旧的目标在 URL 里的通道；该通道已实测
+  # 可用（POST /internal/targets/{id}/refetch → 202，GET …/{requestId} → 200）。
+  # 生产者侧修复发布后删除本行即可回到 protocol。
+  PIXIVFLOW_JOB_TRANSPORT = 'legacy'
   # Telegram Mini App surface. dist/ is served same-domain at /app/ by the
   # TelePost webhook server (2.21.1); MINIAPP_SESSION_SECRET is a separate
   # shared Secret (≥32 chars, never the bot token). Rollback: set back to false.
