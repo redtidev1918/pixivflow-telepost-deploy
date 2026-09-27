@@ -15,7 +15,7 @@ P0（TelePost 重抓作业状态机 + 只读 doctor）与 P1（Tag provenance、
 
 | 缺失的模型 | 落地实现（文件 / 提交） | 版本 | 验证 |
 | --- | --- | --- | --- |
-| 作业单一权威（状态 + 迁移表） | `telepost/domain/refetch_state.py`（254 行：9 个规范状态 `:41-49`、`ALLOWED` `:90-111`、`assert_transition` `:223`） | TelePost 2.69.0（`69849e2`） | **本机复跑**（`/tmp/tp-venv312`）：`pytest -q -p no:cacheprovider --no-cov` → `1107 passed, 1 skipped in 48.76s`；四个重抓套件 → `61 passed in 2.53s`（连续 5 次复跑均 61 passed） |
+| 作业单一权威（状态 + 迁移表） | `telepost/domain/refetch_state.py`（254 行：9 个规范状态 `:41-49`、`ALLOWED` `:90-111`、`assert_transition` `:223`） | TelePost 2.69.0（`69849e2`） | **本机复跑**（`/tmp/tp-venv312`）：`pytest -q -p no:cacheprovider --no-cov` → `1110 passed, 1 skipped in 48.86s`；四个重抓套件 → `62 passed in 2.60s`（早期基线连续 5 次复跑均 61 passed） |
 | 唯一写入口 | `RefetchRepository.apply_transition_on`（`telepost/storage/sqlite/refetch.py:200-279`） | 同上 | 6 个调用点全部在同一文件内（`:287`、`:340`、`:487`、`:500`、`:558`、`:566`） |
 | 逐次事件时间线 | 新表 `refetch_events`（`database/db_manager.py:364-377`）+ `list_events`（`refetch.py:114-121`） | 同上 | API 投影为 `events[]`（`telepost/application/refetch.py:265-277`） |
 | 候选因果（谁被拒绝/替换） | `refetch_seen_candidates` 增列 `request_id/outcome/reason/decided_at/replaced_by`（`db_manager.py:406-418`）+ `_record_candidate_outcome`（`refetch.py:419-437`） | 同上 | 投影为 `lineage[]`（`application/refetch.py:243-262`） |
@@ -189,7 +189,7 @@ TopicPipeline.selectWorks (src/topic/TopicPipeline.ts:68)
 ## 6 验收矩阵
 
 **功能层**：重抓正常替换；超时自动结束；无候选；连续重抓 A→B→C（不冻结、不覆盖、不丢历史）；失败必带原因；25 分钟内任何一次点击都有可见反馈（任务ID + 开始时间 + 阶段）。
-**回归层**：迁移表（允许/禁止）以单元测试固化；`PENDING→PUBLISHED`、终态回流、`FAILED` 重新进入正常流程全部被拒；现有 31+12+9 个重抓测试不得回归。（**最终复核**：`tests/test_refetch.py` 32 个 `def test_`、`tests/test_refetch_card_state.py` 12、`tests/test_refetch_replacement.py` 9、`tests/test_identity_provenance.py` 8，共 **61**；`tests/test_doctor.py` 31 项。）
+**回归层**：迁移表（允许/禁止）以单元测试固化；`PENDING→PUBLISHED`、终态回流、`FAILED` 重新进入正常流程全部被拒；现有 31+12+9 个重抓测试不得回归。（**最终复核**：`tests/test_refetch.py` 32 个 `def test_`、`tests/test_refetch_card_state.py` 12、`tests/test_refetch_replacement.py` 10、`tests/test_identity_provenance.py` 8，共 **62**；`tests/test_doctor.py` 31 项。第 62 例为连续重抓 A→B→C 回归测试 `test_chained_refetch_a_to_b_to_c_keeps_one_active_generation`。）
 **线上自适应层**：健康巡检（15 分钟 WARN / 30 分钟终止）；周期性扫描 `RUNNING` 且 `updated_at < now()-timeout` 并自动修复；`operation_id` 保证重复请求幂等。
 **故障注入**：Pixiv API 超时、Telegram 发送失败、DB 锁等待、任务进程退出、重复点击、bot 重启 —— 每种都要么恢复要么显式失败，**不得进入未知状态**。
 **日志**：所有关键流程带 `request_id`（形如 `refetch-135-20260926xxxx`）与 begin / state change / end 三类事件。
