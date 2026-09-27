@@ -3444,5 +3444,97 @@ Status: `VERIFIED`（发布产物、pin 文件、部署结果与运行期自报�
 * TelePost 的 `v2.71.1` / `v2.64.0` `TAG_CONFLICT` **未对账** ⇒ 下一次发版仍需手工落版本提交；对账要人决策
   （releasegraph 源码写死 “Tag conflicts are permanent: never move/force an existing tag.”，其 `AGENTS.md`
   也写 “`TAG_CONFLICT` → stop and ask a human.”）。
-* §5 的 `invalid_refetch_provenance`（手动准入的键不是规范 UUID 时投递被永久拒绝）仍未修。
+* §5 的 `invalid_refetch_provenance`（手动准入的键不是规范 UUID 时投递被永久拒绝）**已于 2026-09-28 修复**
+  （PixivFlow 3.4.3，见本页末尾「A1」一节；§5 本身保留为现场取证记录）。
 * #2 的行为层验证窗口是下一次真实运行（每日 10:00 / 10:10 CST）。
+
+# 2026-09-28 A1 provenance 契约修复（PixivFlow 3.4.3）与 A2 候选池跨频道清理
+
+Status:
+* A1 手动重抓投递的 provenance 契约错配：VERIFIED（§1）
+* A2 存量清理（跨频道行置 `expired`）：VERIFIED（§2）
+* A2 预防（`tagRelations.deny` 卷上生效）：VERIFIED（§3）
+* B1 备份导出脚本 + 一次恢复演练：IN_PROGRESS（并行进行，完成后追加）
+
+## 1 A1：一段不可用的 provenance 不得让一次合法投递失败
+
+* 缺陷与现场证据见本页 `## 5`（execution #556，`bot1-daily@manual-1e22b55cb33e47289f30c62e8ee1e11f`，
+  `HTTP 400 invalid_refetch_provenance`，`duration_ms 0`，候选已选出却永远投不出去）。
+* 修复形状（PixivFlow，PR #182 → squash `fee6df8`）：新增
+  `src/delivery/refetchProvenance.ts` 的 `canonicalRefetchRequestId(value)` —— 去掉连字符后必须匹配
+  `/^[0-9a-f]{32}$/`（等价于 Python `uuid.UUID()` 的宽容度：允许无连字符、大写、花括号、`urn:uuid:`
+  前缀、首尾空白）才输出唯一的 `8-4-4-4-12` 形式，否则返回空串。两个边界收口：
+  `src/download/handlers/deliveryContext.ts`（Slot 上下文 → 投递字段）与
+  `src/delivery/HttpMultipartDelivery.ts` 的 `buildTemplateVariables`（模板变量，最后一层）。
+  规范化失败时 warn 一次并投空串（下游把空串当「定时执行」）；仅改写拼写时 info。
+  **`manual-` Slot 的身份仍用调用方原拼写**（`ManualJobAdmission.ts:128/409`），幂等语义不变。
+* 取舍理由：可还原的拼写差异按同一 UUID 还原（保住「投稿与重抓请求的关联」），不可还原的值丢弃——
+  宁可少一条 provenance，不可让一次真实替换失败。`docs/CONFIG.md` 的投递模板变量一节已写明该规则。
+* 验证证据：`npx jest src/__tests__/delivery src/__tests__/protocol --silent` → 33 suites / 524 tests；
+  全量 `npx jest --silent --runInBand` → 138 suites / 1532 tests；`npx tsc --noEmit` → exit 0；
+  新测试 `src/__tests__/delivery/refetchProvenance.test.ts`（8 例）。CI（PR #182）全绿。
+* 发布与部署：tag `v3.4.3` → 提交 `74ffa4d29ec29810358a43545676c71134e068ce`；Release run
+  `36350876894`；npm `pixivflow@3.4.3` 已发布；ghcr `pixivflow:3.4.3` 匿名 manifest 200；
+  Release `v3.4.3` 已置 Latest（2026-09-27T21:25:25Z，旧的 `v3.4.2` Release 对象按策略被 prune，
+  tag 与镜像仍在）。执行端 pin 见 `fly/deploy.pixivflow.toml`（`PIXIVFLOW_REF=74ffa4d2…`、
+  `PIXIVFLOW_VERSION=3.4.3`，同文件 pin 历史里写了回滚锚点）。
+* 诚实边界：这修的是「合法替换因 provenance 措辞被整次拒绝」。它不改变「现代审核卡路径送出的就是规范
+  UUID」（线上 6 条 attempt 的 `request_id` 全是虚线 UUID）这一事实，也不覆盖「值非空却不是 UUID」
+  以外的失败面。
+
+## 2 A2：候选池的存量跨频道行
+
+* 池的生命周期长于填它的那次运行：`always` 时代每个解析出的 tag 都是检索 channel，于是
+  `recordInventoryCandidates` 把**另一个 bot 的题材**也存成了备用件；`claimNext` 按
+  `ORDER BY first_seen_date ASC, seen_count ASC` 取件（`CandidateInventoryRepository.ts`），
+  于是这些行排在 fallback 队列最前面。已交付的证据：bot1 已投稿的 28 行里有 3 行带 丸呑 系 tag。
+* 判据修正（重要）：第一版判据是「快照里没有字面种子 tag」→ 干跑出 140 行（bot1 77 + bot2 63）。
+  逐条读快照后**否掉了这个判据**：bot1 池里没有字面 `ボテ腹` 的行多为正宗内容——
+  复合 tag `储精罐/一肚子精液/腹胀/腹部隆起/ボテ腹`（子串含种子）、`怀孕/西瓜肚`、`妊婦/pregnant`、
+  `膨腹/belly inflation`；bot2 池里被判 off-topic 的几乎就是整个 vore 供给
+  （`VORE | 丸吞み`、`VORE | 丸吞 | 捕食`、`丸吞み | vore`、`吞食 | VORE`），按字面清会把 bot2 清空。
+  最终判据：**带另一个 bot 的题材标记、且完全不带本池自身题材标记**的行才清理（混合作品两边都留）。
+* 执行证据（`/app/data/pixivflow.db`，`node:sqlite` 只读干跑 + 单事务 apply）：
+  `COUNTS {"pending":362,"keep":342,"cull":20,...}` → `APPLIED changed=20 planned=20`；
+  `PENDING_AFTER` = bot1-illust 82 / bot1-novel 51（70→51）/ bot2-illust 159 / bot2-novel 50（51→50）。
+  被置 `expired` 的 20 个 pixiv_id（bot1-novel 19 条、bot2-novel 1 条）：
+  `29159030 29158982 29158763 29159656 29158590 29167028 29176318 29177452 29178214 29184796
+  29193831 29204203 29202536 29203645 29204702 29212551 29216355 29219628 29230194 29138260`。
+  置的是 `status='expired'`（`evictExpired` 自己写的状态），行与快照保留，逆操作是一句 SQL：
+  `UPDATE candidate_inventory SET status='pending' WHERE pixiv_id IN (<上列>)`。
+* 撤回的代码守卫：先做过一版 `src/download/inventory.ts` 的 `carriesSeedTag`（字面相等），
+  在证据面前不成立——bot2 的主题写法本身就包含 `丸吞`/`丸吞み`/`vore`，字面判据会把正宗内容挡在池外；
+  而且「一个作品是否属于本主题」是 `TopicPipeline` 的职责，不应在库存层用字符串复刻。该改动已 drop
+  （未提交、未发布），本项以配置侧预防（§3）替代。
+* 诚实边界：清理只针对**跨频道**混入。仍有 140 行「不带字面种子 tag 但不是跨频道」留在池里
+  （含巨型娘/スカトロ/足控 这类 `always` 时代关联空间碎屑），它们是目标当时契约内的邻接，会各自按
+  `expires_at` 在 2026-10-26/27 前自动过期，属 KNOWN_DEBT。
+
+## 3 A2 预防：`tagRelations.deny` 关掉跨频道的检索 channel
+
+* 语义（`src/topic/TopicPipeline.ts:75-118 selectWalkedTags`）：`deny` 永远胜出；`allow`/`allowSources`
+  不能删种子 tag，只有 `deny` 能（`seedDenied` 时退化为「只走种子」）。
+* 配置（`pixivflow/config/production.json`，四个 target 都在 `relatedTags: when_seed_insufficient` 之上叠加）：
+  bot1 两个 target `deny: ["丸吞","丸呑み","丸呑","vore"]`；bot2 两个 target
+  `deny: ["ボテ腹","ポテ腹","妊娠","怀孕","西瓜肚","pregnant"]`。
+* 两层校验：`bash scripts/validate.sh` → `[OK] pixivflow/config/production.json JSON` +
+  Workflow Protocol v1 `[OK]`（另有两条 FAIL 是未 bootstrap 检出目录的既有项）；PixivFlow
+  `node dist/index.js config validate <path>` → `✓ JSON format is valid`、`✓ Download targets configured`
+  （1 warning：本机没有 refresh token）。
+* 卷上应用（deep-diff 闸门，不用 round-trip identity 判等）：`LIVE b09f8512…`(11101 B) →
+  `NEW b1afd374…`(11653 B)，`DIFF_COUNT 4 UNEXPECTED 0`（四条都是
+  `/targets/<n>/topicDiscovery/tagRelations`），备份 `/app/data/production.json.bak-tagrelations`，
+  `APPLIED b1afd374…` / `READBACK_IDENTICAL true`，热重载证据
+  `Scheduler configuration snapshot activated {"generation":2,…}`（21:14:35Z）；随后机器停回 designed
+  `stopped`。
+* 诚实边界：`deny` 只删**检索 channel**，不改 tag 空间与相关性打分，因此「同时带本池主题与另一题材」
+  的混合作品仍可能经其它 channel 进入候选——这是选择 `when_seed_insufficient`（要供应、容忍邻接）
+  而非 `never`（纯净、可能空窗）的既定代价，也是本轮把 bot1/bot2 都留在 `when_seed_insufficient`
+  的原因：bot1 在 2026-09-26/27 都真实走到 `No matching illustration found yet; checking fallback day`
+  的回看分支，`never` 会把这类日子变成空窗。
+
+## 4 本轮未做
+
+* B1（备份导出脚本 + 一次真实恢复演练）并行进行中，完成后追加到本页。
+* 其余未决与上一节相同：TelePost 的 `TAG_CONFLICT` 未对账（下次发版仍需人工落版本提交）、
+  #2 的行为层验证窗口是下一次每日运行。

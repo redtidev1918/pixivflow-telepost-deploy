@@ -283,8 +283,22 @@ kill_timeout = 60
     # (SlotCoordinator.applyOutcome), and no failed outcome is emitted for a
     # consumer-cancelled job (NotificationPolicy.noteRefetchOutcome).
     # Rollback = the d2e9c9e line above.
-    PIXIVFLOW_REF = '4db0bf21a7853e478f699d68f3458acda8270900'
-    PIXIVFLOW_VERSION = '3.4.2'
+    # PIXIVFLOW_REF = '4db0bf21a7853e478f699d68f3458acda8270900'
+    # PIXIVFLOW_VERSION = '3.4.2'
+    # 3.4.3 — the manual-refetch delivery payload canonicalizes `refetch_request_id`
+    # before the template is rendered (new `src/delivery/refetchProvenance.ts`, applied
+    # in `src/download/handlers/deliveryContext.ts` and in
+    # `HttpMultipartDelivery.buildTemplateVariables`). The manual admission key is an
+    # opaque idempotency key, but the field it is written into is validated as a
+    # canonical dashed UUID by the submission endpoint (`invalid_refetch_provenance`),
+    # so a caller that supplied the key without dashes had every replacement rejected
+    # with HTTP 400 and the selected candidate was never delivered (2026-09-27
+    # bot1-daily manual slot). Dashless/braced/upper-case/`urn:uuid:` spellings are now
+    # normalized to the single canonical form; a value that is not a UUID at all is
+    # sent as an empty string (scheduled-execution semantics) instead of failing a
+    # valid delivery. Rollback = the 4db0bf2 / 3.4.2 line above.
+    PIXIVFLOW_REF = '74ffa4d29ec29810358a43545676c71134e068ce'
+    PIXIVFLOW_VERSION = '3.4.3'
 
 [[mounts]]
   source = 'pixivflow_data'

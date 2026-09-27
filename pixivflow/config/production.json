@@ -162,7 +162,10 @@
             "date": "YESTERDAY",
             "topicDiscovery": {
                 "includeR18": true,
-                "relatedTags": "when_seed_insufficient"
+                "relatedTags": "when_seed_insufficient",
+                "tagRelations": {
+                    "deny": ["丸吞", "丸呑み", "丸呑", "vore"]
+                }
             },
             "excludeAI": true,
             "aiMetadataCheck": true,
@@ -208,7 +211,10 @@
             "date": "YESTERDAY",
             "topicDiscovery": {
                 "includeR18": true,
-                "relatedTags": "when_seed_insufficient"
+                "relatedTags": "when_seed_insufficient",
+                "tagRelations": {
+                    "deny": ["丸吞", "丸呑み", "丸呑", "vore"]
+                }
             },
             "languageFilter": "chinese",
             "languageCandidateLimit": 20,
@@ -247,7 +253,10 @@
             "date": "YESTERDAY",
             "topicDiscovery": {
                 "includeR18": true,
-                "relatedTags": "when_seed_insufficient"
+                "relatedTags": "when_seed_insufficient",
+                "tagRelations": {
+                    "deny": ["ボテ腹", "ポテ腹", "妊娠", "怀孕", "西瓜肚", "pregnant"]
+                }
             },
             "excludeAI": true,
             "aiMetadataCheck": true,
@@ -293,7 +302,10 @@
             "date": "YESTERDAY",
             "topicDiscovery": {
                 "includeR18": true,
-                "relatedTags": "when_seed_insufficient"
+                "relatedTags": "when_seed_insufficient",
+                "tagRelations": {
+                    "deny": ["ボテ腹", "ポテ腹", "妊娠", "怀孕", "西瓜肚", "pregnant"]
+                }
             },
             "languageFilter": "chinese",
             "languageCandidateLimit": 20,
