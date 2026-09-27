@@ -1046,6 +1046,26 @@ Recovery 应满足：
 * Tag 侧：PixivFlow 3.1.0 为每个解析出的 Tag 记录 `source`（`seed` / `cooccurrence` / `autocomplete` / `cooccurrence+autocomplete`）与 `weight`，并把关系过滤放在检索之前（`docs/TAG_RANKING.md`）。
 * 封面侧：内容类型（`custom` / `pixiv_generated` / `unknown`）由 PixivFlow 在获取阶段判定，`unknown` 默认 `skip`；TelePost 不做封面类型过滤（非目标）。
 
+## 28.2 Messaging Gateway：边界与「可运行实例」（PixivFlow 3.2.0）
+
+生态里的**平台生态（QQ / 微信 / 飞书 / Discord）不在 PixivFlow 里**，这条边界没有变：
+
+| 事实 | 所有者 | 事实来源 |
+| --- | --- | --- |
+| 内容获取 / 下载 / Artifact / 投递编排（`delivery.targets` + outbox + ledger） | PixivFlow（Execution） | `src/delivery/*`、`docs/GATEWAY_CONTRACT.md`（v1 契约） |
+| 平台协议、登录/扫码、账号与会话、限速与风控 | 网关（外部进程） | 契约三端点：`POST /deliver`（必须）、`GET /pairing`、`GET /health` |
+
+* PixivFlow **不实现** QQ/微信协议、不做扫码登录、不生成二维码、不保存平台登录信息；
+  `delivery.targets.<name>.type` 仍是 `httpMultipart` / `telegram` / `webhook` 三种，
+  路线图里原计划的 `P3c` 原生 OneBot connector **明确不实现**。
+* 3.2.0 补的是**可运行实例**，不是**协议实现**：`examples/onebot-adapter/`（零依赖 ESM，`--selftest` 自检）
+  把契约 `message.parts` 翻成 OneBot v11 消息段、把 OneBot `retcode` 翻成契约 ACK 状态词；
+  `src/__tests__/delivery/onebot-adapter-e2e.test.ts` 用**真实投递运行时**驱动它打到假 OneBot API。
+  它是**网关侧示例代码**（与 `examples/gateway/` 同级），`examples/` 不进 `dist/`、不进镜像，
+  PixivFlow 从不加载它；QQ 会话与扫码仍在 NapCat。
+* 排障分工：`pixivflow gateway test` 只证明端点可达与鉴权通过，**永远不当作投递成功**；
+  投递是否成功只看 outbox / `delivery_ledger` 与网关返回的 ACK 状态词。
+
 ---
 
 # 29. PixivFlow WebUI

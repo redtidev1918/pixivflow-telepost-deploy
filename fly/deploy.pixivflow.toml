@@ -207,8 +207,23 @@ kill_timeout = 60
     # `download.novelCover.unknown` (skip | keep), fail-open. Defaults keep the
     # pre-3.1.0 behaviour (relatedTags always, seedTier off, translated-name
     # matching off). Rollback = the b01a93d line above.
-    PIXIVFLOW_REF = '583a74c98ef708223d100abbd9b255b26976218e'
-    PIXIVFLOW_VERSION = '3.1.0'
+    # c195b90 = v3.2.0 (released 2026-09-27). Ships `examples/onebot-adapter/`:
+    # a zero-dependency, runnable OneBot v11 delivery adapter — the "thin
+    # conversion process" docs/GATEWAY.md §5.3 only described. Contract message
+    # parts -> OneBot v11 segments (text from message.text once; `file` kinds go
+    # through the two-step upload_group_file/upload_private_file plus a notice),
+    # and OneBot `retcode` -> contract ACK word (0 -> accepted + platform
+    # message_id; async/retcode 1 -> pending, never success; deterministic
+    # request codes -> failed; unreachable/unknown/5xx/bad auth -> a bare HTTP
+    # code with no status word, so a fixable config stays retryable instead of
+    # dead-lettering). It implements no QQ protocol and no login/QR flow: the QQ
+    # session stays in NapCat. `--selftest` runs the whole mapping with no QQ,
+    # and `src/__tests__/delivery/onebot-adapter-e2e.test.ts` drives it with the
+    # real delivery runtime against a fake OneBot API. No behaviour change for
+    # any existing route: PixivFlow still ships no platform connector.
+    # Rollback = the 583a74c line above.
+    PIXIVFLOW_REF = 'c195b909063ca63fa7de88a745c9b933b41e4133'
+    PIXIVFLOW_VERSION = '3.2.0'
 
 [[mounts]]
   source = 'pixivflow_data'

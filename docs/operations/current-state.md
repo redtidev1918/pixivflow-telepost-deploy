@@ -2692,4 +2692,113 @@ Status: VERIFIED（2026-09-27，release → pin → 部署 → 运行时取证�
 * **本轮只读项已清零**：`/health`、`verify-images.sh`、`doctor --all-bots`、运行时 grep 均已现场通过（见 §4）。
 * **后续观察**：`delivery_ledger` 目前没有任何未确认行（两库皆 0），所以 2.70.1 之后 `delivery_outbox` 常绿是**真实结论**，
   不是被规避；一旦出现 `partial`/`failed` 行且超 30 分钟，doctor 应立刻 WARN——这是下一轮现场投稿要顺带看的信号。
+* 本节之后，2026-09-27 又落地了 PixivFlow 3.2.0（QQ 场景的可运行 OneBot v11 适配器示例），见下方的
+  「2026-09-27 PixivFlow 3.2.0」节；本节的三条外部验收仍未现场确认，继续顺延。
+
+# 2026-09-27 PixivFlow 3.2.0：QQ 场景的可运行 OneBot v11 适配器示例
+
+Status: VERIFIED（release → pin → 部署 → 运行时取证全部完成，见 §3）
+遗留：EXTERNAL_ACCEPTANCE_REQUIRED（真实 QQ 群投递必须接真实 NapCat 与真实群，本机只能以假 OneBot API 证明映射；见 §4）
+
+## 0 为什么做这一片（缺口与边界）
+
+* **缺口是「没有可运行实例」，不是「缺文档」**：投递运行时路线图 P5 写的是「文档与示例补齐」，
+  但 `examples/` 下只有 `gateway/`（契约参考实现，只把投递打印出来），
+  `docs/GATEWAY.md` §5.3 描述的三路由「最小转换进程」一直是**文字**，
+  `docs/architecture/delivery-runtime.md` 的平台表里 OneBot 一行也只写了「由网关承担」。
+  结论：契约通不通有证明（`gateway-reference-e2e.test.ts`），**平台映射写对没有没有任何证明**。
+* **边界不变（重要）**：`examples/onebot-adapter/` 是**网关侧示例代码**（与 `examples/gateway/` 同级）：
+  `examples/` 不进 `dist/`、不进 Docker 镜像（`docker/pixivflow-scheduler.Dockerfile` 只复制 `src`/`scripts`
+  与可选的 `webui-frontend/dist`）、PixivFlow 从不加载它。它**不实现 QQ 协议、不实现 OneBot 协议、
+  不做扫码登录、不持有会话**，QQ 会话仍属于 NapCat（扫码在 NapCat 自己的面板）。
+  因此路线图的 `P3c`（PixivFlow 内置 `onebot` connector type）依旧**不实现**，
+  `delivery.targets.<name>.type` 依旧是 `httpMultipart` / `telegram` / `webhook` 三种。
+
+## 1 交付内容
+
+* **`examples/onebot-adapter/server.mjs`（零依赖 ESM，612 行）**：契约统一消息 → OneBot v11 消息段，
+  OneBot `retcode` → 契约 ACK 状态词。三条路由：`POST /deliver`、`GET /pairing`（→ `get_login_info`）、
+  `GET /health`（→ `get_status`，`online !== false && good === true`）。`--selftest` 用进程内假 OneBot 跑完整映射。
+* **ACK 映射（「状态词优先」）**：`retcode 0` → `200 {"status":"accepted","id":<message_id>}`；
+  `status:"async"` 或 `retcode 1` → `200 {"status":"pending"}`（**绝不**当成功）；
+  确定性请求错误码（100/102/103/104/105/1400/1404）→ `200 {"status":"failed"}`（终态，进死信）；
+  超时/不可达/HTTP ≥500/非 JSON → `502`，仅 `{reason}`**不带状态词** ⇒ 可重试而不误判死信；
+  鉴权失败/404/429 → 原样 4xx/429，同样不带状态词。去重按 `idempotencyKey` 落在 JSONL 状态文件上，
+  重放返回 `200 {"status":"duplicate_existing","id":…}`。
+* **消息段**：`message.text` 只消费一次；`image`/`video` → 对应段（`image.file` 支持 `file://<绝对路径>` 与
+  `base64://`）；`album` → 多段；`file` **不是**消息段 → 先 `upload_group_file`/`upload_private_file`
+  再补一条「📎 附件：<name>」提示；无法传输的媒体退化为一行「[跳过无法传输的 … 片段]」文本。
+* **`examples/onebot-adapter/README.md`（139 行，中文）**：它是什么/不是什么、`--selftest`、完整环境变量表、
+  三路由、段翻译表、ACK 映射表（含「为什么不带状态词」）、PixivFlow 侧 `delivery.targets.qq-main` 配置样例、
+  四层验收（`--selftest` → jest 用例 → NapCat 面板 → 真实投稿 + `pixivflow delivery status`）。
+* **`src/__tests__/delivery/onebot-adapter-e2e.test.ts`（350 行 / 7 用例）**：像 `gateway-reference-e2e.test.ts`
+  一样**另起进程**拉起适配器，并用**真实投递运行时**驱动它打到一个假 OneBot API：
+  `DeliveryService → outbox → OutboxWorker → DeliveryDispatcher → WebhookDelivery → HTTP`。
+  用例覆盖：真实投递 `delivered` 且段里 `group_id` 是**数字**、重放去重、`async` → 账本仍 `pending`、
+  `retcode 102` → 账本 `failed` 且无可执行 outbox 行、未鉴权 → 裸 401、`schemaVersion: 2` → 400、
+  `/pairing` + `/health` 在假 OneBot 停掉时同端口恢复。
+  写这个用例时抓到两个真问题：目标必须配 `token`，否则适配器按设计回裸 401（投递卡 pending）；
+  以及 `group_id` 曾被当成字符串发（`parseTarget` 因此补了 `idValue`，数字型 id 发数字）。
+* **打包与文档**：`package.json` `files` 增 `examples/onebot-adapter/`（npm 包里带示例）；
+  `docs/GATEWAY.md` §5.3 指向可运行实例、§8 增 `--selftest` 与 jest 命令；
+  `docs/GATEWAY_CONTRACT.md` 「相关文档」与「这份契约是怎么被证明的」表增平台映射一行；
+  `examples/gateway/README.md` 增互补说明；`docs/architecture/delivery-runtime.md` 路线图增 `P8` 行
+  并在 `P3c` 段落说明「示例进仓库 ≠ 反向推翻决定」。
+
+## 2 版本与 pin
+
+* 功能提交 `0d60160 feat(gateway): ship a runnable OneBot v11 delivery adapter example`（7 文件，+1121/−0），
+  合并远端 docs 刷新后为 `c0ca14d`，推送 `b5021bf..c0ca14d`。
+* 发布：release PR **#176 `chore(master): release 3.2.0`** squash 合并 → `c195b909063ca63fa7de88a745c9b933b41e4133`，
+  tag `v3.2.0`。随后补的文档提交 `3feb01c`（合并为 `0466ce0`）是 `docs:` 类型，**不产生新版本**。
+* **pin（已提交，见本节末 commit）**：`fly/deploy.pixivflow.toml`
+  `PIXIVFLOW_REF = 'c195b909063ca63fa7de88a745c9b933b41e4133'` / `PIXIVFLOW_VERSION = '3.2.0'`，
+  回滚 = 上一行 `583a74c98ef708223d100abbd9b255b26976218e`（3.1.0）；
+  `fly/deploy.telepost.toml` 本轮**不动**（`TELEPOST_IMAGE = 'ghcr.io/redtidev1918/telepost:2.70.1'`，
+  TelePost 本轮无代码变更）。
+
+## 3 现场核对（只读）
+
+Status: VERIFIED（2026-09-27，release → pin → 部署 → 运行时取证全部完成）
+
+* **静态门**：`npx tsc --noEmit` → `TSC_EXIT=0`。该仓库没有可用的 ESLint（无本地 eslint、无 `lint` 脚本，
+  `npx eslint@10` 拒绝旧的 `.eslintrc.js`），`tsc` 是唯一静态门。
+* **全量测试**：`npx jest --silent` → `JEST_EXIT=0`，**130 suites / 1431 tests passed**
+  （改动前 129 / 1424 ⇒ +1 suite / +7 tests，全部来自新的适配器 e2e 用例）。
+* **`--selftest`**：`node examples/onebot-adapter/server.mjs --selftest` → `SELFTEST_EXIT=0`，
+  报告 `first=accepted(id=42)`、`second=duplicate_existing(id=42)`、未鉴权 401、
+  `pairing={status:'connected',account:'10001'}`、`health={onebot:{online:true,good:true,retcode:0}}`、
+  `onebotCalls=[send_group_msg,upload_group_file,send_group_msg,get_login_info,get_status]`。
+* **npm 包**：`pixivflow@3.2.0` 已发布；下载 tarball 核对，`examples/onebot-adapter/README.md`
+  与 `examples/onebot-adapter/server.mjs` **确实在包里**（`package.json` `files` 生效）。
+* **部署**（须 `env -u HTTPS_PROXY -u HTTP_PROXY -u ALL_PROXY`）：
+  `fly deploy -c fly/deploy.pixivflow.toml --ha=false` → 镜像 `deployment-01M3GTGBSZ2Y3Z231P7WARDE2W`（172 MB），
+  机器 `83d1650bd23948` 更新后回到 `stopped`（设计态）；为了取证临时 `fly machine start`，取证后再次停机。
+* **`/health`**：PixivFlow `{"status":"ok","service":"pixivflow-scheduler-trigger","version":"3.2.0","commit":"c195b909063c"}`；
+  TelePost 仍是 `"version": "2.70.1"`, `"commit": "f57d1617ef639eeccdbb749adb80f479c45a841b"`。
+* **`./scripts/verify-images.sh` exit 0**：`[OK] 仓库固定的 TelePost 镜像：ghcr.io/redtidev1918/telepost:2.70.1`、
+  `[OK] 仓库固定的 PixivFlow 提交：c195b909063ca63fa7de88a745c9b933b41e4133`、
+  `[OK] TelePost 线上镜像匹配 2.70.1`、`[OK] 执行端报告的版本包含 c195b909063c`。
+* **`python -m telepost.observability.cli doctor --all-bots`（容器内）**：`HEALTHY`，
+  `检查 16 项：16 OK / 0 WARN / 0 CRIT / 0 SKIP；数据库 2 个`（TelePost 本轮未改，属回归确认）。
+* **本轮镜像里没有适配器，这是刻意的**：`docker/pixivflow-scheduler.Dockerfile` 只复制 `src`/`scripts`
+  与可选的 `webui-frontend/dist`，`examples/` 不进镜像（它进的是 npm 包与仓库）。
+  因此 3.2.0 对**运行中的 worker** 是**行为等价**于 3.1.0 的发布（新增文件都在 `examples/` 与文档/测试里），
+  本轮部署的价值是把 pin 推进到已发布提交并保持可追溯，而不是改变运行时行为。
+
+## 4 外部验收（必须在真实 QQ 现场做）
+
+* 接真实 NapCat（+ 真实 QQ 群）跑一次：PixivFlow 侧配 `delivery.targets.qq-main`（`type:"webhook"`，
+  `url` 指向适配器 `/deliver`，`token` **必须配**否则按设计裸 401、投递卡 pending），
+  真实投稿应看到：群里先收到正文，再收到图片，`file` 类附件走两段式上传 + 「📎 附件」提示。
+* ACK 语义现场确认：QQ 侧风控/限速导致的失败必须落成**可重试**（裸 5xx/429，账本 `pending` 且 `hasActionableDelivery=true`），
+  只有确定性请求错误（如 `retcode 102`）才允许进死信；这条是「no status word」设计的现场判据。
+* NapCat 掉线/重启：`GET /pairing` 与 `/health` 必须如实变 `unreachable`/503，恢复后同进程回到 `connected`。
+
+## Pending
+
+* 本轮只读项已清零（§3 全部现场通过）。
+* 外部验收（上一节，需真实 QQ 现场）。
+* 顺延未清的仍是上一节的三条真实投稿外部验收（重复提醒 / 停滞收口 / 小程序禁用态）。
+
 
