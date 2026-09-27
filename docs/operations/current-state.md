@@ -2830,9 +2830,9 @@ Status: IN_PROGRESS（协议 SSOT 与生产端 liveness 已落地并推送；两
 | 规范（决定性文字） | `docs/architecture/workflow-protocol.md`（§2 对象 / §3 HTTP 面 / §4 状态机与预算 / §5+§5.1 错误码与映射 / §6 job_type 目录 / §7 事件 / §8 反耦合清单 / §11 阶段 B/C 文件级映射） | 人工评审 |
 | Schema | `docs/protocol/v1/protocol.schema.json`（JSON Schema 2020-12，入口是 `$defs`） | `scripts/verify-protocol-v1.py` |
 | 错误词表映射 | `docs/protocol/v1/error-mapping.json`（16 个封闭协议码 + `retryable` 缺省 + 生产者内部 19 个原因码 → 协议码） | 同上，含 `TargetOutcome.ts` union 覆盖率 |
-| 示例报文 | `docs/protocol/v1/fixtures/*.json`（9 个：task / job queued·running·succeeded / job failed / **job cancelled** / event succeeded·expired / **capabilities**） | 同上，逐个用对应 `$defs` 入口校验 |
+| 示例报文 | `docs/protocol/v1/fixtures/*.json`（11 个：task / job queued·running·succeeded / job failed / job cancelled / event succeeded·expired / capabilities / **jobpage** / **eventpage**） | 同上，逐个用对应 `$defs` 入口校验 |
 | 同步机制 | `scripts/sync-protocol.sh`（写入两仓 `protocol/v1/` + `SOURCES.sha256`）；`--check` 只校验 | 两仓契约测试再校验一次哈希 |
-| 验收工具 | `scripts/verify-protocol-v1.py`（离线：schema/fixtures/params/词表/哈希/反耦合；`--live`：capabilities → POST /jobs → 幂等重放 → 轮询 → cancel） | 退出码 0/1/2 |
+| 验收工具 | `scripts/verify-protocol-v1.py`（离线：schema/fixtures/params/词表/哈希/反耦合；`--live`：capabilities → POST /jobs → 幂等重放 → 轮询 → cancel → **事件流对账**） | 退出码 0/1/2；`--live` 已用 mock 双向验证（MODE=ok 通过 / MODE=noevents 必失败） |
 
 实测（2026-09-28）：`./scripts/verify-protocol-v1.py` 在 `python3`（内置子集校验器）与
 `/tmp/tp-venv312/bin/python`（真实 `jsonschema` 4.26.0，额外做 meta-schema 校验）两条路径下均 exit 0 ——
@@ -2868,6 +2868,13 @@ Status: IN_PROGRESS（协议 SSOT 与生产端 liveness 已落地并推送；两
   （终态取消带 `error.code=cancelled_by_consumer`、`retryable=false`）与 `capabilities.pixivflow.json`
   （`protocol_versions` + `candidate_search` 声明，预算取自配置：queued 30 min / stall 15 min / 心跳 30 s /
   deadline 90 min）——把 B 阶段最可能做错的「取消」与「能力发现」两面在实现之前先写成可校验报文。
+* 新增 `$defs/JobPage` / `$defs/EventPage` 两个信封（`GET /jobs?...` 与 `GET /jobs/{id}/events`），
+  分页只能用不透明游标（`next_cursor` / `next_after`），禁止暴露生产者表 id；`--live` 会在终态后拉事件流，
+  空事件流 / 缺终态事件 / 混入其它 job / 时间乱序 都判 FAIL ——「没收到回调」不再是唯一的对账依据。
+* 可选的对象字段（`Job.error/result/progress`、`Event.payload.*`）同时接受「缺失」与「显式 null」，
+  避免把合法生产者判失败（PixivFlow 的子集校验器忽略 `anyOf`，真实 jsonschema 路径强制执行）。
+* round B 给 `TerminalReasonCode` 加 `cancelled_by_consumer` 后，union 覆盖率检查立刻变红（预期），
+  SSOT 已补 `cancelled_by_consumer -> cancelled_by_consumer` 并同步两仓，检查恢复绿。
 * `protocol/v1/` vendored 副本 + `tests/test_protocol_contract.py`（8 passed）：schema 合法性、fixture 回放、
   `$ref` 解析、`SOURCES.sha256` 哈希一致、未知字段仍被接受（只增不改）、schema 不含业务词（按**词元**匹配，
   `preview` 不会被 `review` 误伤）、封闭错误词表可映射。
