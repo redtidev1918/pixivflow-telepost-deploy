@@ -44,6 +44,12 @@ services:
       # 投稿 token：TelePost 用它们校验 PixivFlow 的 HTTP 投稿
       TELEPOST_BOT1_SUBMIT_TOKEN: ${TELEPOST_BOT1_SUBMIT_TOKEN:-}
       TELEPOST_BOT2_SUBMIT_TOKEN: ${TELEPOST_BOT2_SUBMIT_TOKEN:-}
+      # 协议 v1（TelePost 2.71.0+）：TelePost 需要知道自己对外的 API 基址，才能在 Task 上给出
+      # callback_url（§7.6）。此前该变量只喂给 PixivFlow 服务；现在 TelePost 自己也要读它。
+      TELEPOST_API_BASE_URL: ${TELEPOST_API_BASE_URL:-http://telepost:8080}
+      # 协议 v1 传输开关：jobs=走通用 POST /jobs（默认）；legacy=回归旧 /internal/targets 路径（回滚）。
+      # 仅当执行端（PixivFlow）已升到 3.3.0 之后才允许切到 jobs。
+      PIXIVFLOW_JOB_TRANSPORT: ${PIXIVFLOW_JOB_TRANSPORT:-jobs}
       SEARCH_ENABLED: ${SEARCH_ENABLED:-false}
       SEARCH_ANALYZER: ${SEARCH_ANALYZER:-simple}
       DB_CACHE_KB: ${DB_CACHE_KB:-1024}
