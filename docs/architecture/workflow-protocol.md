@@ -404,13 +404,13 @@ queued ──claim──▶ running ──▶ succeeded
 
 卫生要求：调试用的临时测试文件（如 `tests/test_zzprobe.py`）**不得提交**；已按要求删除。端口收口完成后 `telepost/application/refetch.py` 已从白名单移出——白名单只允许**变小**，新增条目必须写明理由与收口计划。
 
-## 13 v1 已知未实现与诚实声明（D 阶段范围）
+## 13 v1 已知未实现与诚实声明（更新 2026-09-28：D 阶段已收口事件行）
 
-阶段 B 落地时**如实申报**、未实现的项（宁可能力声明缺失，也不假装支持）。每一条都必须在 `/capabilities` 与对账面上体现，禁止静默降级：
+阶段 B 落地时**如实申报**、未实现的项（宁可能力声明缺失，也不假装支持）。每一条都必须在 `/capabilities` 与对账面上体现，禁止静默降级。标注 ✅ 的行已被后续阶段**真实收口**；其他行仍是**诚实未实现**且不得假装支持：
 
 | 未实现 | 生产者当前行为 | 收口（D 阶段） |
 | --- | --- | --- |
-| 事件端点 `GET /jobs/{job_id}/events`、`…/events/ack`、`callback_url` 投递 | **不实现**，`features` 如实**不声明** `events` | 见 §11.4：复用既有 `delivery_events` + outbox 投递，新增 slot 维度游标与 ack |
+| 事件端点 `GET /jobs/{job_id}/events`、`…/events/ack`、`callback_url` 投递 | ✅ **已收口**（c0c6765）：`features` 现声明 `events`；事件复用既有 `delivery_events` + outbox 投递，新增 slot 维度游标与 ack；终态事件从持久化投影对账保证必有。**D 阶段如实遗留**：`job.progress` 已映射但暂不产出真实进度流（`recordSlotEventOnce` 按 (slot,event) 去重，伪流不实报为空）、`labels` 不回声到事件、`ack_through` 接受任意非空串 |
 | `labels` 持久化 | schema 校验后**忽略**，不回显 | 落一列 JSON（或明确写入协议 §2.1 的「生产者可以不存 labels」） |
 | `GET /jobs` 过滤 | 只支持 `idempotency_key`（无 `correlation_id`/`status`/游标） | 加索引与不透明游标 |
 | 逐 Job 强制消费者 `deadline_ms` | 接受但不逐 Job 执行，`deadline_at` 报**自己**的上限（见 §3 约定） | 加一列 + 到期终态化 |
