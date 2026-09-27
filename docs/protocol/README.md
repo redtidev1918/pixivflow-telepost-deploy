@@ -38,9 +38,13 @@ docs/protocol/
 
 ## 3 校验方式
 
-两仓的契约测试（已落地，可先跑这两条）：
+两仓的契约测试 + 一次总验收（已落地，先跑这三条）：
 
 ```bash
+# 总验收（离线）：schema/fixtures/params/封闭词表/两仓副本哈希/反耦合
+./scripts/verify-protocol-v1.py
+# 总验收（联网）：capabilities -> POST /jobs -> 幂等重放 -> 轮询 -> cancel
+./scripts/verify-protocol-v1.py --live http://127.0.0.1:8090 --tags 西瓜肚 --expect succeeded
 # 消费者侧（TelePost）——真实 jsonschema 库校验 schema/fixtures/哈希/反耦合
 cd TelePost && python -m pytest -q tests/test_protocol_contract.py   # 需要带 pytest + jsonschema 的 venv
 # 生产者侧（PixivFlow）——无新依赖，内置 JSON Schema 子集校验器
@@ -67,8 +71,9 @@ PY
 
 | 仓 | 文件 | 覆盖 | 结果 |
 |---|---|---|---|
-| TelePost | `tests/test_protocol_contract.py` | 7 项：资产存在、schema 合法、7 个 fixture 全部校验通过、`$ref` 全解析、vendored 哈希一致、未知字段被接受（只增不改）、schema 无业务名词 | `7 passed` |
-| PixivFlow | `src/__tests__/protocol/contract.test.ts` | 12 项：同上（`it.each` 展开每个 fixture）+ 同样的反耦合断言 | `12 passed`，`npx tsc --noEmit` exit 0 |
+| TelePost | `tests/test_protocol_contract.py` | 8 项：资产存在（含 `error-mapping.json`）、schema 合法、7 个 fixture 全部校验通过、`$ref` 全解析、vendored 哈希一致、未知字段被接受（只增不改）、schema 无业务名词、封闭错误词表可映射（enum ↔ `protocol_codes` 双向一致 + `retryable` 缺省 + `producer_internal` 不悬空） | `8 passed` |
+| PixivFlow | `src/__tests__/protocol/contract.test.ts` | 13 项：同上（`it.each` 展开每个 fixture）+ 同样的反耦合断言 + 生产者侧词表检查（额外解析 `src/scheduler/TargetOutcome.ts` 的 `TerminalReasonCode` union，未映射/多余映射都失败） | `13 passed`，`npx tsc --noEmit` exit 0 |
+| deploy | `scripts/verify-protocol-v1.py`（离线） | schema meta 校验（有 jsonschema 时）、7 个 fixture + `params` 走对应 `$defs`、错误词表与 enum 双向一致、生产者 union 覆盖率、两仓副本哈希、反耦合 | exit 0（`python3` 与带 `jsonschema` 的 venv 两条路径） |
 | deploy | `scripts/sync-protocol.sh --check` | 两仓副本逐字节比对 + `SOURCES.sha256` 校验 | exit 0 |
 
 反耦合断言按**词元**匹配（`preview` 不会被 `review` 误伤），检查 `$defs` 名、`properties` 名与 `enum` 值；fixtures 里的 `correlation_id`/`labels`/`callback_url` 属于**调用方不透明数据**，不受该断言约束。
