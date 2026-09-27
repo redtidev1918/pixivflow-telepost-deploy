@@ -187,8 +187,17 @@ kill_timeout = 60
     # and prints a reason to stderr even for an unrecognised failure; the command
     # catch and the default scheduler/download failure path print the reason too.
     # Rollback = the 33362ac line above.
-    PIXIVFLOW_REF = 'a0e5f0be1522d2cda5500bb83dcd75295ab43fe9'
-    PIXIVFLOW_VERSION = '3.0.2'
+    # b01a93d = v3.0.3 (released 2026-09-27). Two delivery bugs are fixed
+    # upstream: a Pixiv-generated design cover (the per-novel title template,
+    # always 640x900) is no longer shipped as a novel's cover — PixivFlow probes
+    # the header bytes and emits cover_url: null, fail-open so a failed probe
+    # never drops a real cover; and a topic target now searches its own tag
+    # before related tags (topicDiscovery.relatedTags = always |
+    # when_seed_insufficient | never, default always = unchanged behaviour), so
+    # a related tag such as 丸吞 can no longer be substituted for the seed tag
+    # such as 西瓜肚. Rollback = the a0e5f0be line above.
+    PIXIVFLOW_REF = 'b01a93d49e63454dec0033301231f38db250a2bb'
+    PIXIVFLOW_VERSION = '3.0.3'
 
 [[mounts]]
   source = 'pixivflow_data'

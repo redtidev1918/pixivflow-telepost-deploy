@@ -2386,3 +2386,127 @@ Status: VERIFIED（只读现场核对）
 ## Pending
 
 * 无。三处验收点（`spoiler=0` / 小说封面预览 / 作者行）都在本轮现场投稿上确认通过。
+
+# 2026-09-27 四个现场 Bug 修复上线：重抓可感知（2.68.1）+ 主题 Tag 联想 / Pixiv 生成封面（3.0.3）
+
+Status: VERIFIED (release → pin → runtime) / EXTERNAL_ACCEPTANCE_REQUIRED（下一轮投稿的现场形状）
+
+## 0 现场问题与根因
+
+* **重抓点击后没有可见反馈（bug 1）**：点 `🔄 重抓/换一张` 后，源审核卡的消息与键盘
+  原样不动，唯一反馈是群里多一条 `🔄 审核 #135 已提交重抓…`。现场时间线（只读探针，
+  `refetch_attempts` 行 9 / `audit_events` 877-880）：`t+0` 点重抓 →
+  `review.refetch_requested`；`t+5s` `review.refetch_remote_accepted`（PixivFlow 收单）；
+  `t+106s` 操作者按了 `拒绝`（`review.rejected`）；`t+139s` 结果才到
+  （`submission.received`，actor `service:api_token:2`）。按设计
+  `finalize_replacement()`/`apply_outcome()` 只在源审核仍为 `pending` 时落结果，
+  于是这次尝试被正确判为 `obsolete` 并丢弃——从外面看就像「重抓卡住了」。
+* **卡片一直停在「正常可操作」形态（bug 3）**：即使结果还没回来，卡片也不该继续显示
+  发布/拒绝；而且重抓失败/无替代时没有任何「当前候选恢复可审核」的归还路径。
+  另外进度提醒默认 5 分钟，长于这次尝试 139 s 的寿命，`last_progress_notified_at`
+  始终为 NULL——等待期间一条提示都没有。
+
+## 1 修复（TelePost `60616f8` → 2.68.1）
+
+* `handlers/review.py`：新增 `refresh_refetch_card(bot, review_id, *, minutes=None)`——
+  读取审核行，要求 `status == 'pending'` 且有 `control_message_id`，有活动尝试就把卡片
+  **就地**改成「重抓中」形态（隐藏 发布/拒绝/遮罩，保留 重抓 与 查看原链接），否则用
+  `control_card_from_row(row)` 重建正常卡；纯展示、不抛异常、不碰审核状态。
+  `monitor_refetch_progress` 的每个终态（硬超时、watchdog 取消、远端终态、stalled、
+  进度提醒）都调用它；`REFETCH_PROGRESS_REMIND_MINUTES` 默认 5 → **2**。
+* `telepost/telegram/review_keyboard.py`：`refetch_pending_text` /
+  `refetch_pending_keyboard` / `control_card_from_row`。
+* `utils/api_server.py`：`_refresh_refetch_card(target_review_id)`——没有替换稿就结束的
+  尝试也能从 HTTP 面把卡片交还。
+* **源审核绝不提前判 rejected**（AGENTS.md §refetch-card）：`finalize_replacement()` /
+  `apply_outcome()` 只在源为 `pending` 时落结果，提前驳回会把自己的替换稿变 `obsolete`。
+* 测试 `tests/test_refetch_card_state.py`（316 行）+ 既有 `test_novel_cover_preview.py`
+  → `19 passed`。
+
+## 2 修复（PixivFlow `182694d` + `3775a8d` → 3.0.3）
+
+* **bug 2 主题 Tag 联想**：`mode:"topic"` 只有两条召回通道（Pixiv 自动补全 + 种子作品
+  共现打分），而解析出的每个 Tag 都**各自当天单独检索**，排序又是纯热度——所以
+  `西瓜肚` 目标会被空间里同级的高权重相关 Tag（`丸吞`）用自己当天的热门作品占满
+  slot。新增 `topicDiscovery.relatedTags`：`always`（默认，历史行为）/`
+  when_seed_insufficient`（先搜主题 Tag，填不满才扩展，且带主题 Tag 的作品排在热度
+  之前）/`never`；`TopicSelection.searchedTags` 与 `[TopicRecall] mode=… seedAccepted=…
+  relatedTags=…` 日志可确认实际搜过哪些 Tag。默认值保持 `always` 是硬约束：
+  `src/__tests__/topic/TopicFeature.test.ts:247-278`「RANKING IS POPULARITY-ONLY」钉住了
+  历史排序语义。
+* **bug 4 Pixiv 生成封面**：Pixiv 现在会给没有上传封面的小说**渲染**一张设计封面
+  （标题排版、每本一个 hash、同一个 CDN 路径），`novel-cover-master-default` 不再出现，
+  URL 形状无法与作者真封面区分；5 张生产封面下载后逐张目视分类，3 张生成设计封面的
+  画布**恰好都是 640x900**（约 1.08 MB），作者真封面是 512x512 / 800x1200。
+  因此：`src/utils/imageDimensions.ts`（只读 JPEG/PNG/GIF 头拿尺寸，PixivFlow 不带
+  图像解码器）+ `isPixivDesignCoverImage()`（精确 640x900）+
+  `NovelDownloader.resolveCoverUrl()`——命中则 `cover_url: null` 且不发 `:novelcover`
+  asset，**探测失败一律保留封面**（fail open，网络/认证失败不能吃掉真封面）。
+  两个消费端（TelePost 审核群预览与频道 root）因此同时被修好。
+
+## 3 发布与部署（pin）
+
+* TelePost：push run 又一次 release-please success 但 build/finalize skipped（既有失败
+  模式）→ 手工发版提交 `8cb6e95 chore: release 2.68.1`，Release run `36295738676`
+  success，tag `v2.68.1`（ref `cc8aa543…` → `8cb6e951f913a645c647ebbcb62d156fb0134d7e`）。
+* PixivFlow：push（`182694d`+`3775a8d`）触发 PR **#174**，merge 提交
+  `b01a93d49e63454dec0033301231f38db250a2bb`，Release run `36295701548` success，
+  npm `pixivflow@3.0.3` 已发布，tag `v3.0.3`（ref `14163e903b2daa9a7f3421d5ea0911c26da35e60`）。
+* `fly/deploy.telepost.toml` `TELEPOST_IMAGE` → `ghcr.io/redtidev1918/telepost:2.68.1`
+  （回滚 = 上方 2.68.0 行 / 4653a80）；`fly/deploy.pixivflow.toml` →
+  `PIXIVFLOW_REF=b01a93d49e63454dec0033301231f38db250a2bb` / `PIXIVFLOW_VERSION=3.0.3`
+  （回滚 = 上方 a0e5f0be 行）。`./scripts/validate.sh` 仅剩两个本地文件类 FAIL
+  （`.env` / `data/pixivflow/config.json` 未 bootstrap，与本次改动无关）。
+* **fly 不能走代理**：带 `HTTPS_PROXY` 时 `fly deploy` 报
+  `Error: Get "https://api.machines.dev/v1/apps/telesubmit-multi-bot": EOF`；改用
+  `env -u HTTPS_PROXY -u HTTP_PROXY -u ALL_PROXY fly deploy …` 成功（git/npm 仍要走代理）。
+* TelePost deploy exit 0：镜像
+  `registry.fly.io/telesubmit-multi-bot:deployment-01M3GMGEFY3HAPGMCPRJX6XG8X`，
+  机器 `683032ec6617e8` 版本 229 → **230**，checks 1/1。
+* PixivFlow deploy exit 0：镜像
+  `registry.fly.io/pixivflow-scheduler:deployment-01M3GMPKS2WFX6E03E7A5NPVW7`
+  （digest `sha256:fc1f37b2131f5f7b9111dae20e3b455003df14bcf1a57e796c04a51c8111bcec`），
+  机器 `83d1650bd23948` 滚动更新后回到 `stopped`（设计状态），release v59。
+
+## 4 现场核对（只读）
+
+* TelePost `/health` → `"version": "2.68.1"`，
+  `"commit": "8cb6e951f913a645c647ebbcb62d156fb0134d7e"`，
+  `telepress_version 0.16.1`，卷 159.8/973.7 MB，`review_queue.pending 0`。
+* PixivFlow（临时 `fly machine start` 后）`/health` →
+  `{"status":"ok","service":"pixivflow-scheduler-trigger","version":"3.0.3","commit":"b01a93d49e63"}`；
+  日志同时有 `PIXIVFLOW_REVISION=3.0.2+a0e5f0be…`（04:38:20Z）与
+  `PIXIVFLOW_REVISION=3.0.3+b01a93d49e63454dec0033301231f38db250a2bb`（05:18:28Z）。
+* `./scripts/verify-images.sh` exit 0：仓库固定 TelePost 镜像匹配线上 2.68.1、仓库固定
+  PixivFlow 提交匹配执行端上报的 `b01a93d49e63`。（该脚本要求机器 started。）
+* 修复真的在运行容器里（只读 grep）：PixivFlow
+  `/app/dist/topic/TopicPipeline.js` `relatedTags`×5、
+  `/app/dist/download/novelCover.js` `isPixivDesignCoverImage`×3、
+  `/app/dist/utils/imageDimensions.js` `readImageDimensions`×2；TelePost
+  `/app/handlers/review.py` `refresh_refetch_card`×8 且
+  `REFETCH_PROGRESS_REMIND_MINUTES = max(0, int(os.getenv("REFETCH_PROGRESS_REMIND_MINUTES", "2")))`
+  （83-85 行）、`/app/telepost/telegram/review_keyboard.py`
+  `refetch_pending_keyboard`×1。（容器内 import 探针无意义：`config.settings` 缺 bot
+  token 会直接 `ValueError`。）
+* 核对后 `fly machine stop 83d1650bd23948 -a pixivflow-scheduler` → `stopped`。
+
+## 运维教训
+
+* **`fly` 走代理会 EOF**：`api.machines.dev` 在带 `HTTPS_PROXY` 时返回
+  `Get "…": EOF`，与被代理无关的 `git`/`npm` 不同——`fly` 一律 `env -u HTTPS_PROXY
+  -u HTTP_PROXY -u ALL_PROXY` 执行。
+* **Pixiv 生成设计封面 = 640x900 画布**：`novel-cover-master-default` 占位图已经不再是
+  这套设计封面的特征；要区分只能用画布尺寸（作者真封面各有各的尺寸）。探测必须
+  fail open，否则一次网络抖动就会让真封面消失。
+* **「重抓」的可见反馈属于契约，不属于 UI 打磨**：现场时间线证明，等待 2 分钟内没有
+  任何卡片变化时操作者一定会先做别的判断（这里是拒绝），而拒绝会让正在路上的替换稿
+  按设计作废——反馈缺失会把正常竞态放大成「功能坏了」。
+
+## Pending
+
+* **外部验收（下一轮投稿）**：① 点重抓后审核卡立刻变成「重抓中」形态，且 2 分钟内有
+  带已等待时长的进度提醒；② 小说投稿里 Pixiv 生成设计封面不再作为封面发出（审核行
+  仍应是 `media=0 docs=1`，`review_message_ids` 长度只有 1——封面预览那条不再出现），
+  而作者真封面仍为 2；③ 主题目标的 `[TopicRecall]` 日志与 `searchedTags` 能证明主题 Tag
+  先被搜（默认 `always` 行为不变，改配置的目标才走 seed-first）。
+
