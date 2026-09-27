@@ -273,9 +273,10 @@ queued ──claim──▶ running ──▶ succeeded
 
 1. **至少一次**：生产者持久化「未 Ack 事件」为义务，重试直到 2xx 或达到死信上限。
 2. **去重**：消费者按 `event_id` 去重（唯一索引）。
-3. **对账**：消费者可用 `GET /jobs/{job_id}/events?unacked=1` 与 `GET /jobs?status=…` 补拉，再用 `POST /jobs/{job_id}/events/ack` 回写游标；生产者的死信必须**可被对账发现**（不得像今天那样：`kind='notification'` 死信后无人知晓）。
+3. **对账**：消费者用 `GET /jobs/{job_id}/events?unacked=1` 补拉（`GET /jobs/{job_id}` 取权威 `status`），再用 `POST /jobs/{job_id}/events/ack` 回写游标；生产者的死信必须**可被对账发现**（不得像今天那样：`kind='notification'` 死信后无人知晓）。v1 的 `GET /jobs` 只支持 `idempotency_key` 过滤，`status`/`cursor` 过滤见 §13（未实现，不得假装可用）。
 4. **确认≠终态**：回调未到、ack 未到都**不能**推断作业成功或失败；唯一判据是 `GET /jobs/{job_id}.status` 与事件流。**「没收到回调就当作没发生」正是本次静默事故的根因**。
 5. **顺序**：不保证；消费者按 `at` + `job.status` 幂等归并（`EventPage` 按 `at` 升序返回，`next_after` 可直接当游标）。
+6. **消费者事件入口（`callback_url` 由谁定）**：`callback_url` 由**消费者**在 Task 上给出；生产者不得从自己的配置里凑一个地址。协议事件必须投到消费者**专为协议事件存在**的入口 —— TelePost 侧为 `POST /api/bot<N>/v1/jobs/events`，body 为裸 `$defs/Event`，按 `event_id` 建唯一索引去重 —— **不得**复用旧业务回调 `POST /api/bot<N>/v1/refetch/outcomes`：那是旧 refetch 的业务负载，复用等于把业务字段重新塞回边界。旧配置 `delivery.targets.bot*-submit.refetchOutcomeUrl` 只服务 legacy shim 路径，协议 v2 删除。未提供 `callback_url` 时生产者的义务**不退化**为「不投递」：事件仍必须能通过 `GET /jobs/{job_id}/events` 对账，回调只是加速，不是唯一依据。
 
 ---
 
@@ -310,11 +311,11 @@ queued ──claim──▶ running ──▶ succeeded
 
 ## 10 落地顺序（与 `refetch-silent-failure-cure.md` 的关系）
 
-1. **阶段 A（进行中）**：两侧 Job 生命周期可信 —— 生产者补状态投影时间戳、停摆清扫、`finish()` 收敛被遗弃投递；消费者建持久 Job + 30 s 心跳 + 活性预算 + 启动恢复 + 终态必通知 + doctor 监控。**这是协议的前提**：投影不可信，协议再漂亮也只是换名字。
-2. **阶段 B**：生产者把既有 slot/execution 机制**包一层 job facade**（`POST /jobs`、`GET /jobs/{id}`、`GET /capabilities`），旧 refetch 端点降级为 shim；不重写执行引擎。
-3. **阶段 C**：消费者切到通用 Job API；`refetch_request_id` 等业务字段迁移为 `correlation_id`/`job_id`。
-4. **阶段 D**：事件持久义务 + 对账（取代单次 `refetchOutcomeUrl` 成功假设）；Result/Asset 描述符落地，媒体策略归消费者。
-5. **阶段 E**：契约测试与 fixtures 双仓校验；文档同步（本文件为 SSOT）。
+1. **阶段 A（已完成）**：两侧 Job 生命周期可信 —— 生产者补状态投影时间戳、停摆清扫、`finish()` 收敛被遗弃投递；消费者建持久 Job + 30 s 心跳 + 活性预算 + 启动恢复 + 终态必通知 + doctor 监控（TelePost `6f2617f`，108 项+全套 1139 项通过，含 1000 次有界压力测试）。**这是协议的前提**：投影不可信，协议再漂亮也只是换名字。
+2. **阶段 B（已完成）**：生产者把既有 slot/execution 机制**包一层 job facade**（`POST /jobs`、`GET /jobs/{id}`、`GET /capabilities`、`cancel`），旧 refetch 端点降级为 shim，与 `/jobs` 共用同一身份空间；不重写执行引擎（PixivFlow `21d8982`/`dea50bb`，135 套件/1486 项 + `tsc --noEmit` 0）。
+3. **阶段 C**：消费者切到通用 Job API；`refetch_request_id` 等业务字段迁移为 `correlation_id`/`job_id`；并新增协议事件入口 `POST /api/bot<N>/v1/jobs/events`（§7.6）与 `PIXIVFLOW_JOB_TRANSPORT=legacy` 回滚开关。
+4. **阶段 D**：事件持久义务 + 对账（取代单次 `refetchOutcomeUrl` 成功假设）：`GET /jobs/{job_id}/events` + `POST …/events/ack` + `callback_url` 投递；Result/Asset 描述符落地，媒体策略归消费者。
+5. **阶段 E**：契约测试与 fixtures 双仓校验（已绿：TelePost 8 项 / PixivFlow 18 项 / `verify-protocol-v1.py` 离线 exit 0，且已接进 `scripts/validate.sh` 与 CI）；文档同步（本文件为 SSOT）。
 
 ## 11 阶段 B / C 的文件级落地映射（避免实现时又长出耦合）
 
@@ -329,7 +330,9 @@ queued ──claim──▶ running ──▶ succeeded
 | `GET /jobs/{job_id}` | `src/scheduler/JobProjection.ts`（A 阶段已建） | 投影即 Job；`job_id` 对消费者不透明（v1 实现上等于 slotId，但**禁止**在协议里暴露 `slot*` 语义字段名） |
 | `GET /jobs?idempotency_key=…` | `SlotRepository.findManualSlot` 一族 | 重放同一 `idempotency_key` 必须返回**同一个** job（幂等可视） |
 | `POST /jobs/{job_id}/cancel` | 一个事务：slot + cells → 终态 | 走既有 cell FSM，不新增 cell 状态：`failed` + `terminal_reason_code='cancelled_by_consumer'`，作业 `error.code='cancelled_by_consumer'`。**取消是「作业已终结」而不是系统故障**：生产者必须把它记成可辨认的原因码（`cancelled_by_consumer` 同时是生产者内部原因码之一，映射到同名协议码），并且取消不得计入 alertable / `business_status=failed`，否则每次用户取消都会误告警 |
-| `GET /jobs/{job_id}/events?unacked=1` | 既有 `delivery_events` | 事件至少一次；`event_id` 去重；回调 POST 与 Ack/对账属 D 阶段（替代 `refetchOutcomeUrl` 的单次成功假设） |
+| `GET /jobs/{job_id}/events?unacked=1` | 既有 `delivery_events` | 事件至少一次；`event_id` 去重；游标走 `next_after`；`unacked` 必须是真的未确认数（需要一份持久 ack 游标，可用一次迁移落地） |
+| `POST /jobs/{job_id}/events/ack` | 新增 handler + ack 游标持久化 | `ack_through` 单调、幂等；旧/未知游标是 no-op 而非错误；ack 只记录已持久化的事实，**永不**改动作业状态 |
+| `callback_url` 投递 | 既有 outbox worker（与 `refetchOutcomeUrl` 同一套去重/重试） | 用 Task 上的 `callback_url`（§7.6），不得读生产者配置里的业务地址；回调失败走既有重试/死信，且死信必须可被对账发现 |
 
 **身份（同时修掉 RC10）**：`job_id = slotId`、`idempotency_key = manual_request_id`；B 阶段新增迁移，给 `manual_request_id` 加**非空唯一索引**，老旧 refetch shim 把 `{requestId}` 翻译成 `Task{job_type:'candidate_search', idempotency_key:requestId, correlation_id}`，于是两个入口共用**同一身份空间**，同一请求不会铸出两个 slot / 两次投递。
 
