@@ -3588,3 +3588,44 @@ Status:
   121/94；telepost 卷根目录另有 0 字节 `submissions.db`（Sep 14）与 legacy `pixivflow/` 树
   （含真凭据的 `config.json` 与 `.pixiv-refresh-token*`）——后者是历史残留，值得单独评估是否清理。
 
+# 2026-09-28 部署 PixivFlow 3.4.3 到执行端并核对运行期
+
+Status:
+* PixivFlow 3.4.3 的部署与运行期核对：VERIFIED
+* A1 provenance 修复在业务层的执行：EXTERNAL_ACCEPTANCE_REQUIRED（要等下一次真实手动重抓）
+
+## 1 落地与 pin
+
+* `pixivflow/config/production.json` 的四条 `tagRelations.deny` 与 `fly/deploy.pixivflow.toml` 的 3.4.3 pin 由
+  PR #172（squash `ec4a12d7db6f352b4c71104cf709ecd396536c94`）合并；上一版 pin（`4db0bf21…` / 3.4.2）
+  保留为注释，回滚就是把 `PIXIVFLOW_REF` / `PIXIVFLOW_VERSION` 换回那一对值。
+* **CI 抓到的一次真实错误**：PR 首个 head 的 `quality` 报 `[FAIL] fly/deploy.pixivflow.toml TOML`
+  （`Validation failed with 1 error(s).`）——3.4.3 的两行 pin 直接写在 3.4.2 那两行**活键**下面而没有把旧行
+  注释掉，TOML 拒绝同一张表里的重复键。修法是把旧行改成注释（本仓历史 pin 的既有形态），squash 进 pin
+  提交后重跑，CI 全绿（quality 30s、build 2m12s、clock 11s、gitleaks、branch-contract、release/build-plan）。
+* **教训**：改 `fly/*.toml` 必须先跑 `bash scripts/validate.sh` 再开 PR（这次是在编辑 toml 之前跑的，
+  所以本地没抓到）；本机没装 shellcheck，`validate.sh` 会静默跳过 ShellCheck，shell 静态检查只有 CI 有。
+
+## 2 部署与运行期核对
+
+* 工具：`go build -o /tmp/tp-deploy-cli .`（本仓单二进制），`version` → TelePost 2.71.2 / PixivFlow 3.4.3；
+  执行 `deploy deploy --plane pixivflow` → exit 0，新镜像
+  `registry.fly.io/pixivflow-scheduler:deployment-01M3JCG8MJ8TZ0AT5ABN8CWXTT`（172 MB），机器
+  `83d1650bd23948` 滚动更新后停在 `stopped`。
+* 为读到新镜像的启动行唤醒一次、事后停回 stopped，核对结果：
+  - 日志 `PIXIVFLOW_REVISION=3.4.3+74ffa4d29ec29810358a43545676c71134e068ce`；
+  - `Scheduler configuration snapshot activated {"generation":1,…}`（两条 schedule 与队列上限都在），且
+    `External scheduler mode: internal cron disabled, awaiting authenticated schedule triggers`
+    ——外部时钟模式没有被这次部署改变；
+  - `scripts/verify-images.sh` 4/4 `[OK]`；`scripts/verify-production.sh` exit 0（两个缺凭据 SKIP）；
+  - `GET /health` → `{"status":"ok","service":"pixivflow-scheduler-trigger","version":"3.4.3","commit":"74ffa4d29ec2"}`；
+  - 卷上 `/app/data/production.json` 仍是 `b1afd37420f3a03d767d43fbc97d06f84345ae835e5fd63657a059a9ca6b9360`
+    ——部署没有覆盖卷上的运行配置（该 sha 就是本文件 A1/A2 那一节 §3 记下的卷上编辑结果）；
+  - 上一轮留在容器 `/tmp` 的手工脚本（`apply-config.js`、`a2-pool-cull.js`）与
+    `/app/data/production.json.new` 已删除，`ls /tmp` 为空。
+* **诚实边界**：机器终态是 `stopped`；`fly deploy` 会清掉 app 级 `suspended` 标记（`fly apps list` 现显示
+  `deployed`），但 `auto_start_machines=true` 本来就让 app 级 suspend 不构成关断开关（见本文件先前的
+  那次排查），日常空闲态仍由机器 stopped 承担。A1 的修复要等下一次真实手动重抓才会在业务层被执行，
+  到时应找 `Manual refetch request id is not a UUID` 或 `Canonicalized the manual refetch request id`
+  这两条日志之一来确认行为。
+
