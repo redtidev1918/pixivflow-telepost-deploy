@@ -2830,7 +2830,7 @@ Status: IN_PROGRESS（协议 SSOT 与生产端 liveness 已落地并推送；两
 | 规范（决定性文字） | `docs/architecture/workflow-protocol.md`（§2 对象 / §3 HTTP 面 / §4 状态机与预算 / §5+§5.1 错误码与映射 / §6 job_type 目录 / §7 事件 / §8 反耦合清单 / §11 阶段 B/C 文件级映射） | 人工评审 |
 | Schema | `docs/protocol/v1/protocol.schema.json`（JSON Schema 2020-12，入口是 `$defs`） | `scripts/verify-protocol-v1.py` |
 | 错误词表映射 | `docs/protocol/v1/error-mapping.json`（16 个封闭协议码 + `retryable` 缺省 + 生产者内部 19 个原因码 → 协议码） | 同上，含 `TargetOutcome.ts` union 覆盖率 |
-| 示例报文 | `docs/protocol/v1/fixtures/*.json`（7 个：task / job queued·running·succeeded / job failed / event succeeded·expired） | 同上，逐个用对应 `$defs` 入口校验 |
+| 示例报文 | `docs/protocol/v1/fixtures/*.json`（9 个：task / job queued·running·succeeded / job failed / **job cancelled** / event succeeded·expired / **capabilities**） | 同上，逐个用对应 `$defs` 入口校验 |
 | 同步机制 | `scripts/sync-protocol.sh`（写入两仓 `protocol/v1/` + `SOURCES.sha256`）；`--check` 只校验 | 两仓契约测试再校验一次哈希 |
 | 验收工具 | `scripts/verify-protocol-v1.py`（离线：schema/fixtures/params/词表/哈希/反耦合；`--live`：capabilities → POST /jobs → 幂等重放 → 轮询 → cancel） | 退出码 0/1/2 |
 
@@ -2864,12 +2864,28 @@ Status: IN_PROGRESS（协议 SSOT 与生产端 liveness 已落地并推送；两
 
 ### 3 消费端（TelePost）已落地：协议资产 + 端口收口（实现仍在进行）
 
+* 新增两个 fixture 并同步两仓（TelePost `5228ebb`、PixivFlow `0e984ab`）：`job.cancelled.candidate_search.json`
+  （终态取消带 `error.code=cancelled_by_consumer`、`retryable=false`）与 `capabilities.pixivflow.json`
+  （`protocol_versions` + `candidate_search` 声明，预算取自配置：queued 30 min / stall 15 min / 心跳 30 s /
+  deadline 90 min）——把 B 阶段最可能做错的「取消」与「能力发现」两面在实现之前先写成可校验报文。
 * `protocol/v1/` vendored 副本 + `tests/test_protocol_contract.py`（8 passed）：schema 合法性、fixture 回放、
   `$ref` 解析、`SOURCES.sha256` 哈希一致、未知字段仍被接受（只增不改）、schema 不含业务词（按**词元**匹配，
   `preview` 不会被 `review` 误伤）、封闭错误词表可映射。
 * 远程访问正在收口为**唯一可替换端口** `telepost/application/pixivflow_jobs.py`（`submit` / `get`），
   心跳与状态机只依赖该端口、不再自己拼 HTTP 路径；切到 `POST /jobs` 时只动这一个文件。
   当前工作树未提交（见「仍未完成」）。
+
+### 3.1 本轮钉掉的两个坑（协议侧决策，均已写入 `docs/architecture/workflow-protocol.md`）
+
+* **取消语义与落地顺序**：生产者 `TerminalReasonCode` 现有 19 个成员里没有任何取消语义，直接写
+  `terminal_reason_code='cancelled_by_consumer'` 会绕过 `OPERATIONAL_REASON_POLICY` 的类型约束并把未映射内部码交给消费者。
+  规定顺序：① 生产者补内部 `cancelled_by_consumer`（retryable=false，**不计入** alertable/`business_status=failed`，
+  否则每次用户取消都误告警）→ ② SSOT 补 `error-mapping.json` 映射并同步副本 → ③ union 覆盖率检查重新变绿。
+* **事件与 Ack/对账复用既有 outbox，不造第二套投递**：`delivery_events`（单调 `id`）+ 唯一写入点 `recordEvent` +
+  `noteRefetchOutcome` 已经具备至少一次 + 幂等键（`refetch-outcome:<slotId>:<targetId>`）去重；协议侧只需补
+  `$defs/Event` 投影、按 slot + `after=<event_id>` 的游标读取、消费者 `(job_id,last_event_id)` 游标/ack 与未确认计数。
+  已记明真实陷阱：目标 `type !== 'httpMultipart'` 时 `noteRefetchOutcome` 直接 return（`NotificationPolicy.ts:276`），
+  必须表达为能力声明；回调失败不得改终态，消费者也不得靠「没收到回调」判定失败（这正是「重抓静默」的根因）。
 
 ### 4 仍未完成
 
