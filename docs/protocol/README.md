@@ -74,9 +74,17 @@ PY
 python3 scripts/mock-protocol-server.py &                 # MODE=ok，默认 8799 端口
 python3 scripts/verify-protocol-v1.py --live --pixivflow-url http://127.0.0.1:8799 --pixivflow-token t
 
-# 负例：MODE=noevents（终态无事件流）/ MODE=noack（无 ack 面）/ MODE=stuck（永不终态）/ MODE=refetch（泄漏旧字段）
+# 负例：MODE=noevents（终态无事件流）/ MODE=noack（无 ack 面）/ MODE=stuck（永不终态）/
+#       MODE=refetch（泄漏旧字段）/ MODE=badcapabilities（能力超范围）/
+#       MODE=nolegacy（旧 refetch 端点未降级为 shim）/ MODE=drifting（两个入口各自造作业）
 MODE=noack python3 scripts/mock-protocol-server.py &
+
+# 旧端点与通用面必须共享同一身份空间（§11.1）——加 --legacy-refetch-target 才跑
+python3 scripts/verify-protocol-v1.py --live --pixivflow-url http://127.0.0.1:8799 --pixivflow-token t \
+    --legacy-refetch-target bot1-submit
 ```
+
+实测（2026-09-28，三个 case）：`MODE=ok` → exit 0，含「旧端点已转成 Job（身份 job-1）」「旧端点提交的作业在通用面上可见且 job_id 一致」「通用面提交的 Job 被旧入口解析回同一个 job_id（两个入口一个身份空间）」；`MODE=nolegacy` → exit 1「旧 refetch 端点未实现为 shim」；`MODE=drifting` → exit 1「通用面 Job job-2 提交后，旧入口同一键解析到 legacy-3 —— 两个入口在各自造作业」。未给 `--legacy-refetch-target` 时该项打印 SKIP，不假装通过。
 
 注意：**每次启动 mock 前先 `pkill -f mock-protocol-server.py`**，否则会打到上一个会话残留的进程，看到与本次无关的假失败（已踩过一次）。
 

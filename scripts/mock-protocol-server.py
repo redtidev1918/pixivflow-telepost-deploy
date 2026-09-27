@@ -8,6 +8,9 @@ Only used to smoke-test scripts/verify-protocol-v1.py --live without touching pr
   MODE=refetch            succeeds but leaks a refetch_* field name (guard must fire)
   MODE=badcapabilities    capabilities misses candidate_search (guard must fire)
   MODE=noevents           terminal job with an empty event stream (guard must fire)
+  MODE=noack              no ack surface (guard must fire)
+  MODE=nolegacy           no legacy refetch shim (shim-equivalence guard must fire)
+  MODE=drifting           legacy shim and /jobs use different identity spaces (guard must fire)
 """
 import json
 import os
@@ -61,6 +64,14 @@ class Handler(BaseHTTPRequestHandler):
     def do_GET(self):  # noqa: N802
         if self.path == "/capabilities":
             return self._send(200, capabilities())
+        if self.path.split("?")[0] == "/jobs":
+            query = self.path.split("?", 1)[1] if "?" in self.path else ""
+            wanted_key = ""
+            for part in query.split("&"):
+                if part.startswith("idempotency_key="):
+                    wanted_key = part.split("=", 1)[1]
+            jobs = [JOBS[BY_KEY[wanted_key]]] if wanted_key in BY_KEY else list(JOBS.values())
+            return self._send(200, {"jobs": jobs, "next_cursor": "", "server_time": now_ms()})
         if self.path.startswith("/jobs/") and self.path.split("?")[0].endswith("/events"):
             job_id = self.path.split("?")[0].split("/")[-2]
             job = JOBS.get(job_id)
@@ -111,13 +122,48 @@ class Handler(BaseHTTPRequestHandler):
     def do_POST(self):  # noqa: N802
         length = int(self.headers.get("Content-Length") or 0)
         body = json.loads(self.rfile.read(length) or b"{}")
+        if self.path.startswith("/internal/targets/") and self.path.endswith("/refetch"):
+            # Legacy compatibility shim: it MUST land in the same identity space as /jobs.
+            if MODE == "nolegacy":
+                return self._send(404, {"error": {"code": "not_found", "message": "no legacy shim"}})
+            key = str(body.get("requestId") or "")
+            if not key:
+                return self._send(400, {"error": {"code": "invalid_params", "message": "requestId required"}})
+            replayed = key in BY_KEY or MODE == "drifting"
+            if not replayed:
+                job_id = f"job-{len(JOBS) + 1}"
+                BY_KEY[key] = job_id
+                JOBS[job_id] = {
+                    "protocol_version": "1",
+                    "job_id": job_id,
+                    "job_type": "candidate_search",
+                    "status": "queued",
+                    "idempotency_key": key,
+                    "correlation_id": body.get("correlationId"),
+                    "params": None,
+                    "_from_legacy": True,
+                    "created_at": now_ms(),
+                    "updated_at": now_ms(),
+                    "deadline_at": now_ms() + 5400000,
+                }
+            elif MODE == "drifting":
+                job_id = f"legacy-{len(JOBS) + 1}"
+                JOBS[job_id] = {
+                    "protocol_version": "1", "job_id": job_id, "job_type": "candidate_search",
+                    "status": "queued", "idempotency_key": key,
+                    "created_at": now_ms(), "updated_at": now_ms(),
+                }
+            else:
+                job_id = BY_KEY[key]
+            return self._send(202, {"status": "accepted", "jobId": job_id, "slotId": job_id,
+                                    "replayed": replayed})
         if self.path == "/jobs":
             if body.get("job_type") != "candidate_search":
                 return self._send(400, {"error": {"code": "invalid_params", "message": "unknown job_type"}})
             key = body.get("idempotency_key") or f"auto-{len(JOBS)}"
             if key in BY_KEY:
                 existing = JOBS[BY_KEY[key]]
-                same = _canon(existing.get("params")) == _canon(body.get("params"))
+                same = existing.get("_from_legacy") or _canon(existing.get("params")) == _canon(body.get("params"))
                 if not same:
                     return self._send(409, {"error": {
                         "code": "idempotency_conflict",

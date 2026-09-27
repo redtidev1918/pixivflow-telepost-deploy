@@ -21,6 +21,7 @@ import re
 import sys
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 from pathlib import Path
 
@@ -259,8 +260,6 @@ BOUNDARY_PORT = "telepost/application/pixivflow_jobs.py"
 INTERNAL_PATH_PATTERNS = (re.compile(r"/internal/targets/"),)
 #: 已知的、尚未收口的耦合。列在这里 = 只 WARN；不在表里的新泄漏 = FAIL。
 BOUNDARY_KNOWN_LEAKS = {
-    "telepost/application/refetch.py":
-        "遗留的无循环兜底提交器 _default_submit_pixivflow_refetch；收口时删除或改为走端口",
     "telepost/application/recovery.py":
         "POST /internal/targets/{target}/recover 属于非 Job 面，留待协议 v2（不在 v1 范围）",
     "telepost/domain/refetch_state.py":
@@ -414,6 +413,70 @@ def request(method: str, url: str, token: str | None, body=None, timeout: int = 
         return 0, str(exc)
 
 
+def check_legacy_shim_equivalence(base: str, token: str, args, task: dict) -> None:
+    """旧 refetch 端点与 POST /jobs 必须共享同一个身份空间（§11.1）。
+
+    两个入口都必须落在**同一个 Job**上：否则「降级为 shim」只是并排跑两套作业，
+    旧入口提交的作业在新面上不可见（或反之），对账必然漏。
+    """
+    target = args.legacy_refetch_target
+    quote = urllib.parse.quote
+    legacy_url = f"{base}/internal/targets/{quote(target, safe='')}/refetch"
+
+    # 方向一：旧入口 → 通用面
+    forward_key = f"{args.idempotency_key or 'protocol-acceptance'}-shim"
+    status, body = request("POST", legacy_url, token,
+                           {"requestId": forward_key, "correlationId": args.correlation_id})
+    if status == 404 or (isinstance(body, dict) and (body.get("error") or {}).get("code") == "not_found"):
+        fail("旧 refetch 端点未实现为 shim —— 两个入口必须共享同一身份空间")
+        return
+    if status not in (200, 201, 202) or not isinstance(body, dict):
+        fail(f"旧 refetch 端点提交失败：HTTP {status}（{body}）")
+        return
+    identity = str(body.get("jobId") or body.get("job_id") or body.get("slotId") or "")
+    if not identity:
+        fail("旧 refetch 端点未返回任何 Job 身份（jobId/job_id/slotId）—— 它没有转成 Job")
+        return
+    ok(f"旧 refetch 端点已转成 Job（身份 {identity}）")
+
+    status, page = request("GET", f"{base}/jobs?idempotency_key={quote(forward_key, safe='')}", token)
+    if status != 200 or not isinstance(page, dict):
+        fail(f"按幂等键查询 Job 失败：HTTP {status}（{page}）")
+        return
+    jobs = page.get("jobs")
+    if not isinstance(jobs, list) or len(jobs) != 1:
+        fail(f"同一幂等键应解析到恰好 1 个 Job，实得 {len(jobs) if isinstance(jobs, list) else jobs} —— 旧入口另造了作业")
+        return
+    resolved = str(jobs[0].get("job_id") or "")
+    if resolved != identity:
+        fail(f"身份空间不一致：旧端点给出 {identity}，GET /jobs 给出 {resolved}")
+        return
+    ok("旧端点提交的作业在通用面上可见且 job_id 一致")
+    status, fetched = request("GET", f"{base}/jobs/{quote(identity, safe='')}", token)
+    if status != 200 or not isinstance(fetched, dict) or str(fetched.get("job_id")) != identity:
+        fail(f"GET /jobs/{identity} 未返回该 Job：HTTP {status}")
+        return
+    ok("GET /jobs/{job_id} 能读到旧端点创建的 Job")
+
+    # 方向二：通用面 → 旧入口（同一个键必须解析回同一个 Job，而不是第二个）
+    reverse_key = f"{forward_key}-rev"
+    reverse_task = json.loads(json.dumps(task))
+    reverse_task["idempotency_key"] = reverse_key
+    status, job = request("POST", f"{base}/jobs", token, reverse_task)
+    reverse_id = (job or {}).get("job_id") if isinstance(job, dict) else None
+    if status not in (200, 201, 202) or not reverse_id:
+        fail(f"通用面提交失败（反向验证的基准）：HTTP {status}（{job}）")
+        return
+    status, again = request("POST", legacy_url, token,
+                            {"requestId": reverse_key, "correlationId": args.correlation_id})
+    legacy_id = str((again or {}).get("jobId") or (again or {}).get("job_id") or (again or {}).get("slotId") or "") \
+        if isinstance(again, dict) else ""
+    if legacy_id != str(reverse_id):
+        fail(f"通用面 Job {reverse_id} 提交后，旧入口同一键解析到 {legacy_id or '（无）'} —— 两个入口在各自造作业")
+        return
+    ok("通用面提交的 Job 被旧入口解析回同一个 job_id（两个入口一个身份空间）")
+
+
 def check_live(args) -> None:
     base = args.pixivflow_url.rstrip("/")
     token = args.pixivflow_token
@@ -449,6 +512,11 @@ def check_live(args) -> None:
                                                 for item in args.exclude]
     task["idempotency_key"] = args.idempotency_key
     task["correlation_id"] = args.correlation_id
+
+    if args.legacy_refetch_target:
+        check_legacy_shim_equivalence(base, token, args, task)
+    else:
+        skip("未给 --legacy-refetch-target，跳过「旧端点与 /jobs 同一身份空间」验证")
 
     status, job = request("POST", f"{base}/jobs", token, task)
     if status not in (200, 201, 202) or not isinstance(job, dict):
@@ -599,6 +667,8 @@ def main() -> int:
     parser.add_argument("--poll", type=int, default=15)
     parser.add_argument("--cancel-after", type=int, default=0, help=">0 时在该秒数后取消作业")
     parser.add_argument("--expect", default="", help="期望终态（可选）")
+    parser.add_argument("--legacy-refetch-target", default="",
+                        help="给出目标 id 时，验证「旧 refetch 端点与 /jobs 共享同一身份空间」（shim 等价）")
     parser.add_argument("--vendored", nargs="*", default=[], help="要核对 vendored 副本的仓库路径（默认 ../TelePost ../PixivFlow）")
     args = parser.parse_args()
 

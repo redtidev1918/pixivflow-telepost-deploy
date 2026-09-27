@@ -2886,7 +2886,7 @@ Status: IN_PROGRESS（协议 SSOT 与生产端 liveness 已落地并推送；两
   `preview` 不会被 `review` 误伤）、封闭错误词表可映射。
 * 远程访问正在收口为**唯一可替换端口** `telepost/application/pixivflow_jobs.py`（`submit` / `get`），
   心跳与状态机只依赖该端口、不再自己拼 HTTP 路径；切到 `POST /jobs` 时只动这一个文件。
-  当前工作树未提交（见「仍未完成」）。
+  **已提交**（TelePost `6f2617f`）。
 
 ### 3.1 本轮钉掉的两个坑（协议侧决策，均已写入 `docs/architecture/workflow-protocol.md`）
 
@@ -2900,9 +2900,39 @@ Status: IN_PROGRESS（协议 SSOT 与生产端 liveness 已落地并推送；两
   已记明真实陷阱：目标 `type !== 'httpMultipart'` 时 `noteRefetchOutcome` 直接 return（`NotificationPolicy.ts:276`），
   必须表达为能力声明；回调失败不得改终态，消费者也不得靠「没收到回调」判定失败（这正是「重抓静默」的根因）。
 
+### 3.2 第 9 轮：两侧落地（2026-09-28）
+
+* **TelePost `6f2617f fix(refetch): redesign refetch as persistent job workflow`**（13 文件，+2809/-313，已推送）：
+  attempt 即 job（`heartbeat_at`/`heartbeat_count`/`remote_heartbeat_at`/`remote_state_at`/`next_poll_at`/`poll_failures`/
+  `terminal_notified_at` 六列 + 只回填 `notify_count>0` 终态行的选择性 backfill）；`record_poll` 只写心跳与退避、
+  **绝不**写 `state`/`updated_at`；30 秒 `poll_refetch_jobs` 循环 + 300 秒 `force=True` 复用同一函数；
+  `recover_refetch_jobs` 在 `/ready` 之前跑一次；终态通知恰好一次（发送失败落到 `submitter_notifications`，
+  `kind='refetch_terminal'`，键 `refetch:<request_id>:terminal`）；`doctor` 新增
+  `Refetch: running: N stuck: N failed(last24h): N`（stuck = ACTIVE 且本地心跳超 20 分钟 → CRIT/exit 1；历史行单独计为 legacy，维持 exit 0）；
+  预算修正 `REFETCH_HARD_TIMEOUT_MINUTES=90`；`refetch.py` 的兜底提交器改为**委托端口**（不再是第二套 HTTP 客户端）。
+* **并发单写修复（同一提交内，经复核接受）**：`apply_transition_on` 的 UPDATE 加了 `WHERE request_id=? AND state=?` 的 CAS，
+  `rowcount==0` 时打日志并放弃本次写入——WAL + 每请求新连接下，两个并发迁移曾基于同一旧快照各自通过合法性检查，
+  写出 `state='searching'` 却带着旧 `failure_code`/`finished_at` 的半应用行，把看门狗已终结的 attempt「复活」。
+  事件行只在 CAS 胜出时写。
+* **PixivFlow `21d8982 feat(protocol): introduce the PixivFlow↔TelePost workflow protocol`** +
+  `dea50bb test(protocol): validate the produced jobs against the vendored schema`（已推送，HEAD `fc41c03`）：
+  既有 trigger server 上的 `GET /capabilities`、`POST /jobs`、`GET /jobs/{id}`、`GET /jobs?idempotency_key=`、`POST /jobs/{id}/cancel`；
+  一个核心 `ManualJobAdmission.admit()` + 两个薄适配器（通用 / legacy shim），身份 `job_id=slotId`、`idempotency_key=manual_request_id`
+  并加**受保护的部分唯一索引**（历史重复键则降级为普通索引 + 大声告警）；同键不同参数 → 409 `idempotency_conflict`；
+  内部原因码 → 协议码是穷尽 `Record`（不映射无法编译）；取消走一个事务 + `stopCancelledWork` 死信在途投递，且不计 alertable。
+* **诚实声明**：`/capabilities.features` 不声明 `events`（v1 没有事件端点/ack/callback 投递）；已知未实现项汇总在
+  `docs/architecture/workflow-protocol.md` §13——能力声明宁可缺失，也不假装支持。
+* **`outcome_version` 1 → 2**（`business_status` 增加 `cancelled`）：全生态检索确认**无任何消费者读取该字段**后才升。
+* **边界门收紧**：`telepost/application/refetch.py` 从白名单移出（3 → 2 条），`check_boundary_discipline()` 复跑仍 exit 0。
+* **身份空间等价可机验**：`verify-protocol-v1.py --live --legacy-refetch-target <target>` 双向校验「旧端点 ↔ `/jobs` 同一个 `job_id`」，
+  负例 `MODE=nolegacy` / `MODE=drifting` 实测会红。
+* 独立复核（非子代理自报）：TelePost 目标套件 108 passed / 全量 1139 passed, 1 skipped；PixivFlow `135 suites / 1486 tests` 全过且 `tsc --noEmit` 0；离线验收两条校验路径均 exit 0。
+
 ### 4 仍未完成
 
-* TelePost 持久化 job 生命周期（单写路径、启动恢复、终态必通知、`doctor` 监控、7 场景 + 1000 次压力）未提交。
-* PixivFlow job facade（`GET /capabilities`、`POST /jobs`、`GET /jobs/{id}`、`GET /jobs?idempotency_key=`、幂等 cancel）
-  正在实现（round B）；旧 refetch 端点将降级为兼容 shim，身份收敛为 `job_id=slotId`、`idempotency_key=manual_request_id`。
-* 消费侧切到通用 Job API；事件回调 + Ack/对账；发版（TelePost 2.71.0 / PixivFlow 3.3.0）、部署、现场验收。
+* **C 阶段（消费侧切换）**：`telepost/application/pixivflow_jobs.py` 目前仍走旧 `POST /internal/targets/{t}/refetch`
+  （生产者已把它降级为同一 admission 核心的 shim）。下一步把端口切到 `POST /jobs`（`job_type=candidate_search`）并用
+  `GET /jobs/{id}` 读状态，legacy 入口只保留为回滚路径；切完后旧入口应无人调用（可加计数告警）。
+* **D 阶段（事件）**：`GET /jobs/{job_id}/events` + `…/events/ack` + `callback_url` 投递（§11.4：复用 `delivery_events` + outbox，
+  不造第二套队列）、`labels` 持久化、`GET /jobs` 的 `correlation_id`/`status`/游标过滤、逐 Job 强制 `deadline_ms`。
+* 发版（TelePost 2.71.0 / PixivFlow 3.3.0）、部署与现场验收（含「重抓不再静默」的真实故障复现）。

@@ -133,10 +133,10 @@ Related: `refetch-silent-failure-cure.md`（触发本协议的重抓静默故障
 | 方法 | 路径 | 用途 | 成功 |
 |---|---|---|---|
 | `GET` | `/capabilities` | 能力发现：协议版本、job 类型与 schema、资产类型/质量枚举、限额 | 200 |
-| `POST` | `/jobs` | 提交 Task（幂等） | `202 { job }`，重复键返回同一 Job（200/202 均可，body 必须相同语义） |
-| `GET` | `/jobs/{job_id}` | Job 投影（§2.2 全字段） | 200 / 404 |
+| `POST` | `/jobs` | 提交 Task（幂等） | 首次受理 `202 { job }`；重复键 `200 { job }`（**body 必须相同**，即同一 Job） |
+| `GET` | `/jobs/{job_id}` | Job 投影（§2.2 全字段） | 200 **裸 Job**（与 fixture 一致）/ 404 `{ error }` |
 | `GET` | `/jobs?idempotency_key=…&correlation_id=…&status=…&limit=…` | 查询与对账 | 200 `$defs/JobPage`（`{ jobs, next_cursor?, server_time? }`）；分页只能用**不透明游标**，禁止暴露生产者表 id |
-| `POST` | `/jobs/{job_id}/cancel` | 取消（尽力，返回最终投影） | 200 |
+| `POST` | `/jobs/{job_id}/cancel` | 取消（尽力，返回最终投影） | 200 **裸 Job**（幂等：重复取消返回同一 body） |
 | `GET` | `/jobs/{job_id}/events?after=…&unacked=1` | 事件历史与对账（消费者补拉未 Ack 事件） | 200 `$defs/EventPage`（`{ job_id, events, next_after?, unacked?, server_time? }`，按时间**升序**，`next_after` 直接回传当游标）|
 | `POST` | `/jobs/{job_id}/events/ack` | 消费者回写「已持久记录到哪条」（补拉后的确认） | 200 `$defs/AckResult`（`{ job_id, acked, unacked }`）|
 | `POST` | `{callback_url}` | 事件投递（生产者 → 消费者），消费者返回 2xx 即 Ack | 2xx |
@@ -150,6 +150,9 @@ Related: `refetch-silent-failure-cure.md`（触发本协议的重抓静默故障
 - 列表与批量：所有查询有 `limit`（默认 100，上限 500）。
 - **确认有两条路**：回调 `POST {callback_url}` 返回 2xx（推送路径），或消费者补拉后 `POST /jobs/{job_id}/events/ack {ack_through}`（拉取路径）。`ack_through` **单调、幂等**，未知或更旧的 `event_id` 一律按 no-op 接受（不得报错），且 **ack 绝不改变 Job 状态**——确认不是状态迁移。消费者必须在**持久化之后**才 ack（先确认后落库等于数据丢失）。
 - 生产者的 `unacked` 必须反映真实未确认数（含回调死信），否则对账无法发现「投递失败」；`job.accepted` 之前不得回 202。
+- **响应体形状（规范）**：成功即「裸对象」——`POST /jobs` 是 `{ job }` 包一层，`GET /jobs/{job_id}`、`POST /jobs/{job_id}/cancel` 是**裸 Job**，`GET /jobs` 是 `$defs/JobPage`，`GET …/events` 是 `$defs/EventPage`，`…/events/ack` 是 `$defs/AckResult`。**任何失败**（4xx/5xx）统一为 `{ "error": <$defs/Error> }`，`code` 必须取自 §5 的封闭词表并带 `retryable`；未挂载该能力时用 `503 { error: { code: "internal_error", detail: { reason: "job_api_disabled" } } }`，**不得**返回 200 + 空结果。
+- **未知 `job_type`** 用 `400 { error: { code: "invalid_params", detail: { reason: "unsupported_job_type" } } }`——**不**为此新增枚举码（封闭词表是刻意的）；`detail.reason` 是**非规范**的自由文本，仅用于诊断，消费者**禁止**据此分支（分支只能看 `code`）。
+- **`deadline_ms` 的效力**：Job 的 `deadline_at` 是**唯一权威**的有效期。生产者若无法执行消费者请求的 `deadline_ms`，必须在 `/capabilities` 如实声明自己可执行的 `default_deadline_ms`，并在 `deadline_at` 里报出**自己真正会执行的**值（**禁止**原样回显消费者数字却按别的上限执行）；消费者**只读 `deadline_at`**，不假设自己的数字被采纳。v1 允许生产者不按 Job 单独执行消费者 `deadline_ms`（以自身上限为准），但必须如上如实投影；逐 Job 强制是阶段 D 的收口项（见 §13）。
 
 ### 3.1 兼容（过渡期，v1 内保留，v2 移除）
 
@@ -182,7 +185,10 @@ queued ──claim──▶ running ──▶ succeeded
 | 停摆预算 | 15 min | `running` 且 **心跳与状态都过期** | `expired` / `stalled_no_progress` |
 | 硬上限 | `deadline_ms` | 绝对上限 | `expired` / `deadline_exceeded` |
 
-规则：`heartbeat_at` 由生产者周期刷新（默认 30 s，`/capabilities` 声明）；**心跳或状态刷新即重置停摆时钟**；任何终态都必须带 `result` 或 `error`，且**必须产生一个终态事件**（至少一次，可对账）。长跑正常（2–20 分钟，排队可达数小时）**不得**因为「安静」被误判。
+规则：`heartbeat_at` 由生产者周期刷新（默认 30 s，`/capabilities` 声明）；**心跳或状态刷新即重置停摆时钟**；任何终态都必须带 `result` 或 `error`，且**必须产生一个终态事件**（至少一次，可对账）。
+
+- 终态形状：`succeeded` 带 `result`（**通常不出现 `error` 键**）；`failed`/`expired`/`cancelled` 带 `error`。可选对象字段**缺省与显式 `null` 等价**（`JSON.stringify` 会把 undefined 写成缺省、把 null 写成 null），消费者**必须**把两者一视同仁（schema 已两者都接受）。
+- `deadline_at` 是权威有效期（见 §3 约定）；超限 → `expired` / `deadline_exceeded`。长跑正常（2–20 分钟，排队可达数小时）**不得**因为「安静」被误判。
 
 ---
 
@@ -319,7 +325,7 @@ queued ──claim──▶ running ──▶ succeeded
 | 协议元素 | 落到哪里 | 规则 |
 |---|---|---|
 | `GET /capabilities` | `src/scheduler/ScheduleTriggerServer.ts`（沿用现有 trigger/refetch token 鉴权） | 声明 `job_types:[candidate_search]` 与预算；预算值来自配置（`queuedTimeoutMs`/`stallTimeoutMs`），**不得**由调用方硬编码 |
-| `POST /jobs` | 新 handler，复用 `SchedulerCommand` 的 admission（现 `src/commands/SchedulerCommand.ts:175-217`） | 请求体是 `Task`；`job_type` 未知 → `400 unsupported?`→ 用 `invalid_params`；目标不唯一 → `409`（沿用 `ambiguous target` 语义，但 body 为协议 `Error`） |
+| `POST /jobs` | 新 handler，复用 `SchedulerCommand` 的 admission（现 `src/commands/SchedulerCommand.ts:175-217`） | 请求体是 `Task`；`job_type` 未知 → `400 invalid_params` + `detail.reason='unsupported_job_type'`（不新增枚举码，见 §3 约定）；目标不唯一 → `409`（沿用 `ambiguous target` 语义，但 body 为协议 `Error`） |
 | `GET /jobs/{job_id}` | `src/scheduler/JobProjection.ts`（A 阶段已建） | 投影即 Job；`job_id` 对消费者不透明（v1 实现上等于 slotId，但**禁止**在协议里暴露 `slot*` 语义字段名） |
 | `GET /jobs?idempotency_key=…` | `SlotRepository.findManualSlot` 一族 | 重放同一 `idempotency_key` 必须返回**同一个** job（幂等可视） |
 | `POST /jobs/{job_id}/cancel` | 一个事务：slot + cells → 终态 | 走既有 cell FSM，不新增 cell 状态：`failed` + `terminal_reason_code='cancelled_by_consumer'`，作业 `error.code='cancelled_by_consumer'`。**取消是「作业已终结」而不是系统故障**：生产者必须把它记成可辨认的原因码（`cancelled_by_consumer` 同时是生产者内部原因码之一，映射到同名协议码），并且取消不得计入 alertable / `business_status=failed`，否则每次用户取消都会误告警 |
@@ -352,6 +358,7 @@ queued ──claim──▶ running ──▶ succeeded
 5. `cancel` 后 `status='cancelled'` 且不再产生投递；重复 cancel 幂等。
 6. `grep` 断言：`/jobs` 面不出现 `refetch*` 字段名，且既有 `slot_name` 取值未被改写。
 7. 契约测试新增一条：把**真实产生的 Job 投影**用 `protocol/v1` 的 `$defs/Job` 校验通过（满足 `protocol/README.md` §2 第 1 条要求的「真实报文」部分）。
+8. 旧 `refetch` 端点与 `/jobs` **共享同一个身份空间**：旧入口提交的作业能在 `GET /jobs?idempotency_key=…` 与 `GET /jobs/{job_id}` 上读到，且反向（通用面提交 → 旧入口同键）解析回**同一个** `job_id`；两个入口各自造作业 = 失败。由 `scripts/verify-protocol-v1.py --live --legacy-refetch-target <target>` 机器校验（负例 `MODE=nolegacy` / `MODE=drifting` 已实测会红）。
 
 
 ### 11.4 D 阶段：事件与 Ack/对账的文件级映射（不要造第二套投递）
@@ -379,17 +386,32 @@ queued ──claim──▶ running ──▶ succeeded
 
 | 门 | 规则 | 现状（2026-09-28 实测） |
 | --- | --- | --- |
-| `check_boundary_discipline()` | 扫描 TelePost 检出的 `**/*.py`，`/internal/targets/` 字面量只允许出现在**唯一端口** `telepost/application/pixivflow_jobs.py`；其它文件出现即 **FAIL**（打印 `文件:行号`） | 端口 4 处 OK；3 个文件命中但已进「已知耦合」白名单 → 只 SKIP，不 FAIL |
+| `check_boundary_discipline()` | 扫描 TelePost 检出的 `**/*.py`，`/internal/targets/` 字面量只允许出现在**唯一端口** `telepost/application/pixivflow_jobs.py`；其它文件出现即 **FAIL**（打印 `文件:行号`） | 端口 4 处 OK；**2 个文件**命中但已进「已知耦合」白名单 → 只 SKIP，不 FAIL |
 | `check_producer_protocol_codes()` | `PixivFlow/src/scheduler/ProtocolErrors.ts` 的 `ProtocolErrorCode` 必须与 `$defs/Error.code.enum` **完全一致**（缺码或自造码都 FAIL） | 16 个码完全一致 |
 
 白名单（`BOUNDARY_KNOWN_LEAKS`，每条都要有出处与收口计划，**禁止**往表里新增而不写理由）：
 
 | 文件 | 事实 | 收口计划 |
 | --- | --- | --- |
-| `telepost/application/refetch.py:215-217,419-468` | 仍保留一个「handlers.review 不可导入」时的兜底提交器 `_default_submit_pixivflow_refetch`，**自己拼** `/internal/targets/{t}/refetch`（端口之外的第二套 HTTP 客户端） | C 阶段收口：提交/读取一律经端口（`handlers.review._refetch_client()` 或 `pixivflow_jobs_port`），删除该兜底器；如需无循环兜底则让它**委托端口**而不是重建 URL。删除后同步移出本白名单，门自动变紧 |
+| ~~`telepost/application/refetch.py`~~ | **已收口（2026-09-28，TelePost 6f2617f）**：兜底提交器改为委托端口 `pixivflow_jobs_port.default_job_client().submit("refetch", …)` / `classify_error(exc)`，文件内不再有 URL 组装与 `PIXIVFLOW_REFETCH_BASE_URL` 读取；已**移出白名单**，门自动变紧 | 完成 |
 | `telepost/application/recovery.py:229` | `POST /internal/targets/{target}/recover` —— 非 Job 面的 PixivFlow 内部命令 | 协议 v2：以 `/capabilities` 如实声明 + 或在 v1 内明确列为「非协议面」并停止扩张；本轮不动（不属 v1 范围，也不在本轮改造范围） |
 | `telepost/domain/refetch_state.py:130` | 仅注释里提到远端路径，无调用 | 无需处理（保留在表里以减少评审噪音） |
 
 反向验证（防止门本身失效）：在临时检出里放一个 `/internal/targets/` 新泄漏 → 实测 `[FAIL] 出现新的 PixivFlow 内部路径耦合：handlers/leak.py:2`，退出码 1。
 
-卫生要求：调试用的临时测试文件（如 `tests/test_zzprobe.py`）**不得提交**；端口收口完成后，`telepost/application/refetch.py` 必须从白名单移出。
+卫生要求：调试用的临时测试文件（如 `tests/test_zzprobe.py`）**不得提交**；已按要求删除。端口收口完成后 `telepost/application/refetch.py` 已从白名单移出——白名单只允许**变小**，新增条目必须写明理由与收口计划。
+
+## 13 v1 已知未实现与诚实声明（D 阶段范围）
+
+阶段 B 落地时**如实申报**、未实现的项（宁可能力声明缺失，也不假装支持）。每一条都必须在 `/capabilities` 与对账面上体现，禁止静默降级：
+
+| 未实现 | 生产者当前行为 | 收口（D 阶段） |
+| --- | --- | --- |
+| 事件端点 `GET /jobs/{job_id}/events`、`…/events/ack`、`callback_url` 投递 | **不实现**，`features` 如实**不声明** `events` | 见 §11.4：复用既有 `delivery_events` + outbox 投递，新增 slot 维度游标与 ack |
+| `labels` 持久化 | schema 校验后**忽略**，不回显 | 落一列 JSON（或明确写入协议 §2.1 的「生产者可以不存 labels」） |
+| `GET /jobs` 过滤 | 只支持 `idempotency_key`（无 `correlation_id`/`status`/游标） | 加索引与不透明游标 |
+| 逐 Job 强制消费者 `deadline_ms` | 接受但不逐 Job 执行，`deadline_at` 报**自己**的上限（见 §3 约定） | 加一列 + 到期终态化 |
+| 目标发现仍用冻结的 `refetch*` 配置键（`refetch_request_id`、`delivery.refetchOutcomeUrl`） | 为**字节兼容**保留（不得改字面量） | 阶段 C：配置键改名为通用 `job*`，旧键保留为别名读取 |
+| `recovery.py` 的 `POST /internal/targets/{target}/recover` | 非 Job 面的内部命令（白名单 SKIP） | 协议 v2：改为如实声明的能力或纳入 Job 面 |
+
+另一条不变量：**能力声明必须诚实**——`features` 里没有 `events` 就是没有事件；消费者不得把「没声明」当成「不支持但会在别处给」。
