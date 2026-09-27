@@ -192,7 +192,15 @@ primary_region = 'iad'
     # same shape the channel publishes it (cover photo first, TXT document
     # reply); the cover is a staging-only preview and never enters the review
     # record (media_json/documents_json unchanged).
-    TELEPOST_IMAGE = 'ghcr.io/redtidev1918/telepost:2.68.0'
+    # 2.68.1 (2026-09-27): pressing 重抓 now rewrites the review card itself into
+    # a 「重抓中」 shape (发布/拒绝/遮罩 hidden, 重抓 + 查看原链接 kept) instead of
+    # leaving it looking untouched; the progress reminder fires at 2 minutes and
+    # edits that same card with the elapsed wait, and every terminal outcome
+    # (replacement / no_alternative / failed / stalled / source resolved)
+    # restores the actionable card. The source review is never pre-rejected —
+    # that would obsolete its own replacement. Rollback = the 2.68.0 line above
+    # (release commit 4653a80).
+    TELEPOST_IMAGE = 'ghcr.io/redtidev1918/telepost:2.68.1'
 
 [[mounts]]
   source = 'data'
