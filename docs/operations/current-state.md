@@ -2928,11 +2928,46 @@ Status: IN_PROGRESS（协议 SSOT 与生产端 liveness 已落地并推送；两
   负例 `MODE=nolegacy` / `MODE=drifting` 实测会红。
 * 独立复核（非子代理自报）：TelePost 目标套件 108 passed / 全量 1139 passed, 1 skipped；PixivFlow `135 suites / 1486 tests` 全过且 `tsc --noEmit` 0；离线验收两条校验路径均 exit 0。
 
+### 3.3 第 10-11 轮：让门自己会跑，把悬空决策钉死（2026-09-28）
+
+* **协议门接进 CI**：`scripts/validate.sh` 现在跑 `python3 scripts/verify-protocol-v1.py`，而 `.github/workflows/validate.yml` 跑
+  `./scripts/validate.sh --examples`——本地与 CI 是同一条路径，协议门不再依赖「记得才跑」。实测 `./scripts/validate.sh --examples`
+  退出 0、末行 `Validation passed`，其中 `[OK] workflow protocol v1 offline acceptance`；缺某个检出时脚本自身 SKIP，从不假装通过。
+  `docs/protocol/README.md` §3.2 记录这条路径（提交 `f434a0f`）。
+* **发布机制查清（回答了「发版 2.71.0 / 3.3.0」）**：两仓都由 release-please 管版本（TelePost `telepost/build_info.py:11 RELEASE_VERSION="2.70.1"`，
+  PixivFlow `package.json`/`.release-please-manifest.json` 3.2.0；`src/version.ts` 为生成文件、头部写明禁止手改）——**版本号由提交类型驱动**，
+  两条必需的 `feat:` 提交已推（`6f2617f`、`21d8982`），因此 minor 升版交给工具，不手改文件。
+* **升级顺序与现场验收写成步骤**（`docs/operations/upgrades.md`「升级到协议 v1」+ `refetch-production-verification.md` 2026-09-28 段）：
+  **先 PixivFlow 3.3.0、后 TelePost 2.71.0**（新生产者只是**新增** `/jobs` 并把旧端点降级为同一 admission 核心的 shim，先升它不改变任何行为；
+  先升消费者会指向尚不存在的 `/jobs`）；回滚开关 `PIXIVFLOW_JOB_TRANSPORT=legacy`；两次发布的 schema 变更都是只增，因此旧镜像可容忍。
+  现场必做的回归是**「打断回调目标后触发重抓」**：作业仍须达到带原因的终态、终态通知恰好一次或落到 `submitter_notifications`，
+  绝不回到永久静默（诊断顺序：`GET /jobs/{job_id}` → 生产者账本原因 → 待补发通知 → doctor）。
+* **两条悬空决策钉进 SSOT**（提交 `afc0db3`）：(a) `callback_url` 由**消费者**在 Task 上给出，事件必须投到消费者**专为协议事件存在**的入口
+  （TelePost 侧 `POST /api/bot<N>/v1/jobs/events`，body 为裸 `$defs/Event`，`event_id` 唯一索引去重），**禁止**复用旧业务回调
+  `/api/bot<N>/v1/refetch/outcomes`——复用等于把业务负载塞回边界；未给 `callback_url` 时事件仍须能通过 `GET /jobs/{job_id}/events` 对账。
+  (b) §7.3 原先宣称 `GET /jobs` 支持 `status` 过滤，与 v1 实现不符（只支持 `idempotency_key`），已改成指向 §13 未实现清单——**文档不得比实现更乐观**。
+* **阶段表按事实更新**（§10）：A 已完成、B 已完成、C/D 进行中、E 已绿并接进 CI；§11.1 补 `events`/`ack`/`callback_url` 三行的文件级落点
+  （ack 需要一份持久游标迁移，`unacked` 才是真的未确认数；回调复用既有 outbox 去重/重试）。
+* **1000 次压力测试当场复核**（不是子代理自报）：`/tmp/tp-venv312/bin/python -m pytest -q --no-cov tests/test_refetch_job_lifecycle.py`
+  → `17 passed in 11.92s`；`test_thousand_attempts_all_reach_a_reported_terminal_state`（`tests/test_refetch_job_lifecycle.py:500`）
+  在单一有界注入时钟上跑 1000 次 attempt（断言 `elapsed < 30`，无 sleep），四种不变量齐备（无 ACTIVE 残留、每个终态行有非空 `terminal_reason`、
+  `refetch_events` 时间线非空、`finished_at - created_at <= 90*60+60`），并断言恰好一次通知、失败发送落到 outbox、以及故障组合真的跑过
+  （`set(codes) == {remote_failed, no_alternative, queued_too_long, stalled_no_progress}`）；另 16 个场景覆盖替换 E2E、远端搜索失败、
+  无候选、排队超时、停摆无进展、活心跳保护慢搜索、硬超时、看门狗无心跳、从未轮询行、二次点击、回调重投复用、重启恢复×2、通知重试、远端不可读、未知远端状态。
+* **子代理两次失败留痕（工程教训）**：阶段 C、D 的首次委派（`bfb6fa74…`、`d8ccca93…`）在基础设施层失败、结束消息为空，
+  `git status --porcelain` 证明**两个仓都没留下任何改动**（TelePost 全净，PixivFlow 只有另一会话的 `config/.current-config` 与 `src/version.ts`）——
+  重派前先查仓库状态而不是重跑已完成的活；第二次委派 `33f85071…`（C）/`ba23a275…`（D）已启动。
+
 ### 4 仍未完成
 
-* **C 阶段（消费侧切换）**：`telepost/application/pixivflow_jobs.py` 目前仍走旧 `POST /internal/targets/{t}/refetch`
-  （生产者已把它降级为同一 admission 核心的 shim）。下一步把端口切到 `POST /jobs`（`job_type=candidate_search`）并用
-  `GET /jobs/{id}` 读状态，legacy 入口只保留为回滚路径；切完后旧入口应无人调用（可加计数告警）。
-* **D 阶段（事件）**：`GET /jobs/{job_id}/events` + `…/events/ack` + `callback_url` 投递（§11.4：复用 `delivery_events` + outbox，
+* **C 阶段（消费侧切换，进行中）**：`telepost/application/pixivflow_jobs.py` 目前仍走旧 `POST /internal/targets/{t}/refetch`
+  （生产者已把它降级为同一 admission 核心的 shim）。正在把端口切到 `POST /jobs`（`job_type=candidate_search`）并用
+  `GET /jobs/{id}` 读状态，保留 `PIXIVFLOW_JOB_TRANSPORT=legacy` 回滚；切完后旧入口应无人调用（可加计数告警）。
+* **D 阶段（事件，进行中）**：`GET /jobs/{job_id}/events` + `…/events/ack` + `callback_url` 投递（§11.1：复用 `delivery_events` + outbox，
   不造第二套队列）、`labels` 持久化、`GET /jobs` 的 `correlation_id`/`status`/游标过滤、逐 Job 强制 `deadline_ms`。
-* 发版（TelePost 2.71.0 / PixivFlow 3.3.0）、部署与现场验收（含「重抓不再静默」的真实故障复现）。
+  只有上述真正可用后，`/capabilities.features` 才允许声明 `events`。
+* **E 阶段（消费侧事件入口，未开工）**：TelePost 侧需新增 `POST /api/bot<N>/v1/jobs/events`（裸 `$defs/Event`、`event_id` 唯一去重）
+  与「按 `unacked=1` 补拉 → ack 回写」的对账循环；**待定**：消费者如何知道自己对外的回调基址（现有配置只有生产者的
+  `delivery.targets.bot*-submit.refetchOutcomeUrl`，没有 TelePost 自己的公开基址键）——需在实现时就地确认，宁可新增显式配置键，
+  也不要从旧业务回调地址反推。
+* 发版（TelePost 2.71.0 / PixivFlow 3.3.0，由 release-please 按 `feat:` 提交驱动）、部署与现场验收（含「重抓不再静默」的真实故障复现）。
