@@ -3346,9 +3346,25 @@ Status: FAIL（线上可复现；未修复）
   attempt 自己的 `request_id`，否则 `commit_replacement` 找不到源 review，替换件无法 supersede。
 * 旁证：TelePost 自己生成的 key 也过不了自己的校验 —— `telepost/application/refetch.py:158`
   `key = callback_key or f"api:{review_id}:{uuid.uuid4().hex}"`（带前缀 + 无连字符 hex）。
-* 未定项（诚实边界）：现场那条裸 32 位 hex（`1e22b55cb33e47289f30c62e8ee1e11f`，既无 `api:<review_id>:`
-  前缀也无连字符）的**上游生成者尚未定位**，所以修复落在哪一侧还没定：(a) PixivFlow 转发前规范化为带连字符
-  UUID，或 (b) TelePost 接受无连字符 hex 并在读取时规范化。倾向前者——只有前者同时保留 TelePost 匹配自身
-  attempt UUID 的能力；但先要确认调用方究竟传了什么（是谁把 `uuid4().hex` 当成 `idempotency_key`）。
-* 影响面：手动重抓（现场验收 #1/#3 依赖的同一条链路）在当前已部署的 PixivFlow 3.4.1 + TelePost 2.71.1 上
-  **必然失败**，且失败发生在候选产出之后。
+* 线上旁证（只读查询 `bot1/submissions.db`）：`refetch_attempts` 最近 6 条的 `request_id` **全部是带连字符
+  的规范 UUID**（`b36c3a6c-3282-4182-b7d5-6d89f87d8b5e` / `e0f1edb9-c26f-4928-bc70-73aaf1827cf3` /
+  `c78dd065-60aa-4e7a-bba5-38275019217c` / `c255e1c3-…` / `ad4c7df1-…` / `b7e886d1-…`，callback_key 形如
+  `cb:137:accta59bdbf417694997bcb3`），而 TelePost 的两处提交点正是把这个 `request_id` 当 `idempotency_key`
+  送出去（`telepost/application/refetch.py:433`、`handlers/review.py:1637` —— `client.submit("refetch",
+  request_id, …)`，端口签名见 `telepost/application/pixivflow_jobs.py:343-353`）。
+  ∴ **审核卡「重抓」按钮这条现代路径尚未被证明会失败**；16:16 那条裸 hex 槽位不与任何一个 attempt id 对应。
+* 身份空间分叉（根因的形状）：同一个身份，PixivFlow **两条相邻路由的校验强度不同** ——
+  `POST /internal/targets/:targetId/refetch` 直接把它当不透明串透传
+  （`src/scheduler/ManualRefetchAdapter.ts:24-31` `idempotencyKey: requestId`，`ManualJobAdmission` 不校验形状），
+  而紧挨着的 `POST /internal/targets/:targetId/recover` 用严格正则要求 UUID，否则 400
+  `requestId must be a UUID`（`src/scheduler/ScheduleTriggerServer.ts:533`）。
+* 尚未定位（诚实边界）：那条裸 32 位 hex（`1e22b55cb33e47289f30c62e8ee1e11f`，既无 `api:<review_id>:`
+  前缀也无连字符）的**上游生成者仍未坐实**；已排除 TelePost 的 job port（它送的是虚线 UUID，见上一条），
+  剩余候选是 legacy `/refetch` 路由那个未校验的 `requestId`，或某个操作方/客户端自带的键。
+* 影响（按已证明的范围）：**任何**手动准入只要键不是规范 UUID，它的投递就会被永久拒绝（400 不可重试），
+  且失败发生在候选产出**之后** —— 现场已有一条（#556）。正常 cron occurrence 不走 manual 准入、不带该字段，
+  不受影响。
+* 修复方向（两处都很便宜，推荐同时做）：(1) PixivFlow 的 refetch 提交路由按 `recover` 路由已有的方式校验/
+  规范化 `requestId`，形状不对就**在准入时** 400 说清楚，而不是落一个注定在投递端失败的键；(2) 投递模板在键不是
+  规范 UUID 时**省略** `refetch_request_id` —— 手工触发的一次日常运行本来就没有可关联的重抓，空值才是真话，
+  这样投递能正常完成。TelePost 侧那条校验保持不动：它是「存储值必须能匹配自身 attempt UUID」的不变量。
