@@ -2873,6 +2873,12 @@ Status: IN_PROGRESS（协议 SSOT 与生产端 liveness 已落地并推送；两
   空事件流 / 缺终态事件 / 混入其它 job / 时间乱序 都判 FAIL ——「没收到回调」不再是唯一的对账依据。
 * 可选的对象字段（`Job.error/result/progress`、`Event.payload.*`）同时接受「缺失」与「显式 null」，
   避免把合法生产者判失败（PixivFlow 的子集校验器忽略 `anyOf`，真实 jsonschema 路径强制执行）。
+* 新增**确认面** `POST /jobs/{job_id}/events/ack`（`$defs/AckRequest`/`$defs/AckResult` + fixture）：
+  明确「推送 2xx」与「补拉后 ack」是同一义务的两条路，`ack_through` 单调幂等、未知游标按 no-op、
+  **ack 绝不改状态**；`--live` 新增 ack 往返检查（`unacked` 归零 + 重复 ack 幂等 + 状态不变）与
+  **幂等键冲突探测**（同键不同参数必须 409 `idempotency_conflict`），两者都做了正反双向验证
+  （`MODE=noack` 会从生产者侧失败）。mock 生产者随仓入库（`scripts/mock-protocol-server.py`，
+  `MODE=ok/noevents/noack/stuck/refetch`），`protocol/README.md` §3.1 写明复现命令与「先 pkill 再起 mock」的坑。
 * round B 给 `TerminalReasonCode` 加 `cancelled_by_consumer` 后，union 覆盖率检查立刻变红（预期），
   SSOT 已补 `cancelled_by_consumer -> cancelled_by_consumer` 并同步两仓，检查恢复绿。
 * `protocol/v1/` vendored 副本 + `tests/test_protocol_contract.py`（8 passed）：schema 合法性、fixture 回放、
