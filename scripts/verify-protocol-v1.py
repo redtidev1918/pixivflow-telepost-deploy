@@ -126,6 +126,7 @@ def fixture_entry(name: str) -> str:
         "capabilities": "Capabilities",
         "jobpage": "JobPage",
         "eventpage": "EventPage",
+        "ackresult": "AckResult",
     }[prefix]
 
 
@@ -370,6 +371,17 @@ def check_live(args) -> None:
     else:
         fail(f"重放未返回同一 job（HTTP {status}，{replayed}）")
 
+    conflict_task = json.loads(json.dumps(task))
+    conflict_task["params"]["query"]["tags"] = list(args.tags) + ["__protocol_conflict_probe__"]
+    status, conflict = request("POST", f"{base}/jobs", token, conflict_task)
+    conflict_code = (conflict.get("error") or {}).get("code") if isinstance(conflict, dict) else None
+    if status == 409 and conflict_code == "idempotency_conflict":
+        ok(f"同键不同参数 → 409 error.code={conflict_code}（幂等键不是『参数随便变都认』）")
+    elif status in (200, 201, 202) and isinstance(conflict, dict) and (conflict.get("job_id") or conflict.get("id")) == job_id:
+        fail("同一 idempotency_key 用不同参数提交仍返回原 job —— 幂等键无法发现参数漂移")
+    else:
+        fail(f"幂等键冲突未按协议拒绝：HTTP {status} error.code={conflict_code}（{conflict}）")
+
     status, unknown = request("POST", f"{base}/jobs", token, {**task, "job_type": "definitely_not_a_job_type"})
     if status == 400 and isinstance(unknown, dict) and (unknown.get("error") or {}).get("code"):
         ok(f"未知 job_type → 400 error.code={(unknown.get('error') or {}).get('code')}")
@@ -449,6 +461,37 @@ def check_live(args) -> None:
         fail(f"事件未按时间升序，不能直接当对账游标：{times}")
     else:
         ok("事件按时间升序（可直接用作对账游标）")
+
+    # Ack：回调返回 2xx 只是三条确认路径之一；消费者补拉后必须能把游标回写，否则 unacked 永远不清零、回调失败不可发现。
+    ack_url = f"{base}/jobs/{job_id}/events/ack"
+    ack_through = events[-1].get("event_id")
+    status, ack = request("POST", ack_url, token, {"ack_through": ack_through})
+    ack_code = (ack.get("error") or {}).get("code") if isinstance(ack, dict) else None
+    if status == 404 or ack_code in ("not_found", "unsupported"):
+        fail("生产者未实现 POST /jobs/{job_id}/events/ack —— 补拉事件后无法对账，回调失败即永久静默")
+        return
+    if status != 200 or not isinstance(ack, dict):
+        fail(f"POST 事件 ack → HTTP {status}（{ack}）")
+        return
+    errors = validate_against(schema, "AckResult", ack)
+    if errors:
+        fail(f"ack 响应不符合 $defs/AckResult：{errors[0]}")
+        return
+    ok(f"ack 生效：acked={ack.get('acked')} unacked={ack.get('unacked')}")
+    if int(ack.get("unacked") or 0) != 0:
+        fail(f"ack 后 unacked 仍为 {ack.get('unacked')}（消费者无法完成对账）")
+    else:
+        ok("ack 后 unacked 归零（消费者已追上）")
+    status, again = request("POST", ack_url, token, {"ack_through": ack_through})
+    if status == 200 and isinstance(again, dict) and int(again.get("unacked") or 0) == 0:
+        ok("重复 ack 幂等（同一游标重复提交仍为 200/unacked=0）")
+    else:
+        fail(f"重复 ack 不幂等：HTTP {status}（{again}）")
+    status, after_ack = request("GET", f"{base}/jobs/{job_id}", token)
+    if isinstance(after_ack, dict) and after_ack.get("status") != terminal_status:
+        fail(f"ack 改动了 Job 状态：{terminal_status} → {after_ack.get('status')}")
+    else:
+        ok("ack 不改变 Job 状态（确认不等于状态迁移）")
 
 
 def main() -> int:

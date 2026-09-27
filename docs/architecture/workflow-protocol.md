@@ -138,6 +138,7 @@ Related: `refetch-silent-failure-cure.md`（触发本协议的重抓静默故障
 | `GET` | `/jobs?idempotency_key=…&correlation_id=…&status=…&limit=…` | 查询与对账 | 200 `$defs/JobPage`（`{ jobs, next_cursor?, server_time? }`）；分页只能用**不透明游标**，禁止暴露生产者表 id |
 | `POST` | `/jobs/{job_id}/cancel` | 取消（尽力，返回最终投影） | 200 |
 | `GET` | `/jobs/{job_id}/events?after=…&unacked=1` | 事件历史与对账（消费者补拉未 Ack 事件） | 200 `$defs/EventPage`（`{ job_id, events, next_after?, unacked?, server_time? }`，按时间**升序**，`next_after` 直接回传当游标）|
+| `POST` | `/jobs/{job_id}/events/ack` | 消费者回写「已持久记录到哪条」（补拉后的确认） | 200 `$defs/AckResult`（`{ job_id, acked, unacked }`）|
 | `POST` | `{callback_url}` | 事件投递（生产者 → 消费者），消费者返回 2xx 即 Ack | 2xx |
 
 约定：
@@ -147,6 +148,8 @@ Related: `refetch-silent-failure-cure.md`（触发本协议的重抓静默故障
 - 幂等：同 `idempotency_key` 必须解析到**同一个** Job（含跨进程/重启/集群）；键冲突但参数不同 → `409 { error: { code: "idempotency_conflict" } }`。
 - 未知字段忽略；`protocol_version` 不支持 → `400 { error: { code: "unsupported_protocol_version" } }`。
 - 列表与批量：所有查询有 `limit`（默认 100，上限 500）。
+- **确认有两条路**：回调 `POST {callback_url}` 返回 2xx（推送路径），或消费者补拉后 `POST /jobs/{job_id}/events/ack {ack_through}`（拉取路径）。`ack_through` **单调、幂等**，未知或更旧的 `event_id` 一律按 no-op 接受（不得报错），且 **ack 绝不改变 Job 状态**——确认不是状态迁移。消费者必须在**持久化之后**才 ack（先确认后落库等于数据丢失）。
+- 生产者的 `unacked` 必须反映真实未确认数（含回调死信），否则对账无法发现「投递失败」；`job.accepted` 之前不得回 202。
 
 ### 3.1 兼容（过渡期，v1 内保留，v2 移除）
 
@@ -264,8 +267,9 @@ queued ──claim──▶ running ──▶ succeeded
 
 1. **至少一次**：生产者持久化「未 Ack 事件」为义务，重试直到 2xx 或达到死信上限。
 2. **去重**：消费者按 `event_id` 去重（唯一索引）。
-3. **对账**：消费者可用 `GET /jobs/{job_id}/events?unacked=1` 与 `GET /jobs?status=…` 补拉；生产者的死信必须**可被对账发现**（不得像今天那样：`kind='notification'` 死信后无人知晓）。
-4. **顺序**：不保证；消费者按 `at` + `job.status` 幂等归并。
+3. **对账**：消费者可用 `GET /jobs/{job_id}/events?unacked=1` 与 `GET /jobs?status=…` 补拉，再用 `POST /jobs/{job_id}/events/ack` 回写游标；生产者的死信必须**可被对账发现**（不得像今天那样：`kind='notification'` 死信后无人知晓）。
+4. **确认≠终态**：回调未到、ack 未到都**不能**推断作业成功或失败；唯一判据是 `GET /jobs/{job_id}.status` 与事件流。**「没收到回调就当作没发生」正是本次静默事故的根因**。
+5. **顺序**：不保证；消费者按 `at` + `job.status` 幂等归并（`EventPage` 按 `at` 升序返回，`next_after` 可直接当游标）。
 
 ---
 
