@@ -3436,6 +3436,8 @@ Status: `VERIFIED`（发布产物、pin 文件、部署结果与运行期自报�
 * **`fly apps suspend` 不是流水线开关**（本轮复述，此处留档）：app 级 `suspended` 拦不住
   `auto_start_machines`，外部时钟（cron-job.org / Cloudflare Worker / schedule-watchdog）照样能唤醒机器；
   `fly apps list` 的 STATUS 列与 `fly apps list --json` 的 `Status` 字段不一致，以 `--json` 为准。
+  （补记：本轮部署之后 `pixivflow-scheduler` 的 app 级 `suspended` 标记已不存在——`fly apps list --json`
+  现在报 `deployed`，而机器仍是按设计处于 `stopped`；标记消失的具体原因未坐实，但这恰好再次说明它不是开关。）
 
 ## 4 仍然未决（不在本轮范围）
 
