@@ -313,8 +313,8 @@ queued ──claim──▶ running ──▶ succeeded
 
 1. **阶段 A（已完成）**：两侧 Job 生命周期可信 —— 生产者补状态投影时间戳、停摆清扫、`finish()` 收敛被遗弃投递；消费者建持久 Job + 30 s 心跳 + 活性预算 + 启动恢复 + 终态必通知 + doctor 监控（TelePost `6f2617f`，108 项+全套 1139 项通过，含 1000 次有界压力测试）。**这是协议的前提**：投影不可信，协议再漂亮也只是换名字。
 2. **阶段 B（已完成）**：生产者把既有 slot/execution 机制**包一层 job facade**（`POST /jobs`、`GET /jobs/{id}`、`GET /capabilities`、`cancel`），旧 refetch 端点降级为 shim，与 `/jobs` 共用同一身份空间；不重写执行引擎（PixivFlow `21d8982`/`dea50bb`，135 套件/1486 项 + `tsc --noEmit` 0）。
-3. **阶段 C**：消费者切到通用 Job API；`refetch_request_id` 等业务字段迁移为 `correlation_id`/`job_id`；并新增协议事件入口 `POST /api/bot<N>/v1/jobs/events`（§7.6）与 `PIXIVFLOW_JOB_TRANSPORT=legacy` 回滚开关。
-4. **阶段 D**：事件持久义务 + 对账（取代单次 `refetchOutcomeUrl` 成功假设）：`GET /jobs/{job_id}/events` + `POST …/events/ack` + `callback_url` 投递；Result/Asset 描述符落地，媒体策略归消费者。
+3. **阶段 C（已完成）**：消费者切到通用 Job API；`refetch_request_id` 等业务字段迁移为 `correlation_id`/`job_id`；并新增协议事件入口 `POST /api/bot<N>/v1/jobs/events`（§7.6）与 `PIXIVFLOW_JOB_TRANSPORT=legacy` 回滚开关（TelePost `a57a7bb` 端口切换，full suite 1164 通过 +25）。
+4. **阶段 D（已完成）**：事件持久义务 + 对账（取代单次 `refetchOutcomeUrl` 成功假设）：`GET /jobs/{job_id}/events` + `POST …/events/ack` + `callback_url` 投递；Result/Asset 描述符落地，媒体策略归消费者（PixivFlow `c0c6765`，136 套件/1503 项 + `tsc --noEmit` 0；TelePost 消费侧 `0b1b73a`，full suite 1175 通过，`_apply_remote_terminal` 统一终态缝保证恰好一次通知）。
 5. **阶段 E**：契约测试与 fixtures 双仓校验（已绿：TelePost 8 项 / PixivFlow 18 项 / `verify-protocol-v1.py` 离线 exit 0，且已接进 `scripts/validate.sh` 与 CI）；文档同步（本文件为 SSOT）。
 
 ## 11 阶段 B / C 的文件级落地映射（避免实现时又长出耦合）
