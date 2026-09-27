@@ -2979,12 +2979,13 @@ Status: IN_PROGRESS（协议 SSOT 与生产端 liveness 已落地并推送；两
   camelCase 时间戳、会给活任务误判停摆的 bug（`_pick` 双拼写）。离线 gate exit 0（“内部路径只出现在端口模块 4 处”）；
   全量 `1164 passed, 1 skipped`（基线 1139，增量恰为 +25、零回归）。旧入口已无人调用。cancelled/expired→`failed`、
   recovery `/recover` 留 v2，均为文档化边界。
-* **D 阶段（事件，进行中）**：`GET /jobs/{job_id}/events` + `…/events/ack` + `callback_url` 投递（§11.1：复用 `delivery_events` + outbox，
+* **D 阶段（事件）已完成 ✅**：`GET /jobs/{job_id}/events` + `…/events/ack` + `callback_url` 投递（§11.1：复用 `delivery_events` + outbox，
   不造第二套队列）、`labels` 持久化、`GET /jobs` 的 `correlation_id`/`status`/游标过滤、逐 Job 强制 `deadline_ms`。
   只有上述真正可用后，`/capabilities.features` 才允许声明 `events`。
 * *** **发版前文案与 README 打磨（用户明确要求，2026-09-28 记入）**：施工阶段不碰用户可见文案；一旦 E 落地、功能收口，
   把「推送、发版、部署」之前的最后一步定为**重写/优化两个仓的 README 与用户可见文案**（协议行为、能力声明、升级说明、
   排障——尤其是「重抓不再永久静默」这件事要以人能读懂的方式写出来），再推送、发版并现场验收。
+* **D 阶段已落地并推送**（`c0c6765` `feat(protocol): add job events, ack and callback delivery`，master `fc41c03..c0c6765`）：网关离线 exit 0（内部路径仅端口模块），独立复核 45 测试 + tsc exit 0。D 如实声明三点遗留：`job.progress` 暂不产真实流、`labels` 不回声、`ack_through` 宽松。E 阶段已派发子代理 `1da6e964-7a1d-43eb-95c9-0498a5748a41`（TelePost 事件入口 + 对账循环 + 提交 Task 携带 callback_url）。
 E 阶段（消费侧事件入口，未开工）**：TelePost 侧需新增 `POST /api/bot<N>/v1/jobs/events`（裸 `$defs/Event`、`event_id` 唯一去重）
   与「按 `unacked=1` 补拉 → ack 回写」的对账循环；**待定**：消费者如何知道自己对外的回调基址（现有配置只有生产者的
   `delivery.targets.bot*-submit.refetchOutcomeUrl`，没有 TelePost 自己的公开基址键）——需在实现时就地确认，宁可新增显式配置键，
