@@ -249,6 +249,96 @@ def check_error_mapping() -> None:
             fail(f"error-mapping.json 映射了 {path.name} 中不存在的内部原因码：{stale}")
 
 
+# --------------------------------------------------------------------------------------
+# 边界纪律（静态回归）：协议的意义是「只有一个地方知道对方的内部路径」。
+# 让新的耦合在提交前就变红，而不是等两个月后再出一次静默事故。
+# --------------------------------------------------------------------------------------
+
+#: TelePost 里唯一允许知道 PixivFlow 内部路径的模块（唯一可替换端口）。
+BOUNDARY_PORT = "telepost/application/pixivflow_jobs.py"
+INTERNAL_PATH_PATTERNS = (re.compile(r"/internal/targets/"),)
+#: 已知的、尚未收口的耦合。列在这里 = 只 WARN；不在表里的新泄漏 = FAIL。
+BOUNDARY_KNOWN_LEAKS = {
+    "telepost/application/refetch.py":
+        "遗留的无循环兜底提交器 _default_submit_pixivflow_refetch；收口时删除或改为走端口",
+    "telepost/application/recovery.py":
+        "POST /internal/targets/{target}/recover 属于非 Job 面，留待协议 v2（不在 v1 范围）",
+    "telepost/domain/refetch_state.py":
+        "仅注释提到远端路径，无调用",
+}
+TELEPOST_SKIP_DIRS = {
+    "tests", "test", ".venv", "venv", "protocol", "webapp", "docs",
+    "__pycache__", ".git", "node_modules", "migrations",
+}
+
+PRODUCER_PROTOCOL_CODES: list[tuple[Path, str]] = [
+    (REPO.parent / "PixivFlow" / "src" / "scheduler" / "ProtocolErrors.ts", "ProtocolErrorCode"),
+]
+
+
+def _scan_internal_path_leaks(repo: Path) -> dict[str, list[str]]:
+    hits: dict[str, list[str]] = {}
+    for path in sorted(repo.rglob("*.py")):
+        rel = path.relative_to(repo).as_posix()
+        if set(Path(rel).parts[:-1]) & TELEPOST_SKIP_DIRS:
+            continue
+        try:
+            text = path.read_text(encoding="utf-8", errors="replace")
+        except OSError:  # pragma: no cover - 不可读文件不算泄漏
+            continue
+        for lineno, line in enumerate(text.splitlines(), 1):
+            if any(pattern.search(line) for pattern in INTERNAL_PATH_PATTERNS):
+                hits.setdefault(rel, []).append(f"{rel}:{lineno}")
+    return hits
+
+
+def check_boundary_discipline() -> None:
+    telepost = VENDORED_DIRS[0]
+    if not (telepost / "telepost").is_dir():
+        skip("未发现 TelePost 检出，跳过边界纪律静态检查")
+        return
+    hits = _scan_internal_path_leaks(telepost)
+    new_leaks: list[str] = []
+    known: list[str] = []
+    port_lines: list[str] = []
+    for rel, lines in sorted(hits.items()):
+        if rel == BOUNDARY_PORT:
+            port_lines = lines
+        elif rel in BOUNDARY_KNOWN_LEAKS:
+            known.append(rel)
+        else:
+            new_leaks.extend(lines)
+    for rel in known:
+        skip(f"已知耦合（待收口）：{rel} —— {BOUNDARY_KNOWN_LEAKS[rel]}")
+    if new_leaks:
+        fail("出现新的 PixivFlow 内部路径耦合（必须集中在 " + BOUNDARY_PORT + "）：" + ", ".join(new_leaks))
+    elif not port_lines:
+        fail(f"{BOUNDARY_PORT} 中未出现 /internal/targets/ —— 端口可能被绕过，或文件已改名")
+    else:
+        ok(f"PixivFlow 内部路径只出现在端口模块（{len(port_lines)} 处），无新增耦合")
+
+
+def check_producer_protocol_codes() -> None:
+    """生产者公开的错误类型必须与协议 enum 完全一致（不许自造码）。"""
+    enum = set((load_schema().get("$defs") or {}).get("Error", {}).get("properties", {}).get("code", {}).get("enum") or [])
+    for path, type_name in PRODUCER_PROTOCOL_CODES:
+        codes = _reason_codes(path, type_name)
+        if codes is None:
+            skip(f"{path.name} 未检出或没有 {type_name}，跳过协议错误码一致性检查")
+            continue
+        missing = sorted(enum - codes)
+        extra = sorted(codes - enum)
+        if missing or extra:
+            detail = []
+            if missing:
+                detail.append(f"缺少 {missing}")
+            if extra:
+                detail.append(f"自造 {extra}")
+            fail(f"{path.name} 的 {type_name} 与协议 enum 不一致：{'；'.join(detail)}")
+        else:
+            ok(f"{path.name} 的 {type_name} 与协议 enum 完全一致（{len(codes)} 个码）")
+
+
 def check_offline() -> None:
     schema = load_schema()
     try:
@@ -279,7 +369,9 @@ def check_offline() -> None:
                 ok(f"{path.name} 的 params 通过 $defs/CandidateSearchParams")
 
     check_error_mapping()
+    check_producer_protocol_codes()
     check_vendored_copies()
+    check_boundary_discipline()
 
     surface: list[str] = list((schema.get("$defs") or {}).keys())
     for name, definition in (schema.get("$defs") or {}).items():
