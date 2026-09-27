@@ -167,3 +167,32 @@ python -m telepost.observability.cli reviews inspect <review_id> --bot 1
   一个真正停滞的阶段应以「重抓超时未完成」收口而不是无限 `SEARCHING`；小程序「审核详情」在重抓进行中按钮为禁用态。
 * 判定标准沿用上一节：`HTTP 200 / Machine started / Slot exists / /app 200` **一律不算业务成功**；
   Refetch 只有走到终态（`REPLACED` / `NO_CANDIDATE` / `FAILED` / `TIMEOUT` / `CANCELLED`）才算收敛。
+## 2026-09-28 协议化改造后的现场验收（待执行）
+
+本轮不再给重抓加字段，而是把边界协议化：执行端只做「内容采集与处理引擎」，业务端只做「工作流编排」。
+判据不变：**只有走到终态且带原因、且终态通知确实发出**才算收敛；「没消息」永远不算成功。
+
+### 本地前置证据（已完成）
+* 离线验收 `python3 scripts/verify-protocol-v1.py` 退出 0，含边界纪律（`/internal/targets/` 只允许出现在唯一端口
+  `telepost/application/pixivflow_jobs.py`）、生产者的 `ProtocolErrors.ts` 词表与 schema enum 一致、两仓 vendored 副本哈希一致。
+* TelePost 全量 pytest `1139 passed, 1 skipped`；PixivFlow `135 suites / 1486 tests passed` 且 `npx tsc --noEmit` 退出 0。
+
+### 部署后（只读核对）
+1. `curl -H "Authorization: Bearer $TOKEN" .../capabilities` → `protocol_versions:["1"]`，`candidate_search` 的
+   `queued_timeout_ms`/`stall_timeout_ms`/`default_deadline_ms` 均为正；`features` 里**没有** `events` 就是本轮确实没有事件面
+   （诚实声明——不要按「有事件面」写验收，事件面属于后续版本）。
+2. `python3 scripts/verify-protocol-v1.py --live --pixivflow-url <执行端> --pixivflow-token <t> --legacy-refetch-target bot1-submit`
+   必须退出 0，其中包含「旧 refetch 端点已转成 Job」「旧端点提交的作业在通用面上可见且 job_id 一致」
+   「通用面提交的 Job 被旧入口解析回同一个 job_id（两个入口一个身份空间）」。
+3. `telepost doctor --all-bots` → `Refetch: running: N stuck: N failed(last24h): N`，`stuck=0`，退出码 0；
+   不应存在「非终态且 `heartbeat_at` 早于 20 分钟」的行，也不应有终态缺 `terminal_reason` 的新行。
+4. 旧入口调用计数应为 0（端口默认已切到 `POST /jobs`）；非 0 说明仍有路径绕过端口。
+
+### 现场重抓（业务面）
+* 点一次重抓：任务 ID 沿用 `refetch-<review>-<epoch秒>`，中文阶段可读，已等待时长在走。
+* 等待中至少看到**一条重复**的进度提醒；真正停滞的阶段必须以「重抓超时未完成」收口，而不是无限搜索。
+* **关键回归（针对本次故障）**：把回调目标打成不可达（或断开投稿 token）后再点一次重抓——
+  作业仍必须走到终态，终态通知仍必须恰好发一次（发不出去则落到 `submitter_notifications` 的
+  `kind='refetch_terminal'` 待补发），**绝不能**回到「永久静默」。
+* 若出现静默，按此顺序查：`GET /jobs/{job_id}` 的 `status`/`error` → 执行端账本里该作业的终态与原因 →
+  `submitter_notifications` 的待补发记录 → `doctor` 的 `Refetch` 行。
