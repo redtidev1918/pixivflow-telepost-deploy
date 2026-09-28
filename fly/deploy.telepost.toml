@@ -253,12 +253,13 @@ primary_region = 'iad'
     # that boundary: when a test-typed source chain delivers a real candidate, the
     # candidate keeps its own submitter identity and data class instead of
     # inheriting the fixture's username/user_id. Alongside them the review-group
-    # preview no longer inherits the submitter's mask: `spoiler` is a publication
-    # decision the reviewer takes on the card, and Telegram cannot unmask a sent
-    # message, so the group always shows the unmasked media. Best with
-    # PixivFlow >= 3.4.2 (a failed cover probe now defaults to skipping the
-    # cover). Rollback = 2.71.1.
-    TELEPOST_IMAGE = 'ghcr.io/redtidev1918/telepost:2.71.3'
+    # preview arrives unmasked (submitter spoiler is not inherited into previews):
+    # `spoiler` is a publication decision the reviewer takes on the card; since
+    # 2.71.4 the reviewer's 「遮罩」 toggle re-edits the already-sent preview messages
+    # (editMessageMedia has_spoiler) so the group image is masked/unmasked live.
+    # Best with PixivFlow >= 3.4.2 (a failed cover probe now defaults to skipping
+    # the cover). Rollback = 2.71.1.
+    TELEPOST_IMAGE = 'ghcr.io/redtidev1918/telepost:2.71.4'
 
 [[mounts]]
   source = 'data'
