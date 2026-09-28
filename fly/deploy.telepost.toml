@@ -258,7 +258,7 @@ primary_region = 'iad'
     # message, so the group always shows the unmasked media. Best with
     # PixivFlow >= 3.4.2 (a failed cover probe now defaults to skipping the
     # cover). Rollback = 2.71.1.
-    TELEPOST_IMAGE = 'ghcr.io/redtidev1918/telepost:2.71.2'
+    TELEPOST_IMAGE = 'ghcr.io/redtidev1918/telepost:2.71.3'
 
 [[mounts]]
   source = 'data'
