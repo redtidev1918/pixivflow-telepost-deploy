@@ -3629,3 +3629,30 @@ Status:
   到时应找 `Manual refetch request id is not a UUID` 或 `Canonicalized the manual refetch request id`
   这两条日志之一来确认行为。
 
+# 2026-09-28 部署 TelePost 2.71.3 到常驻执行端（超时修复 + 重抓卡片已作废）
+
+Status:
+* TelePost 2.71.3 的部署与运行期核对：VERIFIED
+* 超时修复（审核 #142 的 capability 协商预算）与重抓卡片「已作废」生效：EXTERNAL_ACCEPTANCE_REQUIRED
+  （要在下一次真实手动重抓时核对，见 TelePost CHANGELOG 2.71.3）
+
+## 1 落地与 pin
+
+* `fly/deploy.telepost.toml` 的 `TELEPOST_IMAGE` 由 `ghcr.io/redtidev1918/telepost:2.71.2` 升到
+  `:2.71.3`。回滚 = 换回 `:2.71.2` 那一行。
+* TelePost 仓库：PR #244（`fix(refetch): negotiation-budget cold-start + keep refetched cards voided`）
+  合并，随后手工 release-please 形版本 bump 提交 `9a1b277` → tag `v2.71.3` + ghcr
+  `telepost:2.71.3`（多平台 amd64+arm64 + `latest`）。本仓 CI 关于 toml 的教训（改 `fly/*.toml` 先跑
+  `scripts/validate.sh`）本轮仍遵守。
+
+## 2 部署与运行期核对
+
+* 工具：本仓单二进制（`go build -o /tmp/tp-deploy-cli .`），`version` → TelePost 2.71.3 / PixivFlow 3.4.3。
+* 执行 `deploy deploy --plane telepost` → exit 0，新镜像
+  `registry.fly.io/telesubmit-multi-bot:deployment-01M3KVDK920XRFFFZVJHBC3D5D`（71 MB），机器
+  `683032ec6617e8` 滚动更新后处于 started/busy（常驻服务）。
+* 部署后确认：`/health` 与 `/live` 200，`version` 报告 `2.71.3`；`scripts/verify-production.sh` 通过
+  （webhook/Cloudflare 两项因缺凭据 SKIP）；`/status` 显示常驻 246MB 可用、volume 16.4% used、队列正常。
+* **诚实边界**：超时修复与卡片「已作废」都属于只在真实手动重抓时才会触发的业务路径，本轮只验证了
+  部署与运行期健康，未在业务层执行——到下次真实「重抓」时应照 TelePost 2.71.3 CHANGELOG 核对行为。
+
