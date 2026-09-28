@@ -3656,3 +3656,33 @@ Status:
 * **诚实边界**：超时修复与卡片「已作废」都属于只在真实手动重抓时才会触发的业务路径，本轮只验证了
   部署与运行期健康，未在业务层执行——到下次真实「重抓」时应照 TelePost 2.71.3 CHANGELOG 核对行为。
 
+
+# 2026-09-28 部署 TelePost 2.71.4 到常驻执行端（审核群遮罩即时改掩）
+
+Status:
+* TelePost 2.71.4 的部署与运行期核对：VERIFIED
+* 审核群「遮罩」按钮即时改掩：EXTERNAL_ACCEPTANCE_REQUIRED（要在真实审核群里点一次「🔇 遮罩」
+  核对图片是否即时上/下遮罩，见 TelePost CHANGELOG 2.71.4）
+
+## 1 落地与 pin
+
+* `fly/deploy.telepost.toml` 的 `TELEPOST_IMAGE` 由 `ghcr.io/redtidev1918/telepost:2.71.3` 升到
+  `:2.71.4`（PR #175）。回滚 = 换回 `:2.71.3` 那一行。
+* 同一 toml 里 §review-group 注释一并刷新：预览仍以未遮罩发送，但审核员的「🔇 遮罩」按钮现在会
+  即时重编辑已发预览（editMessageMedia has_spoiler），不再有「Telegram 无法撤掉已发消息的遮罩」的限制。
+* TelePost 仓库：PR #245（`fix(review): spoiler toggle instantly re-masks review-group media`）合并，
+  随后手工 release-please 形版本 bump 提交 `3719f8c` → tag `v2.71.4` + ghcr
+  `telepost:2.71.4`（多平台 amd64+arm64 + `latest`，digest c1b60ba…）。本仓 CI 关于 toml 的教训
+  （改 `fly/*.toml` 先跑 `scripts/validate.sh`）本轮仍遵守。
+
+## 2 部署与运行期核对
+
+* 工具：本仓单二进制（`go build -o /tmp/tp-deploy-cli .`），`version` → TelePost 2.71.4。
+* 执行 `deploy deploy --plane telepost` → exit 0，新镜像
+  `registry.fly.io/telesubmit-multi-bot:deployment-01M3M06E4XR5T6D8NQJFACYJ9K`（71 MB），机器
+  `683032ec6617e8` 滚动更新后处于 started（常驻服务）。
+* 部署后确认：`/health` 与 `/live` 200，`version` 报告 `2.71.4` / commit `3719f8c`；
+  `scripts/verify-production.sh` 通过（webhook/Cloudflare 两项因缺凭据 SKIP）；`/status` 正常。
+* **诚实边界**：遮罩即时改掩是只在真实审核卡片上点「🔇 遮罩」按钮才会触发的业务路径，本轮只验证了
+  部署与运行期健康，未在业务层执行——到下次真实审核了「遮罩」时应照 TelePost 2.71.4 CHANGELOG
+  核对行为。
