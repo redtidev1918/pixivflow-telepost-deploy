@@ -1,6 +1,6 @@
 # PixivFlow Ecosystem Current Production State
 
-Snapshot: 2026-09-24
+Snapshot: 2026-09-29
 Authority: Current production evidence overrides this file
 
 本文件保存动态状态。
@@ -44,6 +44,14 @@ TelePost RBAC 演化模型（root/sudoers/Role Binding）见 [telepost-rbac-evol
 最近明确记录的生产 baseline：
 
 ```text
+PixivFlow: 3.5.0 / 644b3dfb555160a6fd2dc96439f524a992225e3e — VERIFIED
+  (series-novel display title: DeliveryContext gained `seriesTitle` from
+   `detail.series?.title`, and HttpMultipartDelivery exposes `{{seriesTitle}}`
+   (parent series name) + `{{displayTitle}}` — 《系列名》 章节名 for series
+   novels, bare title otherwise. Volume `/app/data/production.json` title slots
+   (both bot targets) switched `{{title}}` → `{{displayTitle}}`. Public /health
+   → version=3.5.0, commit=644b3dfb5551. verify-images 4/4; verify-production OK
+   (webhook/Cloudflare SKIP = credential-gated). Machine stopped by design.)
 PixivFlow: 3.0.2 / a0e5f0be1522d2cda5500bb83dcd75295ab43fe9 — VERIFIED
   (a failure's contract fields survive the log line: `src/logger.ts` keeps an
    Error's own enumerable fields, so `code`/`statusCode`/`cause` reach the
@@ -3686,3 +3694,50 @@ Status:
 * **诚实边界**：遮罩即时改掩是只在真实审核卡片上点「🔇 遮罩」按钮才会触发的业务路径，本轮只验证了
   部署与运行期健康，未在业务层执行——到下次真实审核了「遮罩」时应照 TelePost 2.71.4 CHANGELOG
   核对行为。
+
+# 2026-09-29 部署 PixivFlow 3.5.0 到执行端并核对运行期（系列小说显示标题）
+
+Status:
+* PixivFlow 3.5.0 的部署与运行期核对：VERIFIED
+* 系列小说标题「《系列名》 章节名」的业务层输出：EXTERNAL_ACCEPTANCE_REQUIRED（要等下一次真实
+  投递一条系列小说章节，核对标题槽位是否显示为《系列名》 章节名；非系列作品应仍是裸标题）
+
+## 1 落地与 pin
+
+* `fly/deploy.pixivflow.toml` 的 `PIXIVFLOW_REF` 由 `3.4.3 / 74ffa4d29ec29810358a43545676c71134e068ce`
+  升到 `644b3dfb555160a6fd2dc96439f524a992225e3e`、`PIXIVFLOW_VERSION` → `3.5.0`（PR #177；CI 的
+  `clock` deployment-contract 测试抓住了首次手写 39-hex 的问题，改对 40-hex 后全绿）。3.4.3 那一对值
+  保留在上面作为注释，回滚 = 换回那一对。
+* `pixivflow/config/production.json`（仓库内，fresh-volume 默认）与 `fly-two-bots.example.json` /
+  `docs/operations/multi-bot.md`：标题槽位 `{{title}}` → `{{displayTitle}}`。
+* PixivFlow 侧发布链：PR #184（`feat(delivery): expose series name for series novels`）合并 →
+  release PR #185 → merge commit `644b3dfb…` → Release `v3.5.0`（Latest，npm `pixivflow@3.5.0`）。
+  功能：`DownloadedArtifact`/`DeliveryContext` 增可选 `seriesTitle`（来自 `detail.series?.title`）；
+  `HttpMultipartDelivery` 暴露 `{{seriesTitle}}` 与 `{{displayTitle}}`（系列小说 → `《系列名》 章节名`，
+  非系列 → 裸 `title`）。
+
+## 2 部署与运行期核对
+
+* 工具：`go build -o /tmp/tp-deploy-cli .`，`version` → TelePost 2.71.4 / PixivFlow 3.5.0；执行
+  `deploy deploy --plane pixivflow` → exit 0，新镜像
+  `registry.fly.io/pixivflow-scheduler:deployment-01M3P8SYBSSFDAY3GF2AA8S60F`（172 MB），机器
+  `83d1650bd23948` 滚动更新后停在 `stopped`。
+* 唤醒一次读取新镜像启动行、改卷配置、核运行期，事后停回 stopped：
+  - 日志 `PIXIVFLOW_REVISION=3.5.0+644b3dfb555160a6fd2dc96439f524a992225e3e`；
+  - runtime starting `version=3.5.0, commit=644b3dfb5551`；`External scheduler mode: internal cron
+    disabled` 未被这次部署改变；`Schedule trigger server listening :8090` 在；
+  - `GET /health` → `{"status":"ok","service":"pixivflow-scheduler-trigger","version":"3.5.0",
+    "commit":"644b3dfb5551"}`；
+  - 卷上 `/app/data/production.json` 两个 bot 目标的 `fields.title` 由 `{{title}}` 改为
+    `{{displayTitle}}`（先 `cp -p` 备份 `production.json.bak-displaytitle`，python 替换后
+    `python3 -c json.load` 校验合法）；sha256 由 `b1afd374…9360` → `53178472…479`；
+  - 调度器热重载命中：`Scheduler configuration snapshot activated` generation 1 → 2（首次替换）→
+    3（双花括号修正），两条 schedule（bot1-daily / bot2-daily）与队列上限 intact，无校验警告；
+  - `./scripts/verify-images.sh` 4/4 `[OK]`（执行端报告 `644b3dfb5551` 与 pin 前缀一致）；
+  - `./scripts/verify-production.sh` exit 0（webhook 归属与 Cloudflare 时钟因缺凭据 SKIP）。
+
+## 3 卷上 config 修订（仅本次）
+
+* 备份：`/app/data/production.json.bak-displaytitle`。
+* 回滚：`mv /app/data/production.json.bak-displaytitle /app/data/production.json`（或把
+  `PIXIVFLOW_REF`/`PIXIVFLOW_VERSION` 换回 `74ffa4d`/3.4.3 后清掉卷配置由镜像 hydration 接管）。
