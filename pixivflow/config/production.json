@@ -100,7 +100,7 @@
                 "previewFileField": "previews",
                 "fields": {
                     "tags": "{{workTags}},{{topicTag}}",
-                    "title": "{{title}}",
+                    "title": "{{displayTitle}}",
                     "note": "🖌 作者：{{author}}\n⭐ {{bookmarkCount}} · 👁 {{viewCount}}\n🏷 {{topicTag}} · Pixiv 分级：{{xRestrictLabel}}",
                     "link": "{{link}}",
                     "spoiler": false,
@@ -129,7 +129,7 @@
                 "previewFileField": "previews",
                 "fields": {
                     "tags": "{{workTags}},{{topicTag}}",
-                    "title": "{{title}}",
+                    "title": "{{displayTitle}}",
                     "note": "🖌 作者：{{author}}\n⭐ {{bookmarkCount}} · 👁 {{viewCount}}\n🏷 {{topicTag}} · Pixiv 分级：{{xRestrictLabel}}",
                     "link": "{{link}}",
                     "spoiler": false,
