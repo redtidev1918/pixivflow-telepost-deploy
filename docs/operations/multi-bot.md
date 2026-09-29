@@ -98,7 +98,7 @@ sudo systemctl restart telepost
         "headers": { "Authorization": "Bearer ${TELEPOST_BOT3_SUBMIT_TOKEN}" },
         "fileField": "files",
         "fields": {
-          "title": "{{title}}",
+          "title": "{{displayTitle}}",
           "tags": ["Pixiv", "{{tag}}", "{{workTags}}"],
           "note": "Pixiv ID: {{pixivId}}",
           "target_id": "{{targetId}}",
