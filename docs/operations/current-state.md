@@ -44,6 +44,14 @@ TelePost RBAC 演化模型（root/sudoers/Role Binding）见 [telepost-rbac-evol
 最近明确记录的生产 baseline：
 
 ```text
+TelePost: 2.71.5 / b6a836c241af72a388e6531ecaa1a84417cdbb42 — VERIFIED
+  (review-mask button-refresh failure surfaces a visible show_alert popup with
+   the actual mask state instead of being swallowed at debug level — no more
+   silently-stale button label; image ghcr.io/redtidev1918/telepost:2.71.5
+   amd64+arm64. Runtimed /health → version=2.71.5, commit=b6a836c, bots:[1,2],
+   telepress_rich_markdown=true; verify-production OK (webhook/Cloudflare SKIP
+   = credential-gated); smoke-telepost OK. Pre-existing main.py ADMIN_IDS import
+   error noted (non-regression).)
 PixivFlow: 3.5.0 / 644b3dfb555160a6fd2dc96439f524a992225e3e — VERIFIED
   (series-novel display title: DeliveryContext gained `seriesTitle` from
    `detail.series?.title`, and HttpMultipartDelivery exposes `{{seriesTitle}}`
@@ -3741,3 +3749,56 @@ Status:
 * 备份：`/app/data/production.json.bak-displaytitle`。
 * 回滚：`mv /app/data/production.json.bak-displaytitle /app/data/production.json`（或把
   `PIXIVFLOW_REF`/`PIXIVFLOW_VERSION` 换回 `74ffa4d`/3.4.3 后清掉卷配置由镜像 hydration 接管）。
+
+# 2026-09-29 部署 TelePost 2.71.5 到常驻执行端（遮罩按钮刷新失败的可见提醒）
+
+Status:
+* TelePost 2.71.5 的部署与运行期核对：VERIFIED
+* 遮罩按钮刷新失败的可见提醒：EXTERNAL_ACCEPTANCE_REQUIRED（要在真实审核卡片上让按钮刷新失败
+  ——例如审核群被移走或消息过旧——才会触发，届时应核对审核人收到弹出提醒且按钮不再静默陈旧，
+  见 TelePost CHANGELOG 2.71.5）
+
+## 1 落地与 pin
+
+* `fly/deploy.telepost.toml` 的 `TELEPOST_IMAGE` 由 `ghcr.io/redtidev1918/telepost:2.71.4` 升到
+  `:2.71.5`（PR #180）。回滚 = 换回 `:2.71.4` 那一行（Rollback 锚点注释一并同步）。
+* 同一 toml 里 §review-group 注释一并刷新：2.71.4 起「遮罩」即时改掩、预览未遮罩发送；2.71.5 起若
+  按钮内键盘刷新失败（已入库生效的遮罩状态无法反映到按钮文字），审核人会收到可见弹出提醒（show_alert，
+  show 实际状态），不再 debug 级吞掉静默陈旧。
+* TelePost 仓库：PR #246（`fix(review): surface spoiler button-refresh failure instead of swallowing
+  it`，merge `c434b84`/`a1ed4f7`）先合并，随后手工 release-please 形版本 bump 提交 `b6a836c` →
+  tag `v2.71.5` + ghcr `telepost:2.71.5`（多平台 amd64+arm64 + `latest`，digest
+  `sha256:59d8e442b4c6b2c0a91eccc02d4977d9e4701d607cfd0741b8c28a80a34aca97`）。Release 流水线
+  （release.yml run 36556415757）全程绿：release-please / build-plan / build×3
+  （windows/ubuntu/macos）/ finalize。
+* 发布用的是与 2.71.3 / 2.71.4 相同的「手工 release-please 形 bump」路径：直接改
+  `.release-please-manifest.json` + `CHANGELOG.md` + `telepost/build_info.py`，提交 `chore: release
+  2.71.5` 再 tag 并 push main——不要走 release-please 自动 PR（其 reconcile 对历史手工 tag 报
+  「untagged merged release PR outstanding」阻塞，但手工 bump + tag + push 可正常触发完整 build）。
+
+## 2 部署与运行期核对
+
+* 工具：本仓单二进制（`go build -o /tmp/tp-deploy-cli .`），`version` → TelePost 2.71.5 / PixivFlow 3.5.0。
+* 执行 `deploy deploy --plane telepost` → exit 0，新镜像
+  `registry.fly.io/telesubmit-multi-bot:deployment-01M3PCTB7CHDDWYK6CAV1Z4RYC`（71 MB），机器
+  `683032ec6617e8` 滚动更新后处于 started（常驻服务，checks 1/1）。
+* 运行期核对（机器内 `python urllib` 打 8080，容器无 curl）：
+  - `/health` → 200 `{"status":"ok","bots":[1,2],"service":"telepost","version":"2.71.5",
+    "commit":"b6a836c241af72a388e6531ecaa1a84417cdbb42","build_date":"2026-09-29T10:39:01Z",
+    "telepress_version":"0.16.1","telepress_rich_markdown":true}`；
+  - `/version` → 200 `{"service":"telepost","version":"2.71.5","commit":"b6a836c…"}`；
+  - 镜像内 `handlers/review.py` 存在 `§review-button-refresh` 分支（:1711）与新告警文案（:1718），
+    确认 Bug1 修复已随镜像上线。
+* `scripts/smoke-telepost.sh` → exit 0（`/health`、`/live` 200；bot1/bot2 无令牌投稿被拒 401/403）。
+* `scripts/verify-production.sh` → exit 0；其中第 6 节明确 `[OK] TelePost 线上镜像匹配 2.71.5`
+  （webhook 归属与 Cloudflare 时钟两项因缺凭据 SKIP）。
+* **诚实边界**：可见提醒只在该按钮刷新失败时触发（正常路径不会出现），本轮只验证了部署与运行期
+  健康 + 镜像内含修复代码，未在真实失败场景下点击复核——到下次真实审核时若按钮刷新失败，应核对
+  popup 提醒出现且按钮不再静默陈旧。
+
+## 3 已知非回归问题（预存量）
+
+* 启动日志出现 `设置命令菜单失败: cannot import name 'ADMIN_IDS' from 'utils.blacklist'`
+  （`main.py:300` 从 `utils.blacklist import OWNER_ID, ADMIN_IDS`）。已确认**非本次回归**：该行自
+  2026-09-24 `66e12576` 引入，v2.71.4 镜像同样存在；两个 bot 正常受控（`/health` bots:[1,2]），
+  只影响可选命令菜单初始化，不影响 Bug1 修复路径。留待后续单独收口，不扩大本轮范围。
