@@ -297,8 +297,14 @@ kill_timeout = 60
     # normalized to the single canonical form; a value that is not a UUID at all is
     # sent as an empty string (scheduled-execution semantics) instead of failing a
     # valid delivery. Rollback = the 4db0bf2 / 3.4.2 line above.
-    PIXIVFLOW_REF = '74ffa4d29ec29810358a43545676c71134e068ce'
-    PIXIVFLOW_VERSION = '3.4.3'
+    # 3.5.0 — series-novel display title: `DownloadedArtifact`/`DeliveryContext`
+    # gained `seriesTitle` from `detail.series?.title`, and
+    # `HttpMultipartDelivery.buildTemplateVariables` now exposes
+    # `{{seriesTitle}}` (parent series name) plus `{{displayTitle}}` (composed
+    # 《系列名》 章节名 for series novels, bare title otherwise; config title
+    # slots render {{displayTitle}}). Rollback = the 74ffa4d / 3.4.3 line above.
+    PIXIVFLOW_REF = '644b3dfb555160a6fd2dc96439f524a992225e3e'
+    PIXIVFLOW_VERSION = '3.5.0'
 
 [[mounts]]
   source = 'pixivflow_data'

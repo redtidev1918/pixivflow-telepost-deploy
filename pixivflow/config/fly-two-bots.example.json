@@ -93,7 +93,7 @@
         },
         "fileField": "files",
         "fields": {
-          "title": "{{title}}",
+          "title": "{{displayTitle}}",
           "tags": [
             "Pixiv",
             "{{topicTag}}",
@@ -130,7 +130,7 @@
         },
         "fileField": "files",
         "fields": {
-          "title": "{{title}}",
+          "title": "{{displayTitle}}",
           "tags": [
             "Pixiv",
             "{{topicTag}}",
