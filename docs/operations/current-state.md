@@ -44,21 +44,19 @@ TelePost RBAC 演化模型（root/sudoers/Role Binding）见 [telepost-rbac-evol
 最近明确记录的生产 baseline：
 
 ```text
-TelePost: 2.73.0 / 6e823cd54b61343305db7a91be1eaa2707cd79fb — VERIFIED
-  (new reviewer endpoint POST /api/botN/v1/reviews/{id}/rerender re-stages a
-   stored card's media/documents through the full pipeline as a new pending
-   review under current code (public API path is /api/botN/v1/*, NOT
-   /api/v1/*). Reviewer-scoped via _review_auth(write=True); refused with 409
-   rerender_decided when the chain head is published/approved/publishing;
-   idempotent via callbackKey. Delivery re-staging now preserves the「原图」
-   document flag (review_stager.stage_file_ids). Image
-   ghcr.io/redtidev1918/telepost:2.73.0. Runtimed /version →
-   version=2.73.0, commit=6e823cd, bots:[1,2]; readonly review mode restored.
-   Endpoint verified live; target #109 (150253061) re-render is BLOCKED (409
-   rerender_decided) because chain-109 head is #111 (150261579, a different
-   work) which is now published — per contract a published chain head is never
-   superseded. Bug158's format fix (N 个文档（含 M 份原图）) applies to future
-   renders. Rollback = 2.72.0.)
+TelePost: 2.73.3 / 4f434f34236986514b6723ea9c71096e10de90a8 — VERIFIED
+  (conditional original-preservation: only when an oversized image's preview
+   file is kept does its ORIGINAL become a countable 原图 document; a kept
+   preview is a real countable visible photo (media), NOT staging_only. Image
+   ghcr.io/redtidev1918/telepost:2.73.3. Deployed live via fly/deploy.telepost.toml
+   pin; /health → version=2.73.3, commit=4f434f3, bots:[1,2].
+   The 2.73.0-only rerender endpoint survives, but target #109 (150253061)
+   re-render stays BLOCKED (409 rerender_decided) because chain-109 head #111
+   is a different, published work (published head is never superseded). Instead
+   the manga was FRESH re-delivered under a NEW idempotency key with 2.73.3
+   code → new pending review #114 with the correct 「4 个媒体 / 4 个文档（含 4 份
+   原图）」card (see §2026-09-30 2.73.3 section below). Bug158's format fix
+   (N 个文档（含 M 份原图）) confirmed on #114. Rollback = 2.72.0.)
 PixivFlow: 3.5.0 / 644b3dfb555160a6fd2dc96439f524a992225e3e — VERIFIED
   (series-novel display title: DeliveryContext gained `seriesTitle` from
    `detail.series?.title`, and HttpMultipartDelivery exposes `{{seriesTitle}}`
@@ -3852,3 +3850,65 @@ Status:
 
 * 与 2.71.5 相同：启动日志 `cannot import name 'ADMIN_IDS' from 'utils.blacklist'`
   （`main.py:300`，自 `66e12576` 引入）仍存在，非本次回归，两 bot 正常受控，留待后续单独收口。
+
+# 2026-09-30 发布并部署 TelePost 2.73.3（条件式原图保留）+ 以新 key 重交付 150253061
+
+Status:
+* TelePost 2.73.3 发布 / 部署 / 运行期核对：VERIFIED
+* 条件式原图保留修复 / 预览媒体计数在本轮以真实漫画重交付复核：VERIFIED
+* 漫画 150253061 重交付（新 idempotency key → 新审核卡 #114）：VERIFIED（4 个媒体 / 4 个文档，含 4 份原图）
+
+## 1 修复内容（TelePost 侧，条件式原图保留）
+
+* 规则：仅当超大图片的**预览文件被保留**时，其**原图**才成为可计数的「原图文档」；被保留的预览是
+  真实可见媒体（`media`），不再是 `staging_only`。
+* 修复随 2.73.2 的 preview-preservation 一起，但在 2.73.3 验证/补齐：CI 测试
+  `test_review_displays_preview_but_publishes_immutable_original_document` 按新规则更新断言
+  （`assert media == [{'type':'photo','file_id':'PREVIEW_PHOTO'}]`），本地 131 passed，Release 流水线全绿。
+* commit `test(review): preview of transformed image is a countable media item`
+  = `4f434f3`（telepost main，`901bd3d..4f434f3`）。Release CI run 36766543255 全程绿；
+  镜像 `ghcr.io/redtidev1918/telepost:2.73.3`（GIT_SHA=4f434f3，build_date 2026-09-30T19:41:42Z，amd64+arm64）。
+
+## 2 部署与运行期核对
+
+* `fly/deploy.telepost.toml` 的 `TELEPOST_IMAGE` 升到 `ghcr.io/redtidev1918/telepost:2.73.3`（deploy commit
+  `d5d9359`）。回滚 = 换回 `:2.72.0`。
+* `fly deploy -c fly/deploy.telepost.toml --ha=false --strategy rolling` → exit 0，镜像
+  `registry.fly.io/telesubmit-multi-bot:deployment-01M3SY4AFGH88SWSVN6RH3ZBWY`，机器 `683032ec6617e8`
+  滚动更新后 started（checks 1/1），smoke + health 全绿。
+* `/health`：
+  `{"status":"ok","bots":[1,2],"service":"telepost","version":"2.73.3",
+   "commit":"4f434f34236986514b6723ea9c71096e10de90a8","build_date":"2026-09-30T19:41:42Z",...}`。
+
+## 3 以新 idempotency key 重交付漫画 150253061（为何不用 re-render）
+
+* 背景：target #109（150253061）此前的 `re-render` 一直 409 `rerender_decided`——chain-109 的 head
+  #111（150261579，另一作品）已 published，按契约已发布的链头永不被取代。所以唯一能得到正确 4+4 审核卡的
+  路径是**用新 key 全新重交付**（不是 re-render、也不是复用旧 key `redeliver-328691fce478`——它已被旧审核
+  #113 消耗）。
+* 在 scheduler 机（83d1650bd23948，空闲即停）卷上建隔离配置目录
+  `/app/data/redeliver-150253061-fresh2/`：复制生产配置，只留单个 150253061 target + target 级
+  `delivery.fields.idempotency_key = pixiv:bot2:illustration:150253061:redeliver2-ac8e67bb3884`，独立 DB/
+  downloads，不动线上 daily 配置 `/app/data/production.json`。
+* 执行：
+  `node /app/dist/index.js download --config <fresh2>/production.json`
+  → 下载 4 页 + `Delivery intent enqueued created:true`（fresh2 独立 DB）；
+  随后同一 fresh2 config 起 scheduler 运行时，outbox worker 投递到
+  `${TELEPOST_API_BASE_URL}/api/bot2/v1/submissions`。
+* 结果：投递 `delivered`，TelePost 生成**新审核 #114**（status pending），idempotency key
+  `api:5073758941:pixiv:bot2:illustration:150253061:redeliver2-ac8e67bb3884`。
+* 审核卡核对（`/app/data/bot2/submissions.db` pending_reviews =>
+  `id 114 | media 4 | docs 4`，media = photo×4，docs = original:True ×4）：
+  **「4 个媒体 / 4 个文档（含 4 份原图）」**——修复生效。对照：#113（1 媒体 + 3 文档，旧 2.73.2 代码）、
+  #109（1 媒体 + 3 文档）、#112（failed）。
+
+## 4 收尾
+
+* 重交付完成后 `fly machine stop 83d1650bd23948 -a pixivflow-scheduler` → state `stopped`
+  （restart policy 原样，等下次时钟触发再自启），volume 与 fresh2 目录保留。
+* 本 repo 的临时取证脚本已清理。deploy repo 无待提交变更（d5d9359 已含 pin；本文件在收尾 commit 一并提交）。
+
+## 5 已知非回归问题（预存量）
+
+* 同 2.72.0：启动日志 `cannot import name 'ADMIN_IDS' from 'utils.blacklist'`（`main.py:300`，自 `66e12576`
+  引入）仍存在，非本次回归，两 bot 正常受控，留待后续单独收口。
