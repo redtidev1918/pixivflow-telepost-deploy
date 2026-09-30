@@ -261,7 +261,13 @@ primary_region = 'iad'
     # reviewer gets a visible show_alert popup (with the actual mask state) instead
     # of a stale button label with no notice. Best with PixivFlow >= 3.4.2 (a failed
     # cover probe now defaults to skipping the cover). Rollback = 2.71.4.
-    TELEPOST_IMAGE = 'ghcr.io/redtidev1918/telepost:2.71.5'
+    # 2.72.0 (2026-09-30): three delivery/review fixes. (1) oversized manga pages
+    # are resized into publishable photos instead of being dropped. (2) kept
+    # content-duplicate original-image documents are labeled「原图」in delivery and
+    # on the review card. (3) the review-card file-count text is formatted and
+    # explicit (e.g. "N 个文档（含 M 份原图）"). Decode memory budget is now capacity
+    # aware and fully env-configurable (no hardcoded literals). Rollback = 2.71.5.
+    TELEPOST_IMAGE = 'ghcr.io/redtidev1918/telepost:2.72.0'
 
 [[mounts]]
   source = 'data'
