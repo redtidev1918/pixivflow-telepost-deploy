@@ -44,18 +44,21 @@ TelePost RBAC 演化模型（root/sudoers/Role Binding）见 [telepost-rbac-evol
 最近明确记录的生产 baseline：
 
 ```text
-TelePost: 2.72.0 / 5398d2e07909dd4dfbe7af93a60e14968bf8ae50 — VERIFIED
-  (three delivery/review fixes: oversized manga pages are resized into
-   publishable photos instead of dropped; kept content-duplicate original-image
-   documents are labeled「原图」in delivery and on the review card; the
-   review-card file-count text is formatted and explicit (e.g. "N 个文档（含
-   M 份原图）"). Decode memory budget is now capacity-aware and fully
-   env-configurable (no hardcoded literals). Image
-   ghcr.io/redtidev1918/telepost:2.72.0 amd64+arm64. Runtimed /health →
-   version=2.72.0, commit=5398d2e, bots:[1,2], telepress_rich_markdown=true;
-   verify-production OK (webhook/Cloudflare SKIP = credential-gated);
-   verify-images OK. Pre-existing main.py ADMIN_IDS import error noted
-   (non-regression).)
+TelePost: 2.73.0 / 6e823cd54b61343305db7a91be1eaa2707cd79fb — VERIFIED
+  (new reviewer endpoint POST /api/botN/v1/reviews/{id}/rerender re-stages a
+   stored card's media/documents through the full pipeline as a new pending
+   review under current code (public API path is /api/botN/v1/*, NOT
+   /api/v1/*). Reviewer-scoped via _review_auth(write=True); refused with 409
+   rerender_decided when the chain head is published/approved/publishing;
+   idempotent via callbackKey. Delivery re-staging now preserves the「原图」
+   document flag (review_stager.stage_file_ids). Image
+   ghcr.io/redtidev1918/telepost:2.73.0. Runtimed /version →
+   version=2.73.0, commit=6e823cd, bots:[1,2]; readonly review mode restored.
+   Endpoint verified live; target #109 (150253061) re-render is BLOCKED (409
+   rerender_decided) because chain-109 head is #111 (150261579, a different
+   work) which is now published — per contract a published chain head is never
+   superseded. Bug158's format fix (N 个文档（含 M 份原图）) applies to future
+   renders. Rollback = 2.72.0.)
 PixivFlow: 3.5.0 / 644b3dfb555160a6fd2dc96439f524a992225e3e — VERIFIED
   (series-novel display title: DeliveryContext gained `seriesTitle` from
    `detail.series?.title`, and HttpMultipartDelivery exposes `{{seriesTitle}}`
