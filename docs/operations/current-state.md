@@ -44,14 +44,18 @@ TelePost RBAC 演化模型（root/sudoers/Role Binding）见 [telepost-rbac-evol
 最近明确记录的生产 baseline：
 
 ```text
-TelePost: 2.71.5 / b6a836c241af72a388e6531ecaa1a84417cdbb42 — VERIFIED
-  (review-mask button-refresh failure surfaces a visible show_alert popup with
-   the actual mask state instead of being swallowed at debug level — no more
-   silently-stale button label; image ghcr.io/redtidev1918/telepost:2.71.5
-   amd64+arm64. Runtimed /health → version=2.71.5, commit=b6a836c, bots:[1,2],
-   telepress_rich_markdown=true; verify-production OK (webhook/Cloudflare SKIP
-   = credential-gated); smoke-telepost OK. Pre-existing main.py ADMIN_IDS import
-   error noted (non-regression).)
+TelePost: 2.72.0 / 5398d2e07909dd4dfbe7af93a60e14968bf8ae50 — VERIFIED
+  (three delivery/review fixes: oversized manga pages are resized into
+   publishable photos instead of dropped; kept content-duplicate original-image
+   documents are labeled「原图」in delivery and on the review card; the
+   review-card file-count text is formatted and explicit (e.g. "N 个文档（含
+   M 份原图）"). Decode memory budget is now capacity-aware and fully
+   env-configurable (no hardcoded literals). Image
+   ghcr.io/redtidev1918/telepost:2.72.0 amd64+arm64. Runtimed /health →
+   version=2.72.0, commit=5398d2e, bots:[1,2], telepress_rich_markdown=true;
+   verify-production OK (webhook/Cloudflare SKIP = credential-gated);
+   verify-images OK. Pre-existing main.py ADMIN_IDS import error noted
+   (non-regression).)
 PixivFlow: 3.5.0 / 644b3dfb555160a6fd2dc96439f524a992225e3e — VERIFIED
   (series-novel display title: DeliveryContext gained `seriesTitle` from
    `detail.series?.title`, and HttpMultipartDelivery exposes `{{seriesTitle}}`
@@ -3802,3 +3806,46 @@ Status:
   （`main.py:300` 从 `utils.blacklist import OWNER_ID, ADMIN_IDS`）。已确认**非本次回归**：该行自
   2026-09-24 `66e12576` 引入，v2.71.4 镜像同样存在；两个 bot 正常受控（`/health` bots:[1,2]），
   只影响可选命令菜单初始化，不影响 Bug1 修复路径。留待后续单独收口，不扩大本轮范围。
+
+# 2026-09-30 部署 TelePost 2.72.0 到常驻执行端（原图标注/文件计数格式化/大图缩放）
+
+Status:
+* TelePost 2.72.0 的部署与运行期核对：VERIFIED
+* 三项产品修复（原图「原图」标注 + 文件计数显式化 + 超大漫画页缩放为可发布图片）：
+  EXTERNAL_ACCEPTANCE_REQUIRED（代码已上线，需要在真实审核/投稿路径上复核三处表现，见 TelePost
+  CHANGELOG 2.72.0）
+
+## 1 落地与 pin
+
+* `fly/deploy.telepost.toml` 的 `TELEPOST_IMAGE` 由 `ghcr.io/redtidev1918/telepost:2.71.5` 升到
+  `:2.72.0`（PR #182，merge `22cd034`）。回滚 = 换回 `:2.71.5` 那一行（Rollback 锚点注释一并同步）。
+* 版本历程：releasegraph 上游修复（waiver 优先于 tag-conflict，releasegraph PR #92 → v1.5.15）
+  合入后，TelePost release.yml pin 升到 v1.5.15（PR #248，`82dbf56`）；随后 Provider pre-reconcile
+  自动 ACK 历史 PR #240（`autorelease: pending` → `tagged`），release-please 解除阻塞并自动打开
+  release PR #249 → merge `5398d2e` → tag `v2.72.0` + ghcr `telepost:2.72.0`（多平台 amd64+arm64，
+  index digest `sha256:8c584c5d69ac5a4b0b335ba30f92348203cf71df6244ad96f8306b0e72823966`）。
+  Release 流水线（run 36677384751）全程绿：release-please / build-plan / build×3 / finalize。
+* 本次发布走的是**修复后的 release-please 自动路径**，不再需要手工 bump。
+
+## 2 部署与运行期核对
+
+* `fly deploy -c fly/deploy.telepost.toml --ha=false --strategy rolling` → exit 0，新镜像
+  `registry.fly.io/telesubmit-multi-bot:deployment-01M3RTZWQ2X90Q5WQF80VM6PNH`（71 MB），机器
+  `683032ec6617e8` 滚动更新后处于 started（常驻服务，checks 1/1）。
+* 运行期核对（`/health`）：
+  `{"status":"ok","bots":[1,2],"service":"telepost","version":"2.72.0",
+   "commit":"5398d2e07909dd4dfbe7af93a60e14968bf8ae50","build_date":"2026-09-30T06:22:39Z",
+   "telepress_version":"0.16.1","telepress_rich_markdown":true,...}`（process_rss ~71/71/58 MB，
+   system_available_mb 244.8。review_queue pending 2 / expired 30 为运行期既有队列状态）。
+* `scripts/verify-production.sh` → exit 0；第 6 节明确 `[OK] TelePost 线上镜像匹配 2.72.0`
+  （webhook 归属与 Cloudflare 时钟两项因缺凭据 SKIP）。
+* `scripts/verify-images.sh` → exit 0（仓库 pin `2.72.0` 与线上镜像一致）。
+* **诚实边界**：三项产品修复位于真实审核/投稿路径（大图经审核卡、原图片留档、文件计数文案），
+  本轮只验证了部署与运行期健康 + 线上镜像/提交匹配，未在真实漫画稿件上逐项点复核——到下次相关
+  投稿通过审核时应复核：超大漫画页不再被丢弃而是缩放发布、保留的原图带「原图」标注、文件计数
+  文案为「N 个文档（含 M 份原图）」格式。
+
+## 3 已知非回归问题（预存量）
+
+* 与 2.71.5 相同：启动日志 `cannot import name 'ADMIN_IDS' from 'utils.blacklist'`
+  （`main.py:300`，自 `66e12576` 引入）仍存在，非本次回归，两 bot 正常受控，留待后续单独收口。
