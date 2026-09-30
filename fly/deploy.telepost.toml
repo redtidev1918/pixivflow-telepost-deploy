@@ -273,7 +273,7 @@ primary_region = 'iad'
     # code (e.g. the「N 个文档（含 M 份原图）」line; original-image documents keep
     # their「原图」 flag). Re-render is refused for published/approved/publishing
     # chains and keeps the new card pending. Rollback = 2.72.0.
-    TELEPOST_IMAGE = 'ghcr.io/redtidev1918/telepost:2.73.0'
+    TELEPOST_IMAGE = 'ghcr.io/redtidev1918/telepost:2.73.1'
 
 [[mounts]]
   source = 'data'
