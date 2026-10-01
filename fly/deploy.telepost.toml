@@ -282,7 +282,17 @@ primary_region = 'iad'
     # The review-card media count now reflects the persisted message specs (the
     # actual visible images/pages, excluding presentation-only previews) instead
     # of the Telegram album/container count. Rollback = 2.73.2.
-    TELEPOST_IMAGE = 'ghcr.io/redtidev1918/telepost:2.73.3'
+    # 2.73.10 (2026-10-01): Mini App production repair. Bot-side entry gate
+    # (config/settings.MINIAPP_ENABLED) and the Mini App session gate
+    # (miniapp/auth.init_data_enabled) now share ONE
+    # enabled-unless-explicitly-disabled default contract (was: Bot side
+    # default-off vs session side default-on, so bot1 chat replied "Mini App
+    # 尚未启用" while the app was served, and bot2 users hit the misleading
+    # "请在 Telegram 中打开" fallback). Reviewer 审核历史 added:
+    # GET /api/v1/reviews/history (terminal states, updated_at keyset paging,
+    # reviewer/admin RBAC) + Mini App /review/history page, both projecting the
+    # SAME ReviewService state as the pending queue. Rollback = 2.73.9.
+    TELEPOST_IMAGE = 'ghcr.io/redtidev1918/telepost:2.73.10'
 
 [[mounts]]
   source = 'data'

@@ -44,7 +44,19 @@ TelePost RBAC 演化模型（root/sudoers/Role Binding）见 [telepost-rbac-evol
 最近明确记录的生产 baseline：
 
 ```text
-TelePost: 2.73.3 / 4f434f34236986514b6723ea9c71096e10de90a8 — VERIFIED
+TelePost: 2.73.10 / 5b2961d662710a768a068cafbd2d0f18533dfee3 — VERIFIED
+  (Mini App production repair: unified MINIAPP_ENABLED default contract —
+   Bot entry gate + session gate both default-on unless explicitly disabled;
+   bot1 chat-side Mini App entry restored, bot2 authenticated entry restored;
+   new reviewer 审核历史 surface GET /api/v1/reviews/history + /review/history
+   page sharing the queue's ReviewService state. Image
+   ghcr.io/redtidev1918/telepost:2.73.10 (digest sha256:1153e62b...,
+   revision=5b2961d). Deployed via flyctl deploy --image --ha=false onto
+   machine 683032ec6617e8; /health → version=2.73.10, commit=5b2961d,
+   bots:[1,2]; /api/botN/v1/health 200; /api/botN/v1/reviews/history → 401
+   unauthenticated (route mounted, auth enforced); /app/ 200. Rollback =
+   2.73.9.)
+TelePost: 2.73.3 / 4f434f34236986514b6723ea9c71096e10de90a8 — SUPERSEDED
   (conditional original-preservation: only when an oversized image's preview
    file is kept does its ORIGINAL become a countable 原图 document; a kept
    preview is a real countable visible photo (media), NOT staging_only. Image
