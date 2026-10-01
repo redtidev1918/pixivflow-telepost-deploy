@@ -29,7 +29,7 @@ jobs:
   trigger:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Fire schedule trigger
         env:
           SCHEDULE_TRIGGER_TOKEN: ${{ secrets.SCHEDULE_TRIGGER_TOKEN }}
