@@ -322,7 +322,14 @@ primary_region = 'iad'
     # and preview-less submissions are byte-identical to before;
     # READONLINE_LINK_PREVIEW=false restores the old form outright.
     # Rollback = 2.75.0.
-    TELEPOST_IMAGE = 'ghcr.io/redtidev1918/telepost:2.76.0'
+    # 2.76.1 (2026-10-02): root-caption completeness + read-online entrance
+    # dedupe. In discussion mode the preview URL no longer forces the caption
+    # into the trailing comment text; the channel root keeps the full caption
+    # (no READ_ONLINE footer) and a separate two-line bare-link message owns
+    # the IV card in the discussion thread. Multi-document caption trailing
+    # form is preserved with the bare link as its own tail item.
+    # Rollback = 2.76.0.
+    TELEPOST_IMAGE = 'ghcr.io/redtidev1918/telepost:2.76.1'
 
 [[mounts]]
   source = 'data'
