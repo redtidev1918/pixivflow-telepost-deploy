@@ -5,5 +5,5 @@ FROM ${TELEPOST_IMAGE}
 # Override the additive TelePress dependency without changing the immutable
 # TelePost application image. Keep this pin equal to TelePost requirements.txt
 # and docker/telepress.Dockerfile (cross-repo version-sync contract).
-ARG TELEPRESS_VERSION=0.16.3
+ARG TELEPRESS_VERSION=0.16.4
 RUN pip install --no-cache-dir "telepress==${TELEPRESS_VERSION}"
