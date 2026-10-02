@@ -3625,7 +3625,7 @@ Status:
 
 Status:
 * PixivFlow 3.4.3 的部署与运行期核对：VERIFIED
-* A1 provenance 修复在业务层的执行：EXTERNAL_ACCEPTANCE_REQUIRED（要等下一次真实手动重抓）
+* A1 provenance 修复在业务层的执行：VERIFIED（2026-10-02 核销：09-28 后真实手动重抓 bot1×3/bot2×1 全成功，`invalid_refetch_provenance` 自 09-27T16:24:56 起为零；证据见文末「2026-10-02 生产收尾」§2）
 
 ## 1 落地与 pin
 
@@ -3924,3 +3924,121 @@ Status:
 
 * 同 2.72.0：启动日志 `cannot import name 'ADMIN_IDS' from 'utils.blacklist'`（`main.py:300`，自 `66e12576`
   引入）仍存在，非本次回归，两 bot 正常受控，留待后续单独收口。
+
+# 2026-10-02 生产收尾：密钥轮换 + legacy 凭据清理 + 两项条件触发项核销 + 测试基建治理
+
+Status:
+* bot2 `review_queue failed=1`（审核 #112）画像与处置：VERIFIED（§1，结论：诚实终态历史，无需清理）
+* A2 行为层（`[TopicRecall] mode=when_seed_insufficient` + 种子接受）：VERIFIED（§2）
+* A1 provenance 修复在业务层的执行：VERIFIED（§2，上一节「2026-09-28 部署 PixivFlow 3.4.3」的
+  EXTERNAL_ACCEPTANCE_REQUIRED 就此核销）
+* 应用层 token 轮换（5 项）+ 三链路真实验证：VERIFIED（§3）
+* TelePost 卷 legacy `pixivflow/` + 0 字节 `submissions.db` 清理：VERIFIED（§4，卷外备份已落）
+* Dependabot 8 PR 分诊：6 merged / 1 closed-with-reason / 1 待 CI 后合并（§5）
+* 测试基建（aiosqlite 退出挂起 + 墙钟断言）：VERIFIED（§6，TelePost PR #268）
+* verify-production.sh webhook 永久 SKIP 收敛：VERIFIED（§7）
+
+## 1 bot2 failed 审核 #112 完整画像
+
+* 链：`#109（150253061，superseded）→ #112（redeliver-dd8c78d5200c）→ #113（rejected）→ #114（published 20:31，频道消息 501）`。
+* 时间线：#112 于 2026-09-30T13:08:40Z 创建；9 秒后 2.73.3 部署重启，boot 时 `reconcile_incomplete`
+  发现 media_json 为空（重启打断了 preview staging），`finalize_control(ready=False)` 落 failed。
+  error 字段为空属预期（错误描述只由 `mark_preparation_failed` 写，该路径未执行）。
+* 处置：作品已由 #114 正常发布，#112 是诚实终态历史（在「审核历史」页正常显示为 失败），
+  不做任何清理/篡改。bot1 近 7 天 audit 仅 09-27 Pixiv-502  outage 日事件（refetch_failed×4、
+  dropped_replacement×5），无重复发布 / publishing 僵尸 / flood-control 告警。
+
+## 2 两个条件触发项的业务层证据
+
+* **A2/TopicRecall**：PixivFlow 卷上 `/app/data/pixiv-downloader.log` 出现
+  `[2026-10-01T02:12:25Z] [TopicRecall] mode=when_seed_insufficient tag=丸呑み seedAccepted=10/20
+  relatedTags=11; expanding`（bot2）与 bot1 的 `ボテ腹 seedAccepted=0/20、3/20`——mode 与种子接受
+  行为正常。bot1 近 3 天 11 条审核仅 2 条 flagged：#150（人工刻意 redeliver，已记录）与
+  #152（混合作品自带 bot1 种子 tag，契约允许的邻接进入，见 2026-09-28 §3 诚实边界）。
+* **A1 provenance**：09-28 后真实手动重抓——bot1 09-28×3（e898fe4e / bf5f36bf / 09abbf70，
+  delivery_events `job.requested→outbox.delivered→execution.summary completed`，均为规范连字符
+  UUID）、bot2 09-30（slot `bot2-daily@manual-3d9813c4-…` success）。`invalid_refetch_provenance`
+  最后出现于 09-27T16:24:56（修复前事故），此后为零；`Canonicalized…` 日志未出现（输入本已规范，
+  符合预期）。
+
+## 3 应用层 token 轮换（2026-10-02 07:0x–07:4x CST）
+
+* 机制修正（重要）：`TELEPOST_BOT*_SUBMIT_TOKEN` 在 TelePost 侧并非 env 直读——
+  `utils/api_server.py:_resolve_principal → utils/api_tokens.authenticate` 只认 `api_tokens` 表里的
+  `tp_` 哈希行；env 值只是跨 app 共享参照。因此轮换 = 用应用自身供应函数
+  （`utils.api_tokens.generate_token`，即 `/gen_token` 命令的同一代码路径，非手写 SQL）在两 bot DB
+  各签发新 `tp_` token，再双 app 同步 `flyctl secrets set`，旧行用应用函数 `revoke_token` 吊销。
+* 轮换清单（只记新摘要前 8 位）：
+  - `TELEPOST_BOT1_SUBMIT_TOKEN`：`9690654c…` → `4905986d…`（双 app 同步）
+  - `TELEPOST_BOT2_SUBMIT_TOKEN`：`dbbfcc10…` → `15805602…`（双 app 同步）
+  - `PIXIVFLOW_REFETCH_TOKEN`：`8d3ca7e0…` → `fd14c4e0…`（双 app 同步）
+  - `TELEPOST_MCP_REVIEW_TOKEN`：`2482fb8b…` → `c606f782…`（TelePost；**MCP sidecar 客户端需用户配发新值**）
+  - `WEBHOOK_SECRET_TOKEN`：`d5b8198f…` → `27d5eaba…`（TelePost；启动时 `setup_webhook()` 自动用新值重注册）
+  - 未轮换：`PIXIV_REFRESH_TOKEN`（Pixiv OAuth 属用户操作，步骤见交接报告）、
+    `MINIAPP_SESSION_SECRET` / `SCHEDULER_TRIGGER_TOKEN` / `TELEPRESS_API_KEY`（建议下轮评估）。
+* 三链路真实验证：
+  - 投稿：bot1 新 token 真实 multipart 投稿 → **201**，生成真实 pending 审核 #158
+    （`secret-rotation-verify-2026-10-02-bot1`，1 天后自动过期或人工驳回）；bot2 新 token 空载荷
+    → 400（鉴权通过、校验拒绝）；错误 token → 401。旧 DB 行已 revoked。
+  - 审核 API：新 MCP token `GET /api/bot1/v1/reviews` → 200；错误 token → 401。
+  - webhook：错误 secret POST → 401；正确 secret → 200；`getWebhookInfo` 双 bot url 正确、
+    pending=0、无 last_error。refetch：错误 token → 401，新 token → 400（鉴权通过）。
+  - 轮换后 PixivFlow 持久日志零 401/投递失败；下一次 10:00 CST 定时触发为最终现场证据。
+* 影响窗口：双 app secrets 设置的间隔内投稿短暂 401（秒级，文档既定代价）；两次 secrets 变更各引起
+  一次 TelePost 滚动重启，checks 1/1 通过。
+* **用户待办**：MCP sidecar 客户端换发 `TELEPOST_MCP_REVIEW_TOKEN` 新值（在新值配发前 MCP 写路径
+  返回 401）；Pixiv refresh token 轮换；真机测试私信（本环境无 Telegram 用户态）。
+
+## 4 TelePost 卷 legacy 凭据清理
+
+* 清理前卷外备份：`~/.local/share/pixivflow-volume-backups/20261001T233405Z/telepost`
+  （`scripts/export-volume-backup.sh --plane telepost`，290 文件 / 166 MB，逐文件 sha256 全对，
+  11 个 SQLite 三件套 integrity 全 ok，含被删目标全量）。
+* 删除（仅此两个明确目标）：`/app/data/pixivflow/`（含 `config.json`、`.pixiv-refresh-token*`、
+  legacy pixivflow.db 与缓存）、`/app/data/submissions.db`（0 字节）。删除前 `/proc/*/fd` 扫描确认
+  零进程持有句柄。
+* **该 `.pixiv-refresh-token` 与当前 env `PIXIV_REFRESH_TOKEN` 同值（活凭据特征）**——文件已随卷外
+  备份保留可恢复性，卷上副本已消除；彻底失效依赖用户完成 Pixiv 侧轮换（§3 用户待办）。
+* 删除后 `/health` ok、bots [1,2]、存储指标正常（`pixivflow_cache` 归零是该 legacy 监控目标的
+  预期终态——`PIXIVFLOW_ENABLED` 未设置，同容器 worker 拓扑已退役）。
+* 另发现（未动，另案）：`/app/data` 根残留 `tmp_verify_final.py`、`tmp_verifycard.py` 两个历史
+  取证脚本，不含凭据，留待用户决定是否清理。
+
+## 5 Dependabot 8 PR 终态
+
+* merged：TelePost #258（aiohttp≥3.14.3，CI 5/5 绿）、#259（github-actions 组，rebase 后 CI 5/5 绿）；
+  PixivFlow #186（minor-patch 组）、#188（github-actions 组）；deploy #168（github-actions 组）、
+  #164（mihomo v1.19.31）。
+* closed-with-reason：PixivFlow #187（archiver 7→8 纯 ESM 化；本仓 CJS `createRequire` 加载，
+  15 套件模块加载期失败；适配立项 PixivFlow issue #189）。
+* TelePost #257（python-telegram-bot 21.10→22.8 主版本）：v22 breaking changes 全部为 v20.x 弃用项
+  移除，代码核对未触碰（`disable_web_page_preview` 仅作 bot 方法 kwarg 使用，v22.8 仍支持；
+  未用 `Defaults.*`/BaseRequest 子类/run_polling 超时参数）；本地全量 1236 passed / 3 skipped
+  （PTB 22.8 隔离 venv，exit 0）；rebase 后 CI 绿即合并（§8 跟进）。
+* 期间发现的第三处测试抖动（非本轮治理范围）：`test_novel_delivery_semantics.py::
+  test_case2_fallback_card_root_and_temp_cleaned` 在 main 与 dependabot base 上间歇失败
+  （AsyncMock 时序敏感），rerun/rebase 可过；建议下轮治理。
+
+## 6 测试基建（TelePost PR #268）
+
+* aiosqlite 退出挂起：`tests/conftest.py` 加 session-finish finalizer 翻转泄漏 worker 的 `_running`
+  并 join（不改业务代码）。证据：无 finalizer 基线 1236 passed 后干挂 6 分钟+；有 finalizer
+  1236 passed / 3 skipped / exit 0 / 74s。
+* `test_refetch_job_lifecycle.py` 墙钟断言（原 `elapsed<30`、#254 放宽为 `<120`）删除：生命周期
+  时钟本已注入，正确性由状态断言承担；17/17 通过。
+
+## 7 verify-production.sh webhook 永久 SKIP 收敛
+
+* `scripts/verify-webhooks.sh` 新增机器内回退：本地无 token 时把既有 `tg_webhook_check.py`（5 字段
+  JSON 契约、token 不进 argv）base64 送入 TelePost 机器执行，token 不出机器，本机只收结论行。
+* 实测：全脚本 exit 0，第 5 节双 bot `[OK] …（机器内核对）`，不再是永久 SKIP。
+* Cloudflare 时钟仍为 SKIP：需要 `CLOUDFLARE_API_TOKEN`（只读）或标注接受人工核对——已在交接
+  报告中向用户索取。
+
+## 8 跟进项
+
+* TelePost #257 合并后若 release-please 产新版本，按正式流程发版、部署、重跑
+  `/health` + `/api/botN/v1/health` + 测试私信。
+* 用户人工验收卡（Agent 能力边界外）：BotFather Main Mini App URL 核对（bot2 必须
+  `…/app/?bot=bot2`）+ 真机 Telegram E2E 四项（含顺带肉眼核对审核历史里的 #112）+
+  MCP token 配发 + Pixiv refresh token 轮换。
