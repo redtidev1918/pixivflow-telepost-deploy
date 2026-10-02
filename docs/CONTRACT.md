@@ -51,7 +51,9 @@ PixivFlow 默认 multipart 字段名即 `files` / `previews`（可经 operator �
 
 ### 其余字段：可配置，非固定契约
 
-`files`/`previews` 之外的所有 form part 对 TelePost 而言都是普通文本字段（`tags`、`title`、`note`、`link`、`spoiler`、`anonymous`、`idempotency_key`、`target_id`、`work_type`、`pixiv_id`、`source_label`、`refetch_request_id` 等）。这些字段的内容完全取决于 PixivFlow 侧 operator 配置的模板，**不属于本契约固定的 schema**。
+`files`/`previews` 之外的所有 form part 对 TelePost 而言都是普通文本字段（`tags`、`title`、`note`、`link`、`spoiler`、`anonymous`、`idempotency_key`、`target_id`、`work_type`、`work_id`、`pixiv_id`、`source_label`、`refetch_request_id` 等）。这些字段的内容完全取决于 PixivFlow 侧 operator 配置的模板，**不属于本契约固定的 schema**。
+
+**作品标识字段的命名契约（2026-10 起）**：`work_id` 是来源中立的 canonical 字段；`pixiv_id` 为其 deprecated 别名，永久可用。两者同现时 TelePost 以 `work_id` 为准；都缺省时维持从 `link` 推导的现状。TelePost 侧存储列（`pending_reviews.pixiv_id` / `delivery_ledger.pixiv_id`）与审计载荷键 `pixiv_id` 为持久化 schema，**永不改名**；`pixiv:` 资产 ID 前缀永久合法，未来第二来源可使用自己的命名空间前缀，消费侧一律视为不透明。`GET /api/v1/deliveries/lookup` 的查询参数同样接受 `work_id`（别名等价），响应同时携带 `work_id` 与 `pixiv_id` 两键。
 
 其中 `spoiler` 虽然是可配置字段，语义上却是**每个 target 的显式策略**，而不是「上游给什么就照做」：它决定的是**频道发布**是否加 Telegram 遮罩，取值只有三种含义——`false`（默认不遮罩，R-18/R-18G 也照常展示）、`"{{spoiler}}"`（兼容旧版：Pixiv 受限作品一律遮罩）、`true`（全部遮罩）；**审核群预览不受它影响**（2026-09-28 起恒不遮罩：审核员必须看见被审媒体，而 Telegram 无法对已发送的消息反向解除遮罩）。默认不遮罩的口径自 CHANGELOG 的 1.8.3（见 `CHANGELOG.md`）起生效，示例配置 `pixivflow/config/fly-two-bots.example.json` 与生产配置 `pixivflow/config/production.json` 现在都用 `false`；需要逐稿切换时用审核卡片上的遮罩按钮（那是唯一的逐稿开关：改写审核记录的存储值，发布时以该值为准）。
 
