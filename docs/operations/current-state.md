@@ -4231,3 +4231,31 @@ closed-as-duplicate-of-#192，内容与 fa00bcf 一致。）
   work_id 值，抽查一条即可）。
 * 回滚：TelePost pin 回 2.74.0（#198 注释）；PixivFlow pin 回 644b3df/3.5.0
   （#199 注释）；live 配置用备份文件回写。
+
+### 2026-10-02（补④）TelePost 2.76.0：频道小说帖「在线阅读」Instant View 预览上线
+
+* 变更（TelePost #279，release 2.76.0）：有 Telegraph 预览页的小说频道帖，
+  caption 迁移为尾随文本消息（单 TXT 同样强制），文本末尾追加裸链块
+  `📖 在线阅读\n<telegra.ph url>`，发送层对该 TEXT 消息显式下发
+  `LinkPreviewOptions(url=…, prefer_large_media=True)` 触发 IV 卡片
+  （Telegram 只对文本消息里的裸 URL 生成链接预览，媒体 caption 永远不会有）。
+  无预览页投稿逐字节不变；`READONLINE_LINK_PREVIEW=false` 全链路退回旧形态。
+  审核/预览面（channel_caption 共用方）零变化。开关默认 on，未在 fly env
+  显式设置（代码默认 true）。
+* 部署：pin PR #202，`fly deploy -c fly/deploy.telepost.toml --ha=false
+  --strategy rolling`，机器 683032ec6617e8 rolling 更新，checks 1/1。
+* VERIFIED：`/health` version=2.76.0 commit=fc8b5846，bots [1,2]，
+  `/api/botN/v1/health` 双 200；测试 1275 passed（基线 1256 + 新增 19，
+  含 有/无 preview × 单文档/多文档/图集 形态兼容矩阵、开关 off 回归、
+  dict 往返、发送层三分支、审核面无裸链）。
+* 生产全链路（投稿→审核）VERIFIED：机内 multipart 真实 TXT 小说投稿 →
+  201，pending review #161（bot1，标题「在线阅读预览验证帖」，1 天保留期）。
+* 批准→发布段**必须人工**：生产 `TELEPOST_REVIEW_API_MODE=readonly`（无值守
+  自动化安全开关），MCP/review token 与 owner token 的审核写路径均被 403
+  （"Review API is read-only"），只有审核群按钮 / Mini App 人工审核员可批准。
+  **人工验收项**：审核群通过 #161 → 频道帖应为「TXT 文档 + 尾随文本消息」，
+  尾随文本下方出现 telegra.ph 预览卡片且桌面端带 Instant View 按钮
+  （移动端 IV 在客户端内打开即读）；同期无预览页图集投稿形态不变。
+* 回滚：TelePost pin 回 2.75.0（#202 注释），或 fly secrets 设
+  `READONLINE_LINK_PREVIEW=false`（无需重新部署，进程重启后生效——注意
+  该开关为启动期读取的 settings 常量，改值需 machine restart）。
