@@ -4204,3 +4204,30 @@ closed-as-duplicate-of-#192，内容与 fa00bcf 一致。）
   anycast IP，公网 `telepress-publish.fly.dev` 不可达属有意收窄。机器空闲后按
   `auto_stop_machines` 自动停止，下次 flycast POST 自动唤醒；10-03 10:00 CST 调度
   将首次真实走完投稿前 preview 路径（届时日志应不再出现 telepress_network_error）。
+
+# 2026-10-02（补③）TelePost 2.75.0 + PixivFlow 3.6.0：work_id 命名泛化上线
+
+* 范围：TelePost ↔ PixivFlow 解耦（来源中立 work_id）全链路发版部署。
+* TelePost 2.75.0（#275→release #276，pin PR #198）：投稿 API 收 `work_id`
+  （canonical）与 `pixiv_id`（deprecated 别名，同现 work_id 优先）；
+  `deliveries/lookup` 支持 `work_id` 别名并返回双键；零迁移（存储列/审计键
+  `pixiv_id` 永久不动，repository 边界映射）。部署前卷快照已建。
+  **VERIFIED**：health `bot_version=2.75.0`；生产库实作 novel 29272549 的
+  lookup 双别名等价（均 found、双键齐全）；multipart 只带 `work_id` 的投稿
+  正确命中历史去重（duplicate_existing，复用当日 10:00 槽位幂等键，未产生
+  新审核行/TG 噪音）。
+* PixivFlow 3.6.0（#190/#191→release #192，pin PR #199 至 650a0ba）：
+  `{{workId}}` 模板别名 + `download.assetNamespace` 可配（默认 pixiv 未改）。
+  **VERIFIED**：机器启动日志 `PIXIVFLOW_REVISION=3.6.0+650a0bac…`。
+* 生产模板（#196）：双 bot 投稿模板 `work_id: "{{workId}}"` 与 `pixiv_id`
+  并存；卷上 `/app/data/production.json` 已热更新（备份
+  `.bak-workid-20261002`），watchConfig 热加载生效（scheduler snapshot
+  generation 2）。
+* 构建修复（#200）：johnvansickle 对 Fly 构建器 IP 间歇返回非 xz 错误页导致
+  ffmpeg `ADD` 层构建失败；改 curl + `xz -t` 校验 + BtbN GitHub 镜像兜底。
+* 兼容窗口：旧字段路径（pixiv_id only）在 2.75.0 上行为不变（当日 10:00
+  调度稿即旧路径，发布后 lookup/去重均正常）；10-03 10:00 CST 调度将首次
+  以 work_id+pixiv_id 双字段真实投稿（届时 TelePost 落库 pixiv_id 列应等于
+  work_id 值，抽查一条即可）。
+* 回滚：TelePost pin 回 2.74.0（#198 注释）；PixivFlow pin 回 644b3df/3.5.0
+  （#199 注释）；live 配置用备份文件回写。
