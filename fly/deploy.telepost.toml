@@ -301,7 +301,12 @@ primary_region = 'iad'
     # warning when a manifest proxies to nothing, and the TELEPRESS_* env
     # stopgap below stays as belt-and-braces. Also carries 2.73.11 (per-bot
     # release version diagnostics). Rollback = 2.73.10.
-    TELEPOST_IMAGE = 'ghcr.io/redtidev1918/telepost:2.73.12'
+    # 2.74.0 (2026-10-02): Mini App review queue empty state now explains
+    # itself with recent terminal records (#273), so an empty queue no longer
+    # reads as a malfunction. GHCR image revision verified == release commit
+    # 78a6454; deployed 2026-10-02 after volume snapshot
+    # vs_7l5YAyMpeYNcbw1OD5X3Rl. Rollback = 2.73.12.
+    TELEPOST_IMAGE = 'ghcr.io/redtidev1918/telepost:2.74.0'
 
 [[mounts]]
   source = 'data'
