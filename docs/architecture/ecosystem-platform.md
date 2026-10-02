@@ -1165,6 +1165,13 @@ Delivery
 
 Submission 表示投稿事实。
 
+Submission 的作品标识是**来源中立**的：wire 字段 `work_id` 为 canonical，
+`pixiv_id` 是 deprecated 别名（永久可用，同现时 `work_id` 优先）。存储列与
+审计键的历史命名（`pixiv_id`）属于持久化 schema，永不迁移改名；映射集中在
+repository 边界（TelePost `telepost/storage/sqlite/columns.py`）。资产 ID 的
+`pixiv:` 前缀永久合法，消费侧一律视为不透明；第二来源使用自己的命名空间
+（PixivFlow `download.assetNamespace`），不需要任何消费侧改动。
+
 Review 不是 Submission 本身。
 
 ---
