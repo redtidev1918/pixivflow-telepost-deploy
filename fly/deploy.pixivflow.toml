@@ -303,8 +303,13 @@ kill_timeout = 60
     # `{{seriesTitle}}` (parent series name) plus `{{displayTitle}}` (composed
     # 《系列名》 章节名 for series novels, bare title otherwise; config title
     # slots render {{displayTitle}}). Rollback = the 74ffa4d / 3.4.3 line above.
-    PIXIVFLOW_REF = '644b3dfb555160a6fd2dc96439f524a992225e3e'
-    PIXIVFLOW_VERSION = '3.5.0'
+    # 3.6.0 — source-neutral work identity: `buildTemplateVariables` exposes
+    # `{{workId}}` (same value as `{{pixivId}}`) so submission templates can
+    # send TelePost's canonical work_id field, and the media-asset id prefix
+    # becomes configurable via `download.assetNamespace` (default `pixiv`,
+    # production unchanged). Rollback = the 644b3df / 3.5.0 line above.
+    PIXIVFLOW_REF = '650a0bacba9023ee68df4c2f29df44393f74c635'
+    PIXIVFLOW_VERSION = '3.6.0'
 
 [[mounts]]
   source = 'pixivflow_data'
