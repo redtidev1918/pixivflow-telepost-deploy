@@ -44,7 +44,18 @@ TelePost RBAC 演化模型（root/sudoers/Role Binding）见 [telepost-rbac-evol
 最近明确记录的生产 baseline：
 
 ```text
-TelePost: 2.73.12 / bf94d68363d69dbe805050c9aa0cefddf08dddc1 — VERIFIED
+TelePost: 2.74.0 / 78a645454e9aebefefbed802a2d2094d7199e93b — VERIFIED
+  (Mini App review-queue empty state explains itself: up to three recent
+   terminal records + review-history link, silent degrade on peek failure;
+   pure frontend, zero API contract change. GHCR 2.74.0 revision == release
+   commit. Deployed via fly/deploy.telepost.toml pin PR #192 onto machine
+   683032ec6617e8; /health → version=2.74.0, commit=78a6454,
+   telepress_version=0.16.3, bots:[1,2]; /api/botN/v1/health 200; /app/ 200;
+   smoke-telepost OK; verify-production.sh exit 0 (Cloudflare clock SKIP =
+   credential-gated). Rollback = 2.73.12. Empty-state UX itself =
+   EXTERNAL_ACCEPTANCE_REQUIRED: confirm on real Telegram that an empty
+   queue renders the recent-terminal list and the history link works.)
+TelePost: 2.73.12 / bf94d68363d69dbe805050c9aa0cefddf08dddc1 — SUPERSEDED
   (online-reading image restoration: provider assembly bridges TelePost's
    MEDIA_PROXY_BASE_URL/HOSTS into the in-process TelePress library
    (TELEPRESS_MEDIA_PROXY_*; explicit TELEPRESS_* wins), telepress 0.16.3
@@ -4118,3 +4129,38 @@ Status:
 * 存量 28 页处置待用户拍板。
 * 用户人工验收卡不变（BotFather URL、真机 E2E、MCP token 配发、Pixiv refresh token 轮换、
   Cloudflare token）。
+
+# 2026-10-02 部署 TelePost 2.74.0 到常驻执行端（Mini App 审核队列空态解释）
+
+Status:
+* TelePost 2.74.0 的发布 / 部署 / 运行期核对：VERIFIED
+* 空态「最近处理」三条终态记录 + 审核历史入口的真实 Telegram 表现：EXTERNAL_ACCEPTANCE_REQUIRED
+  （需在真机 Mini App 打开空队列核对：显示最近终态记录、审核历史链接可点、非空队列回归正常）
+
+## 1 落地与 pin
+
+* 来源包：`MiniApp审核队列诊断修复包`（诊断结论：队列空 = 瞬态 pending 语义 + 审核主战场在
+  TG 审核群 + 双 bot 分库，非故障；本修复解决「空得像故障」的体验问题）。
+* TelePost 仓库：PR #273（feat(miniapp) 队列空态解释，纯前端零 API 契约变更）合并 →
+  release-please PR #274 → **v2.74.0**（release commit `78a6454`；GHCR 镜像
+  `org.opencontainers.image.revision=78a6454…` 与 release commit 一致，manifest 核对）。
+* 本地工具链说明：本机 vitest/vite 因 esbuild 服务握手挂起无法本地执行（环境问题，
+  与代码无关）；webapp 测试/typecheck/lint/build 全部以 CI 为准并全绿（webapp 34s、
+  browser-e2e 1m9s）。
+* `fly/deploy.telepost.toml` pin 2.73.12 → 2.74.0（PR #192，含 Rollback=2.73.12 锚点注释）。
+
+## 2 部署与运行期核对
+
+* 部署前卷快照已调度（vol_4y5e58mylle1nnjr）。
+* `fly deploy -c fly/deploy.telepost.toml --ha=false --strategy rolling` → 机器
+  683032ec6617e8 rolling 更新后 good state。
+* `/health`：`version=2.74.0, commit=78a645454e9aebefefbed802a2d2094d7199e93b,
+  bots:[1,2], telepress_version=0.16.3, telepress_rich_markdown=true`；
+  `/api/bot1/v1/health` 200、`/api/bot2/v1/health` 200、`/app/` 200。
+* `scripts/smoke-telepost.sh` exit 0（health/live 200，双 bot 无令牌投稿 401）。
+* `scripts/verify-production.sh` exit 0：常驻参数、生命周期、业务探针、webhook 归属
+  （机器内核对双 bot OK、pending=0）、线上镜像匹配 2.74.0、PixivFlow pin 644b3dfb 一致；
+  仅 Cloudflare 时钟 SKIP（待用户 token）。
+* Phase G 配置复核：`flyctl config show` env 与 `fly/deploy.telepost.toml` [env] **零漂移**
+  （键集一致、值一致）；有意配置在位：MINIAPP_ENABLED=true、SEARCH_ENABLED=false、
+  PENDING_REVIEW_RETENTION_DAYS=1、TELEPOST_REVIEW_API_MODE（secret）=readonly。
