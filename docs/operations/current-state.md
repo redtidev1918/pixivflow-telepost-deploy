@@ -4083,11 +4083,12 @@ Status:
   `vs_Mwn5GB6ZM5YF0KZzV0XBl2P`；machine 683032ec6617e8 于 01:54Z 起运行 2.73.12；
   `/health` version/commit/telepress_version=0.16.3、`/api/botN/v1/health` 双 bot 2.73.12、
   webhook 无 secret → 401。部署仓 pin PR #190 已合并（生产=pin=最新 release）。
-* **生产验证（进行中）**：2026-10-02 10:00 CST 官方调度已产出双 bot 真实小说投稿
-  （bot1 02:03Z / bot2 review #118 02:04Z，均 pending）；任意一篇经审核发布后，其新
-  Telegraph 页应含 `img` 节点且 src 指向 `pixiv-media-proxy…/media/i.pximg.net/…`
-  （worker 已用真实 pximg 路径实测 200 image/jpeg 623KB）。审核是人工动作，页面验证
-  结果将补记于此并翻转 `control-plane/pixiv-media-proxy/DECISION.md` 状态。
+* **生产验证（VERIFIED 2026-10-02）**：10:00 CST 官方调度产出双 bot 真实小说投稿，经正常
+  审核发布。bot1 review #160（02:12Z 发布，rich-v2）Telegraph 页经 telegra.ph API 实测
+  **8 个 img 节点，src 全部指向 `pixiv-media-proxy…/media/i.pximg.net/…`**；首图经第三方
+  网络实测 HTTP 200（image/png, 3.07MB, 1736×1290）。bot2 #118 为 plain 快照（该作品
+  manifest 无图片资产，非缺陷）。`control-plane/pixiv-media-proxy/DECISION.md` 状态已同步
+  翻转 VERIFIED。
 * **存量处置（待用户决定）**：28 个纯文字存量页清单已记录（见交接报告）。处置选项：
   接受现状 / 对 title='' 的 legacy 页借正式 delivery retry 触发 `_RICH_PREVIEW_TITLE`
   升级例外重建 / 用 Telegraph token 删旧页后自然重建。不擅自重发。
