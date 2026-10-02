@@ -4164,3 +4164,43 @@ Status:
 * Phase G 配置复核：`flyctl config show` env 与 `fly/deploy.telepost.toml` [env] **零漂移**
   （键集一致、值一致）；有意配置在位：MINIAPP_ENABLED=true、SEARCH_ENABLED=false、
   PENDING_REVIEW_RETENTION_DAYS=1、TELEPOST_REVIEW_API_MODE（secret）=readonly。
+
+# 2026-10-02（补②）bot2 菜单按钮复核 + telepress-publish 断链修复
+
+（2.74.0 发布/部署/运行期核对以上一节 #194 为准。本节仅补两处独立事项；部署前卷快照
+补记 ID `vs_7l5YAyMpeYNcbw1OD5X3Rl`（03:58Z）。并行会话重复 pin PR #193 已
+closed-as-duplicate-of-#192，内容与 fa00bcf 一致。）
+
+## 1 bot2 菜单按钮「disabled」复核（VERIFIED，无需代码变更）
+
+* 起因：用户在 BotFather 侧将 bot2 菜单按钮调整为 disabled。
+* 实测（机器内 Bot API，token 不出机器）：`getChatMenuButton` 双 bot 均为
+  `{"type":"web_app","text":"📱 Mini App","web_app":{"url":"…/app?bot=botN"}}` —— 即
+  Telegram 云端运行时状态**从未处于 disabled**；BotFather 页面展示的是其自身保存的
+  配置，与代码每次启动经 `setChatMenuButton` 重设的运行时状态可能脱节。
+* 处置：对 bot2 幂等重放一次 `setChatMenuButton`（参数与 `main.py` 启动逻辑完全
+  一致），`ok:true`；2.74.0 部署重启后再次核对双 bot 仍为 web_app 且 `?bot=botN`
+  作用域正确。
+* 留档：菜单按钮的最终事实来源是 Bot API 状态（代码每次启动重设），BotFather 的
+  「Disable menu button」不会持久生效——重启即被代码覆盖。
+
+## 2 telepress-publish 断链修复（VERIFIED）
+
+* 发现：`telepress-publish` 全部 IP（公网 + flycast 私网）缺失，app 级 Status=
+  suspended，公网边缘 TLS reset、`.flycast` 不解析。PixivFlow 生产配置仍指向
+  `http://telepress-publish.flycast/publish/rich-novel`，调度日志显示 09-19 起间歇、
+  09-21 起**每次小说运行**都 `telepress_network_error`（含 10-01、10-02 两次），
+  投稿前 rich preview 一直被跳过（按设计非致命，TXT 投稿不受影响；审核后由 TelePost
+  进程内 enricher 兜底发布）。
+* 处置：①按部署仓 `docker/telepress.Dockerfile`（telepress[api]==0.16.3）重部署
+  （`fly deploy -c fly/deploy.telepress.toml --ha=false`，镜像
+  `deployment-01M3XCPMTBD1H0S3X4M85FFYW9`）；②`fly machine start` 后 app Status
+  自动翻回 `deployed`（再次印证「suspended 不是开关」）；③`flyctl ips allocate-v6
+  --private` 恢复 flycast 私网 IP `fdaa:10:b479:0:1::3`。
+* 验证：机器内 `pip show telepress` = **0.16.3**；从 pixivflow-scheduler 机器经
+  flycast `GET /` → 200 `{"status":"ok","service":"telepress"}`；无 key POST
+  `/publish/rich-novel` → 401 `Invalid or missing API key`（鉴权在位）。
+* 边界：仅恢复 flycast 私网入口（唯一有据消费者是 PixivFlow 内网调用）；未分配公网
+  anycast IP，公网 `telepress-publish.fly.dev` 不可达属有意收窄。机器空闲后按
+  `auto_stop_machines` 自动停止，下次 flycast POST 自动唤醒；10-03 10:00 CST 调度
+  将首次真实走完投稿前 preview 路径（届时日志应不再出现 telepress_network_error）。
