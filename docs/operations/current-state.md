@@ -4259,3 +4259,40 @@ closed-as-duplicate-of-#192，内容与 fa00bcf 一致。）
 * 回滚：TelePost pin 回 2.75.0（#202 注释），或 fly secrets 设
   `READONLINE_LINK_PREVIEW=false`（无需重新部署，进程重启后生效——注意
   该开关为启动期读取的 settings 常量，改值需 machine restart）。
+
+# 2026-10-02（补）TelePost 2.76.1 在线阅读观感修复deploy closeout
+
+## 1 修复内容
+
+2.76.0 的 IV 预览在 discussion 回复模式下有两个观感缺陷：单文档小说被拆成
+`[文档, 尾随文本]`，discussion 把尾随文本路由进评论串导致主贴变成裸文件；
+尾随文本里在线阅读出现两次（页脚内嵌超链接 + 裸链块）。根因是 `_publish`
+的 `text_as_caption` 把 `link_preview_url` 也当成搬 caption 的条件，漏算了
+reply-mode 维度。
+
+2.76.1（TelePost PR #283）修复：
+* `text_as_caption` 回到 2.75.0 条件（仅多文档且全 DOCUMENT）。
+* 有 preview 时追加独立两行裸链尾随项 `📖 在线阅读\n<url>`，不搬 caption。
+* 真实发布链路带裸链块时，caption 页脚只去掉 READ_ONLINE，保留
+  BOT_SUBMIT / MINI_APP_SUBMIT；`channel_caption()` 默认共享语义不变，
+  审核/预览面页脚不受影响。
+* legacy chat/`deliver_items_to_chat` 路径复用相同形态。
+
+## 2 验证
+
+* Phase 0 路由表已核对生产 `CHANNEL_ALBUM_REPLY=discussion`（机器内实测）。
+* TelePost 全量 pytest：**1282 passed / 3 skipped / exit 0**（新增三维兼容母体：
+  reply mode x 单/多文档 x preview；discussion 路由级测试单文档裸链进评论串、
+  多文档 caption+裸链进评论串）。
+* GHCR `telepost:2.76.1` image revision == release commit `2299a1376d92…`。
+* 部署前卷快照 `vs_AJxGBgw4lGRfw5KBgjYOGVm`；`/health` 2.76.1 /
+  `2299a13` / telepress 0.16.3；`/api/botN/v1/health` 双 bot 2.76.1。
+* pin：deploy 仓 PR #204（TELEPOST_IMAGE 2.76.0 → 2.76.1，Rollback=2.76.0）。
+
+## 3 仍待人工验收（Agent 能力边界外，不阻塞代码部署）
+
+* 真机审核一篇真实小说并用 readonly 开关不绕过：桌面端 + 移动端确认
+  主贴完整（标题/简介/tags/页脚齐全，无 READ_ONLINE 重复）、IV 卡片在
+  discussion 模式的评论串位置、在线阅读入口唯一。
+* 人工删除 #161（2.76.0 形态错误的旧验证帖）。
+* 观察 24h 发布成功率 / 队列指标无异常。
