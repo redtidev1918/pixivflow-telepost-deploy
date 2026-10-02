@@ -103,6 +103,68 @@ print(obj.get("status", "API_ERROR"), obj.get("host") or "-",
 check_bot BOT1 "${BOT1_TOKEN:-}"
 check_bot BOT2 "${BOT2_TOKEN:-}"
 
+# 机器内回退：本地没有可用 token 时，把同一个 helper 送进 TelePost 机器执行——
+# 机器主进程的环境里本来就有 BOT1_TOKEN/BOT2_TOKEN，token 由此**不出机器**，
+# 本机只收到与本地模式完全相同的 5 字段 JSON 结论行。这消除了「运维本机必须
+# 持有 bot token 才能核对 webhook 归属」的永久 SKIP。
+check_bot_in_machine() {
+  local label=$1 env_name=$2
+  local helper_b64 out rc=0
+  helper_b64=$(base64 < "$repo_dir/scripts/tg_webhook_check.py" | tr -d '\n')
+  # $helper_b64 / $expected_host / $label / $env_name 在本机展开；helper 内部只从
+  # 继承环境读 token。远端 stderr（SSH 横幅等）被丢弃，只保留 JSON 结论行。
+  out=$(flyctl ssh console --app "$telepost_app" -C     "sh -c 'echo $helper_b64 | base64 -d > /tmp/tg_webhook_check.py && python3 /tmp/tg_webhook_check.py --label $label --expected-host $expected_host --env $env_name; rm -f /tmp/tg_webhook_check.py'"     2>/dev/null | grep -E '^\{.*\}$' | tail -1) || rc=$?
+  if [[ -z "$out" ]]; then
+    echo "[SKIP] ${label}: 机器内核对未返回结论（flyctl ssh 不可用或机器不可达，rc=${rc}）"
+    return 0
+  fi
+  checked=$((checked + 1))
+  local status host pending
+  read -r status host pending < <(printf '%s' "$out" | python3 -c '
+import json, sys
+try:
+    obj = json.load(sys.stdin)
+except Exception:
+    raise SystemExit(0)
+p = obj.get("pending_update_count")
+print(obj.get("status", "API_ERROR"), obj.get("host") or "-",
+      p if isinstance(p, int) else "-")
+' 2>/dev/null)
+  case "${status:-API_ERROR}" in
+    OK)
+      echo "[OK]   ${label}: webhook 归属 ${host}（待处理更新 ${pending}，机器内核对）"
+      ;;
+    NO_WEBHOOK)
+      echo "[FAIL] ${label}: 没有注册 webhook（用户投稿不会被接收）"
+      failures=$((failures + 1))
+      ;;
+    HOST_MISMATCH)
+      echo "[FAIL] ${label}: webhook 指向 ${host}，期望 ${expected_host}（投稿会被错误的一方吞掉）"
+      failures=$((failures + 1))
+      ;;
+    INVALID_TOKEN)
+      echo "[FAIL] ${label}: Telegram 拒绝机器内 ${env_name}（生产 secret 异常）"
+      failures=$((failures + 1))
+      ;;
+    *)
+      echo "[FAIL] ${label}: getWebhookInfo 无响应（机器内核对）"
+      failures=$((failures + 1))
+      ;;
+  esac
+  return 0
+}
+
+if [[ $checked -eq 0 ]]; then
+  telepost_app=${TELEPOST_APP:-telesubmit-multi-bot}
+  if command -v flyctl >/dev/null 2>&1 || command -v fly >/dev/null 2>&1; then
+    flyctl_cmd=$(command -v flyctl || command -v fly)
+    echo "[INFO] 本地无可用 bot token，改用机器内核对（token 不出 ${telepost_app} 机器）"
+    flyctl() { "$flyctl_cmd" "$@"; }
+    check_bot_in_machine BOT1 BOT1_TOKEN
+    check_bot_in_machine BOT2 BOT2_TOKEN
+  fi
+fi
+
 if [[ $checked -eq 0 ]]; then
   echo "[SKIP] 未提供任何 bot token，webhook 归属未验证"
   exit 0
