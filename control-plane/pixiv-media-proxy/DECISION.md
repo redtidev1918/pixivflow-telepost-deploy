@@ -2,7 +2,7 @@
 
 ## Status
 
-VERIFIED (Worker route + deploy; full real-novel rich-novel E2E remains EXTERNAL_ACCEPTANCE_REQUIRED)
+VERIFIED (Worker route + deploy; full real-novel rich-novel E2E VERIFIED 2026-10-02: bot1 review #160 Telegraph page carries 8 img nodes with /media/i.pximg.net/ srcs, image loads 200 from third-party network)
 
 ## Context
 
