@@ -314,7 +314,15 @@ primary_region = 'iad'
     # storage columns + audit key stay pixiv_id (persisted schema), mapped
     # at the repository boundary. Old producers (pixiv_id only) are
     # unaffected. Rollback = 2.74.0.
-    TELEPOST_IMAGE = 'ghcr.io/redtidev1918/telepost:2.75.0'
+    # 2.76.0 (2026-10-02): channel novel posts with a Telegraph preview page
+    # move their caption onto a trailing TEXT message whose bare read-online
+    # URL earns the Telegram link preview / Instant View card (media captions
+    # never get one); the send layer emits LinkPreviewOptions(url=…,
+    # prefer_large_media=True) for that message only. Review/preview surfaces
+    # and preview-less submissions are byte-identical to before;
+    # READONLINE_LINK_PREVIEW=false restores the old form outright.
+    # Rollback = 2.75.0.
+    TELEPOST_IMAGE = 'ghcr.io/redtidev1918/telepost:2.76.0'
 
 [[mounts]]
   source = 'data'
