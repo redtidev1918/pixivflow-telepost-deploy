@@ -297,7 +297,7 @@ primary_region = 'iad'
     # set MEDIA_PROXY_BASE_URL/HOSTS, so proxy rewriting was silently skipped
     # and every rich-novel Telegraph page went out text-only. The provider
     # assembly now bridges TelePost's media-proxy config into the library
-    # (explicit TELEPRESS_* still wins), telepress pin 0.16.3 adds a loud
+    # (explicit TELEPRESS_* still wins), telepress pin 0.16.4 adds a loud
     # warning when a manifest proxies to nothing, and the TELEPRESS_* env
     # stopgap below stays as belt-and-braces. Also carries 2.73.11 (per-bot
     # release version diagnostics). Rollback = 2.73.10.
