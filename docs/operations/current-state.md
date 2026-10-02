@@ -44,7 +44,19 @@ TelePost RBAC 演化模型（root/sudoers/Role Binding）见 [telepost-rbac-evol
 最近明确记录的生产 baseline：
 
 ```text
-TelePost: 2.73.10 / 5b2961d662710a768a068cafbd2d0f18533dfee3 — VERIFIED
+TelePost: 2.73.12 / bf94d68363d69dbe805050c9aa0cefddf08dddc1 — VERIFIED
+  (online-reading image restoration: provider assembly bridges TelePost's
+   MEDIA_PROXY_BASE_URL/HOSTS into the in-process TelePress library
+   (TELEPRESS_MEDIA_PROXY_*; explicit TELEPRESS_* wins), telepress 0.16.3
+   warns loudly when a rich manifest proxies to nothing, TELEPRESS_* env
+   stopgap kept as belt-and-braces. Also carries 2.73.11 per-bot release
+   version diagnostics. Image ghcr.io/redtidev1918/telepost:2.73.12
+   (revision=bf94d68 == release commit). Deployed onto machine
+   683032ec6617e8; /health → version=2.73.12, commit=bf94d68, bots:[1,2],
+   telepress_version=0.16.3; /api/botN/v1/health 200 bot_version=2.73.12.
+   Pre-deploy volume snapshot vs_Mwn5GB6ZM5YF0KZzV0XBl2P. Rollback =
+   2.73.10.)
+TelePost: 2.73.10 / 5b2961d662710a768a068cafbd2d0f18533dfee3 — SUPERSEDED
   (Mini App production repair: unified MINIAPP_ENABLED default contract —
    Bot entry gate + session gate both default-on unless explicitly disabled;
    bot1 chat-side Mini App entry restored, bot2 authenticated entry restored;
@@ -154,7 +166,7 @@ TelePost: 2.64.2
    landed under chain-122; slot-level confirmation pending the 10:00 run;
    real-user reaction ingestion VERIFIED (bot1 message 3056, heat_score 1.4138);
    pre-2.55.4 history stays at heat 0 = KNOWN_DEBT (no Bot-API backfill path)
-TelePress: 0.16.1
+TelePress: 0.16.3
 Pixiv Media Proxy: pixiv-media-proxy.redtidev1918.workers.dev (v2, generic allowlist)
 ```
 
@@ -4042,3 +4054,67 @@ Status:
 * 用户人工验收卡（Agent 能力边界外）：BotFather Main Mini App URL 核对（bot2 必须
   `…/app/?bot=bot2`）+ 真机 Telegram E2E 四项（含顺带肉眼核对审核历史里的 #112）+
   MCP token 配发 + Pixiv refresh token 轮换。
+
+# 2026-10-02 在线阅读图片事故修复与全量收尾（B2 + 发版部署 + PR 终态）
+
+## 1 事故根因（已核销，证据链完整）
+
+在线阅读（Telegraph）小说页全部丢失图片。链路：`build_rich_snapshot` 正确产出
+`![](images/xxx.jpg)` + manifest（PixivFlow 侧 media_asset_refs 正常）→ 进程内 TelePress 库
+`_apply_proxy_manifest` 只读 `TELEPRESS_MEDIA_PROXY_BASE/HOSTS`，而 TelePost 生产仅有
+`MEDIA_PROXY_BASE_URL/HOSTS`（供 delivery_planner）→ 代理改写整体静默跳过 → 本地相对路径
+找不到文件 → Telegraph 丢弃相对引用 → 纯文字页面。存量实测：28 个已发布 preview 页
+（bot1×19 + bot2×9，含 5 个 rich-v2 标记页）经 telegra.ph API 逐页核对 **imgs=0**。
+
+## 2 修复与发版（全部走正式流程）
+
+* **配置止血（2026-10-02T00:45Z，先行落地）**：`TELEPRESS_MEDIA_PROXY_BASE/HOSTS` 下发到
+  telesubmit-multi-bot machine（Machines API 与 ssh env 双重核实）；部署仓
+  `fly/deploy.telepost.toml` [env] 同步（PR #188）。
+* **TelePress 库侧告警**：`_apply_proxy_manifest` 在 manifest 带 CDN source 但无一可改写时
+  输出带配置指引的 loud warning（TelePress PR #61，并入 **0.16.3**，PyPI 01:00Z）。
+* **TelePost 侧治本**：`build_telepress_provider` 装配时把 TelePost 单一配置源桥接为
+  `TELEPRESS_MEDIA_PROXY_*`（显式 TELEPRESS_* 优先；PR #269，含 telepress pin bump 0.16.3
+  与 4 个回归测试）。release-please 出 **2.73.12**（release PR #272；2.73.11 为另一
+  per-bot 版本诊断修复 2620e8e，同日发布）。
+* **版本同步契约**：deploy 仓 `docker/telepress.Dockerfile` → 0.16.3（2c2bdb7）+
+  `docker/telepost.Dockerfile` overlay 与 control-plane 契约测试跟进（PR #189）。
+* **部署**：2.73.12 GHCR 镜像 revision=bf94d68 == release commit；部署前卷快照
+  `vs_Mwn5GB6ZM5YF0KZzV0XBl2P`；machine 683032ec6617e8 于 01:54Z 起运行 2.73.12；
+  `/health` version/commit/telepress_version=0.16.3、`/api/botN/v1/health` 双 bot 2.73.12、
+  webhook 无 secret → 401。部署仓 pin PR #190 已合并（生产=pin=最新 release）。
+* **生产验证（VERIFIED 2026-10-02）**：10:00 CST 官方调度产出双 bot 真实小说投稿，经正常
+  审核发布。bot1 review #160（02:12Z 发布，rich-v2）Telegraph 页经 telegra.ph API 实测
+  **8 个 img 节点，src 全部指向 `pixiv-media-proxy…/media/i.pximg.net/…`**；首图经第三方
+  网络实测 HTTP 200（image/png, 3.07MB, 1736×1290）。bot2 #118 为 plain 快照（该作品
+  manifest 无图片资产，非缺陷）。`control-plane/pixiv-media-proxy/DECISION.md` 状态已同步
+  翻转 VERIFIED。
+* **存量处置（待用户决定）**：28 个纯文字存量页清单已记录（见交接报告）。处置选项：
+  接受现状 / 对 title='' 的 legacy 页借正式 delivery retry 触发 `_RICH_PREVIEW_TITLE`
+  升级例外重建 / 用 Telegraph token 删旧页后自然重建。不擅自重发。
+
+## 3 PR 终态（本轮全部闭环）
+
+* TelePress：#60（github-actions 组）merged；#61（loud warning）merged → 0.16.3；
+  #63（release 0.16.3）merged。#62（并行重复实现）closed-with-reason。
+* TelePost：#269（桥接治本 + pin bump）merged；#271（release 2.73.11）merged；
+  #272（release 2.73.12）merged。#270（并行重复实现）closed-as-duplicate-of-#269。
+* deploy：#186（undici 安全补丁 + wrangler，/control-plane）merged；#188（TELEPRESS_*
+  stopgap）merged；#189（telepress pins 0.16.3）merged；#190（pin 2.73.12）merged。
+* 过程记录：#269 于 01:15Z 合并时 version-sync/Mini App CI 两红（外因：deploy 仓 pin
+  漂移 + PyPI 0.16.3 CDN 传播延迟），修复后 rerun 全绿；2.73.12 release build 曾卡死
+  于 runner（同 commit Mini App CI python 3m24s 绿），cancel + repair dispatch 后
+  于 01:48Z 完成发布。代理缓存期间造成多次状态误读，关键校验已改为直连。
+
+## 4 Phase E/Gate 复核
+
+* TelePost main（含 #268 + #269）本地全量：**1243 passed / 3 skipped / exit 0 / 61s，无 hang**。
+* `verify-production.sh` exit 0：常驻参数、生命周期、业务探针、webhook 归属（机器内核对
+  双 bot OK）、镜像与提交号（线上=2.73.12）全 OK；仅 Cloudflare 时钟 SKIP（待用户 token）。
+
+## 5 跟进项
+
+* 小说审核发布后：核验证 Telegraph 新页 img+代理 src → 翻转 DECISION.md 状态 → 补记本节。
+* 存量 28 页处置待用户拍板。
+* 用户人工验收卡不变（BotFather URL、真机 E2E、MCP token 配发、Pixiv refresh token 轮换、
+  Cloudflare token）。
