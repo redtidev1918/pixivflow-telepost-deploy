@@ -48,10 +48,30 @@ ARG PIXIVFLOW_VERSION=0.0.0
 RUN apt-get update \
     && apt-get install -y --no-install-recommends python3 ca-certificates curl xz-utils \
     && rm -rf /var/lib/apt/lists/*
-ADD https://johnvansickle.com/ffmpeg/releases/ffmpeg-release-amd64-static.tar.xz /tmp/ffmpeg.tar.xz
-RUN tar -xf /tmp/ffmpeg.tar.xz -C /tmp \
-    && mv /tmp/ffmpeg-*-static/ffmpeg /usr/local/bin/ffmpeg \
-    && rm -rf /tmp/ffmpeg*
+# ffmpeg via curl (not ADD) so a poisoned/garbage download fails the FETCH step
+# loudly instead of surfacing as "xz: File format not recognized", with the
+# BtbN GitHub mirror as fallback (johnvansickle intermittently serves error
+# pages to cloud builder IPs). xz -t validates the archive before extraction.
+RUN set -e; \
+    fetched=0; \
+    for url in \
+      "https://johnvansickle.com/ffmpeg/releases/ffmpeg-release-amd64-static.tar.xz" \
+      "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-linux64-gpl.tar.xz"; do \
+      echo "ffmpeg: trying ${url}"; \
+      if curl -fsSL --retry 3 --connect-timeout 20 -o /tmp/ffmpeg.tar.xz "${url}" \
+         && xz -t /tmp/ffmpeg.tar.xz 2>/dev/null; then \
+        fetched=1; break; \
+      fi; \
+    done; \
+    [ "${fetched}" = "1" ] || { echo "ffmpeg: no working download source"; exit 1; }; \
+    tar -xf /tmp/ffmpeg.tar.xz -C /tmp; \
+    if ls /tmp/ffmpeg-*-static/ffmpeg >/dev/null 2>&1; then \
+      mv /tmp/ffmpeg-*-static/ffmpeg /usr/local/bin/ffmpeg; \
+    else \
+      mv /tmp/ffmpeg-*-linux64*/bin/ffmpeg /usr/local/bin/ffmpeg; \
+    fi; \
+    rm -rf /tmp/ffmpeg*; \
+    /usr/local/bin/ffmpeg -version | head -1
 
 WORKDIR /app
 COPY --from=build /build/dist ./dist
