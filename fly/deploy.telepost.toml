@@ -301,6 +301,14 @@ primary_region = 'iad'
 [env]
   MEDIA_PROXY_BASE_URL = 'https://pixiv-media-proxy.redtidev1918.workers.dev'
   MEDIA_PROXY_HOSTS = 'i.pximg.net'
+  # 2026-10-02 stopgap for the text-only 在线阅读 incident: the in-process
+  # TelePress library reads its own TELEPRESS_MEDIA_PROXY_* names, so the
+  # TelePost pair alone left proxy rewriting silently skipped and Telegraph
+  # dropped every relative-path inline image. Keep in sync with the pair
+  # above until the TelePost-side env bridge (telepress_provider) makes the
+  # mapping automatic; after that these two lines are belt-and-braces.
+  TELEPRESS_MEDIA_PROXY_BASE = 'https://pixiv-media-proxy.redtidev1918.workers.dev'
+  TELEPRESS_MEDIA_PROXY_HOSTS = 'i.pximg.net'
   RUN_MODE = 'WEBHOOK'
   CHANNEL_ALBUM_REPLY = 'discussion'
   WEBHOOK_PATH = '/webhook'
