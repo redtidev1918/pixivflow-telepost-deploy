@@ -124,12 +124,12 @@ jobs:
         if: steps.target.outputs.changed == 'true'
         run: ./scripts/validate.sh --examples
 
+      # 注意：GitHub Actions 的 `defaults` 只能写在 workflow / job 级别，写在 step
+      # 上会让整个 workflow 文件解析失败（dispatch 直接 422），所以这里用 cd。
       - name: Test the clock and its guard tests
         if: steps.target.outputs.changed == 'true'
-        defaults:
-          run:
-            working-directory: control-plane
         run: |
+          cd control-plane
           npm ci
           npm test
 
