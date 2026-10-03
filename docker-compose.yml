@@ -7,7 +7,7 @@ name: pixivflow-telepost
 
 services:
   telepost:
-    image: ${TELEPOST_IMAGE:-ghcr.io/redtidev1918/telepost:2.78.1}
+    image: ${TELEPOST_IMAGE:-ghcr.io/redtidev1918/telepost:2.79.0}
     restart: unless-stopped
     init: true
     environment:
