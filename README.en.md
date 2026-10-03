@@ -131,6 +131,23 @@ and operates them.
 
 ---
 
+## Upstream version baseline
+
+```text
+PixivFlow ──HTTP──► TelePost ──► Telegram channel
+```
+
+The default deployed versions are managed by this repo's deployment baseline. The single
+source is [`versions.json`](versions.json); it is synced into `docker-compose.yml`,
+`.env.example`, `docker/*.Dockerfile` and `fly/deploy.telepost.toml`, and `deploy init`
+scaffolds from the same file instead of keeping a second version number.
+
+The default PixivFlow and TelePost versions move with upstream releases. Templates are pinned
+to an exact release version so a deployment can be reproduced and rolled back — production
+never uses `latest`. See [Upgrades and rollback (Chinese)](docs/operations/upgrades.md).
+
+---
+
 ## Supported deployment architectures
 
 | Preset | Support level | Status | In one sentence |
@@ -209,6 +226,7 @@ paths.)
 | Know where credentials live and where the boundary is | [Credentials (Chinese)](docs/concepts/credentials.md) |
 | Deploy to Fly.io | [Fly.io](docs/en/platforms/flyio.md) |
 | Deploy to a VPS | [Docker](docs/en/platforms/docker.md) / [VPS and bare metal](docs/en/platforms/vps.md) |
+| Upgrade or roll back upstream versions | [Upgrades and rollback (Chinese)](docs/operations/upgrades.md) |
 | Out of memory / OOM | [Performance and memory (Chinese)](docs/operations/performance.md) |
 | Troubleshooting | [Troubleshooting (Chinese)](docs/operations/troubleshooting.md) |
 | Move from one architecture to another | [Migration contract (Chinese)](docs/architectures/migration.md) |

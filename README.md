@@ -136,6 +136,22 @@ deploy doctor && deploy deploy           # 自检 → 一键部署
 
 ---
 
+## 上游版本基线
+
+```text
+PixivFlow ──HTTP──► TelePost ──► Telegram 频道
+```
+
+默认部署版本由本仓库的 deployment baseline 管理：唯一来源写在 [`versions.json`](versions.json)，
+并同步到 `docker-compose.yml`、`.env.example`、`docker/*.Dockerfile` 与
+`fly/deploy.telepost.toml`；`deploy init` 生成的脚手架也来自同一份，不会另起一个版本号。
+
+TelePost 与 PixivFlow 的默认版本会随上游 release 更新。部署模板固定到具体 release 版本，
+以便复现和回滚——生产不使用 `latest`。升级与回滚步骤见
+[升级与回滚](docs/operations/upgrades.md)。
+
+---
+
 ## 支持哪些部署架构
 
 | Preset | 支持等级 | 实现状态 | 一句话 |
@@ -205,6 +221,7 @@ PRIMARY（cron-job.org）在预定时刻触发，SECONDARY（Cloudflare Cron）�
 | 知道凭据放在哪、边界在哪 | [凭据契约](docs/concepts/credentials.md) |
 | 部署到 Fly.io | [Fly.io](docs/platforms/flyio.md) |
 | 部署到一台 VPS | [Docker](docs/platforms/docker.md) / [VPS 与裸机](docs/platforms/vps.md) |
+| 升级上游版本、回滚 | [升级与回滚](docs/operations/upgrades.md) |
 | 内存不够 / OOM | [性能与内存](docs/operations/performance.md) |
 | 排障 | [故障排查](docs/operations/troubleshooting.md) |
 | 从一种架构迁到另一种 | [迁移契约](docs/architectures/migration.md) |

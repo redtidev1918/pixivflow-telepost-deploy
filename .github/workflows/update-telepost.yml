@@ -1,0 +1,196 @@
+name: Update TelePost baseline
+
+# TelePost 发布新版本后，本仓库的默认部署基线不该靠人工全仓搜索再手改。
+#
+# 每次运行：解析 TelePost 最新正式 Release → 与 versions.json 比对 → 有更新就
+# 同步所有模板 → 跑完整验证 → 开一个 PR。绝不直接 push main，也绝不写 latest：
+# 检测是动态的，落进仓库的永远是固定版本号。
+#
+# 触发方式（三选一，效果相同）：
+#   1. schedule：每天定时检查（最简单稳定的兜底）
+#   2. workflow_dispatch：手动指定版本
+#   3. repository_dispatch（type=telepost-release）：TelePost 发布后主动通知
+#      curl -X POST -H "Authorization: Bearer <token>" \
+#        -H "Accept: application/vnd.github+json" \
+#        https://api.github.com/repos/redtidev1918/pixivflow-telepost-deploy/dispatches \
+#        -d '{"event_type":"telepost-release","client_payload":{"tag":"v2.79.0"}}'
+#
+# 为什么用 RELEASE_PLEASE_TOKEN 而不是 GITHUB_TOKEN 开 PR：validate.yml 与
+# branch-contract.yml 都会跳过 github-actions[bot] 提交的 PR，用默认 token 开出来
+# 的 PR 永远不会有 CI 结果。这个 PAT 对应真实用户，CI 才会真的跑。
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "TelePost release version (X.Y.Z or vX.Y.Z). Empty = latest GitHub release."
+        required: false
+        type: string
+  schedule:
+    # 每天 05:23 UTC 检查一次。
+    - cron: "23 5 * * *"
+  repository_dispatch:
+    types: [telepost-release]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: update-telepost-baseline
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # 见文件头：必须是真实用户 PAT，否则开出来的 PR 不会触发 CI。
+          token: ${{ secrets.RELEASE_PLEASE_TOKEN || github.token }}
+
+      - name: Resolve target TelePost release
+        id: target
+        env:
+          GH_TOKEN: ${{ github.token }}
+          INPUT_VERSION: ${{ inputs.version }}
+          DISPATCH_TAG: ${{ github.event.client_payload.tag }}
+        run: |
+          set -euo pipefail
+          ver="${INPUT_VERSION:-${DISPATCH_TAG:-}}"
+          if [[ -z "$ver" ]]; then
+            ver=$(gh api repos/redtidev1918/TelePost/releases/latest --jq .tag_name)
+          fi
+          ver="${ver#v}"
+          if ! [[ "$ver" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::解析到的 TelePost 版本不是 X.Y.Z：$ver"
+            exit 1
+          fi
+          # 显式指定的版本也要确认它真的是已发布的正式 Release（非 draft / 非预发布）。
+          if ! gh release view "v$ver" --repo redtidev1918/TelePost \
+              --json tagName,isDraft,isPrerelease \
+              --jq 'select(.isDraft == false and .isPrerelease == false) | .tagName' \
+              | grep -qx "v$ver"; then
+            echo "::error::v$ver 不是 TelePost 的正式 Release"
+            exit 1
+          fi
+          current=$(python3 -c 'import json;print(json.load(open("versions.json"))["telepost"]["version"])')
+          echo "version=$ver" >> "$GITHUB_OUTPUT"
+          echo "current=$current" >> "$GITHUB_OUTPUT"
+          echo "TelePost 最新正式 Release = $ver；本仓库当前基线 = $current"
+          if [[ "$ver" == "$current" ]]; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::基线已是 $ver，无需更新"
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Verify the GHCR image exists
+        if: steps.target.outputs.changed == 'true'
+        env:
+          VERSION: ${{ steps.target.outputs.version }}
+        run: |
+          set -euo pipefail
+          token=$(curl -sS -m 20 "https://ghcr.io/token?scope=repository:redtidev1918/telepost:pull&service=ghcr.io" \
+            | python3 -c 'import json,sys;print(json.load(sys.stdin)["token"])')
+          code=$(curl -sS -o /dev/null -m 30 -w '%{http_code}' \
+            -H "Authorization: Bearer $token" \
+            -H "Accept: application/vnd.oci.image.index.v1+json,application/vnd.oci.image.manifest.v1+json,application/vnd.docker.distribution.manifest.list.v2+json,application/vnd.docker.distribution.manifest.v2+json" \
+            "https://ghcr.io/v2/redtidev1918/telepost/manifests/$VERSION")
+          echo "GHCR telepost:$VERSION -> HTTP $code"
+          if [[ "$code" != "200" ]]; then
+            echo "::error::ghcr.io/redtidev1918/telepost:$VERSION 不存在（HTTP $code）；不生成 PR"
+            exit 1
+          fi
+
+      - name: Sync the deployment baseline
+        if: steps.target.outputs.changed == 'true'
+        env:
+          VERSION: ${{ steps.target.outputs.version }}
+        run: python3 scripts/sync-telepost-baseline.py --to "$VERSION"
+
+      - uses: actions/setup-go@v7
+        if: steps.target.outputs.changed == 'true'
+        with:
+          go-version: "1.22"
+
+      - name: Test deploy CLI (baseline consistency guards)
+        if: steps.target.outputs.changed == 'true'
+        run: go test ./...
+
+      - name: Validate public files, examples and Compose
+        if: steps.target.outputs.changed == 'true'
+        run: ./scripts/validate.sh --examples
+
+      - name: Test the clock and its guard tests
+        if: steps.target.outputs.changed == 'true'
+        defaults:
+          run:
+            working-directory: control-plane
+        run: |
+          npm ci
+          npm test
+
+      - name: Open a pull request
+        if: steps.target.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.RELEASE_PLEASE_TOKEN || github.token }}
+          VERSION: ${{ steps.target.outputs.version }}
+          CURRENT: ${{ steps.target.outputs.current }}
+        run: |
+          set -euo pipefail
+          branch="chore/telepost-baseline-$VERSION"
+          if git ls-remote --exit-code --heads origin "$branch" >/dev/null 2>&1; then
+            echo "::notice::分支 $branch 已存在，跳过"
+            exit 0
+          fi
+          if gh pr list --state open --head "$branch" --json number --jq '.[].number' | grep -q .; then
+            echo "::notice::PR 已存在，跳过"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git switch -c "$branch"
+          git add versions.json .env.example docker-compose.yml \
+            docker/combined.Dockerfile docker/telepost.Dockerfile fly/deploy.telepost.toml
+          git commit -m "chore(telepost): sync deployment baseline to $VERSION"
+          git push -u origin "$branch"
+          {
+            echo "TelePost 发布 **v$VERSION**，本仓库部署基线从 **$CURRENT** 同步到 **$VERSION**。"
+            echo
+            echo "自动化：\`.github/workflows/update-telepost.yml\`。改动由 \`scripts/sync-telepost-baseline.py\`"
+            echo "从 \`versions.json\`（唯一权威来源）生成，未手改任何模板。"
+            echo
+            echo "## 同步范围"
+            echo
+            echo "| 文件 | 值 |"
+            echo "| --- | --- |"
+            echo "| \`versions.json\` | \`$VERSION\` |"
+            echo "| \`docker-compose.yml\` | \`ghcr.io/redtidev1918/telepost:$VERSION\` |"
+            echo "| \`.env.example\` | \`ghcr.io/redtidev1918/telepost:$VERSION\` |"
+            echo "| \`docker/combined.Dockerfile\` | \`ghcr.io/redtidev1918/telepost:$VERSION\` |"
+            echo "| \`docker/telepost.Dockerfile\` | \`ghcr.io/redtidev1918/telepost:$VERSION\` |"
+            echo "| \`fly/deploy.telepost.toml\` | \`ghcr.io/redtidev1918/telepost:$VERSION\` |"
+            echo
+            echo "Rollback：把上面的版本改回 \`$CURRENT\` 重新部署即可。"
+            echo
+            echo "## 已验证"
+            echo
+            echo "- GHCR \`telepost:$VERSION\` manifest 存在"
+            echo "- \`go test ./...\`（含 TelePost 基线一致性守护）"
+            echo "- \`./scripts/validate.sh --examples\`"
+            echo "- \`(cd control-plane && npm test)\`"
+            echo
+            echo "## 合并前人工确认"
+            echo
+            echo "- [ ] [TelePost v$VERSION release notes](https://github.com/redtidev1918/TelePost/releases/tag/v$VERSION) 无 Workflow Protocol / API 破坏性变更"
+            echo "- [ ] 需要时先升 PixivFlow 执行端（协议 v1 的顺序是先执行端后业务端）"
+          } > /tmp/pr-body.md
+          gh pr create \
+            --base main \
+            --head "$branch" \
+            --title "chore(telepost): sync deployment baseline to $VERSION" \
+            --body-file /tmp/pr-body.md \
+            --label "dependencies"
