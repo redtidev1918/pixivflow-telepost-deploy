@@ -216,3 +216,103 @@ docker compose up -d --no-deps --force-recreate stack
    本轮两仓的库表变更都是**只增**的（TelePost 六列 + 只回填 `notify_count>0` 终态行的选择性 backfill；
    PixivFlow `params_json` + 受保护的部分唯一索引），回滚到旧镜像时这些列/索引保持无害。
 6. 现场验收清单见 `docs/operations/refetch-production-verification.md` 的「2026-09-28」节。
+
+---
+
+## TelePost 基线：唯一来源与自动同步
+
+### 唯一来源
+
+TelePost 的默认部署版本只有一个权威来源：`versions.json`。
+
+```json
+{
+  "telepost": {
+    "version": "2.78.0",
+    "tag": "v2.78.0",
+    "image": "ghcr.io/redtidev1918/telepost:2.78.0",
+    "minSupported": "2.71.0"
+  }
+}
+```
+
+- `version` / `tag` / `image` 是**默认部署版本**，三者互相推导，必须来自同一个正式 Release。
+- `minSupported` 是**最低兼容版本**（工作流协议 v1 自 TelePost 2.71.0 起可用），语义是
+  「还能跑的下限」，不是默认版本。升级时不要把它一起抬上去。
+
+以下位置的 TelePost 镜像声明全部由基线生成，不要手改：
+
+| 文件 | 声明 |
+| --- | --- |
+| `docker-compose.yml` | `image: ${TELEPOST_IMAGE:-…}` 的默认值 |
+| `.env.example` | `TELEPOST_IMAGE=` |
+| `docker/combined.Dockerfile` | `ARG TELEPOST_IMAGE=` |
+| `docker/telepost.Dockerfile` | `ARG TELEPOST_IMAGE=` |
+| `fly/deploy.telepost.toml` | `[env] TELEPOST_IMAGE` |
+| `init.go` | `telepostBaseline`（由 `versions.json` embed 推导，不再是第二个版本库） |
+
+手工同步：
+
+```bash
+python3 scripts/sync-telepost-baseline.py            # 按 versions.json 刷新所有模板
+python3 scripts/sync-telepost-baseline.py --check    # 只校验，不一致 exit 1
+python3 scripts/sync-telepost-baseline.py --to 2.79.0  # 改基线并刷新（供 CI 用）
+```
+
+一致性由 `go test ./...` 的 `TestTelepostBaseline*` 守护。失败信息会逐个列出各来源的实际值，
+例如：
+
+```text
+TelePost baseline mismatch（权威来源 versions.json = 2.78.0）:
+  docker-compose               = 2.64.2
+```
+
+### 自动同步
+
+`.github/workflows/update-telepost.yml` 负责「上游发版 → 本仓 PR」：
+
+```text
+TelePost Release
+      ↓  schedule（每日） / repository_dispatch（上游通知） / workflow_dispatch（手动）
+解析最新正式 Release（排除 draft 与预发布）
+      ↓
+与 versions.json 比对
+      ↓ 有更新
+验证 GHCR image 存在（manifest HTTP 200）
+      ↓
+sync-telepost-baseline.py --to <version>
+      ↓
+go test ./...  +  ./scripts/validate.sh --examples  +  (cd control-plane && npm test)
+      ↓
+创建 PR（分支 chore/telepost-baseline-<version>）
+      ↓
+人工合并
+```
+
+约束：
+
+- **不直接 push `main`**，一律走 PR 与 CI。
+- **检测是动态的，落库是固定的**：工作流查「最新 release」，但写进仓库的永远是 `X.Y.Z`，
+  不会是 `latest`。
+- **PR 由 `RELEASE_PLEASE_TOKEN` 创建**。`validate.yml` 与 `branch-contract.yml` 会跳过
+  `github-actions[bot]` 提交的 PR；用默认 `GITHUB_TOKEN` 开出来的 PR 永远不会有 CI 结果，
+  所以这里必须用真实用户 PAT。
+- **镜像不存在就不开 PR**：Release 打出来了但 GHCR 还没有对应镜像时，工作流直接失败。
+
+上游主动通知（可选，TelePost 侧配置）：
+
+```bash
+curl -X POST \
+  -H "Authorization: Bearer <token>" \
+  -H "Accept: application/vnd.github+json" \
+  https://api.github.com/repos/redtidev1918/pixivflow-telepost-deploy/dispatches \
+  -d '{"event_type":"telepost-release","client_payload":{"tag":"v2.79.0"}}'
+```
+
+### 合并前仍需人工确认
+
+自动化只负责「版本对齐 + 验证通过」，不替人判断兼容性：
+
+1. 看该版本 Release notes 是否有 Workflow Protocol / HTTP API 破坏性变更。
+2. 若协议升级涉及两侧，**先升执行端 PixivFlow，后升业务端 TelePost**（理由见上一节）。
+3. 合并后用 `./scripts/verify-images.sh` 复核线上镜像与仓库 pin 一致。
