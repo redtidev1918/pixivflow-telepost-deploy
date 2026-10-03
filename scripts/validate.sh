@@ -16,6 +16,14 @@ if [[ -f data/pixivflow/config.json ]]; then
   if python3 -m json.tool data/pixivflow/config.json >/dev/null; then ok "runtime PixivFlow JSON"; else fail "runtime PixivFlow JSON"; fi
 fi
 
+# TelePost 部署基线：versions.json 是唯一来源，所有模板必须由它生成。
+# 漂移（某个模板停在旧版本）会在这里先炸，比等到部署后才发现便宜得多。
+if python3 scripts/sync-telepost-baseline.py --check >/dev/null; then
+  ok "TelePost baseline (versions.json) matches every template"
+else
+  fail "TelePost baseline drifted from versions.json; run scripts/sync-telepost-baseline.py"
+fi
+
 if python3 -c 'import tomllib' >/dev/null 2>&1; then
   while IFS= read -r file; do
     if python3 - "$file" <<'PY'

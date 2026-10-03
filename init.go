@@ -7,10 +7,12 @@ package main
 import (
 	"bufio"
 	"embed"
+	"encoding/json"
 	"fmt"
 	"io/fs"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -26,14 +28,40 @@ import (
 //go:embed fly/deploy.pixivflow.toml
 var scaffold embed.FS
 
-// 与 docker-compose/.env 基线保持一致（发版时同步更新）。
-//
+//go:embed versions.json
+var versionsJSON []byte
+
+// TelePost 基线来自 versions.json——它是本仓库唯一的版本权威来源，
+// docker-compose.yml / .env.example / docker/*.Dockerfile / fly/deploy.telepost.toml
+// 的默认值都由 ./scripts/sync-telepost-baseline.py 从同一份文件生成。
+// 这里不再硬编码第二个版本号：脚手架写给第三方的 pin 必须和模板一致。
+var telepostBaseline = loadTelepostBaseline()
+
+func loadTelepostBaseline() string {
+	var doc struct {
+		Telepost struct {
+			Version string `json:"version"`
+			Tag     string `json:"tag"`
+			Image   string `json:"image"`
+		} `json:"telepost"`
+	}
+	if err := json.Unmarshal(versionsJSON, &doc); err != nil {
+		panic("versions.json 无法解析: " + err.Error())
+	}
+	v := doc.Telepost.Version
+	// 必须是不可变引用：latest / 分支名之类的浮动 tag 会让第三方脚手架
+	// 每次构建都指向不同的代码（见 deploy_test.go 的基线不可变性断言）。
+	if !regexp.MustCompile(`^\d+\.\d+\.\d+$`).MatchString(v) {
+		panic("versions.json 的 telepost.version 不是 X.Y.Z 发布版本: " + v)
+	}
+	return v
+}
+
 // Fly 拓扑只有一种：常驻的 TelePost 应用 + 独立的 PixivFlow 执行工作器。
 // 没有「同一容器里再拉起 PixivFlow」的合并拓扑，也没有平台侧按空闲推断停机的
 // autosleep 拓扑——后者会在下载进行中就停掉机器。
 const (
-	telepostBaseline = "2.17.6"
-	pixivBaseline    = "2.18.1"
+	pixivBaseline = "2.18.1"
 	// PixivFlow 的发布 tag 带 v 前缀。构建引用（PIXIVFLOW_REF）必须是发布 tag 或
 	// 40 位提交号：分支名会让镜像层缓存一直命中旧提交。
 	pixivBaselineRef = "v" + pixivBaseline
