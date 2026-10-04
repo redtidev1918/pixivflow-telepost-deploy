@@ -332,8 +332,8 @@ primary_region = 'iad'
     # 2.76.2 (2026-10-02): telepress 0.16.4 dependency bump (pagination
     # page-turn frequency reduced for long markdown payloads).
     # Rollback = 2.76.1.
-    # Pinned from versions.json (TelePost v2.79.0, synced 2026-10-03). Rollback = 2.78.1.
-    TELEPOST_IMAGE = 'ghcr.io/redtidev1918/telepost:2.79.0'
+    # Pinned from versions.json (TelePost v2.80.0, synced 2026-10-04). Rollback = 2.79.0.
+    TELEPOST_IMAGE = 'ghcr.io/redtidev1918/telepost:2.80.0'
 
 [[mounts]]
   source = 'data'
