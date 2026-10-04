@@ -1,11 +1,11 @@
 {
   "_comment": "TelePost 部署基线的唯一权威来源。docker-compose.yml / .env.example / docker/*.Dockerfile / fly/deploy.telepost.toml / init.go 的 TelePost 镜像默认值全部由本文件生成，用 ./scripts/sync-telepost-baseline.py 同步，用 go test ./... 的 TestTelepostBaseline* 守护。改版本号只改这里。",
   "telepost": {
-    "version": "2.79.0",
-    "tag": "v2.79.0",
-    "image": "ghcr.io/redtidev1918/telepost:2.79.0",
+    "version": "2.80.0",
+    "tag": "v2.80.0",
+    "image": "ghcr.io/redtidev1918/telepost:2.80.0",
     "minSupported": "2.71.0",
     "minSupportedNote": "Workflow Protocol v1 的最低兼容版本（协议 v1 自 TelePost 2.71.0 起可用）。这是「还能跑的下限」，不是默认部署版本；默认部署版本是上面的 version。",
-    "source": "https://github.com/redtidev1918/TelePost/releases/tag/v2.79.0"
+    "source": "https://github.com/redtidev1918/TelePost/releases/tag/v2.80.0"
   }
 }
