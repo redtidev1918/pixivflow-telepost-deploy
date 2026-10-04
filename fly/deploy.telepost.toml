@@ -297,7 +297,7 @@ primary_region = 'iad'
     # set MEDIA_PROXY_BASE_URL/HOSTS, so proxy rewriting was silently skipped
     # and every rich-novel Telegraph page went out text-only. The provider
     # assembly now bridges TelePost's media-proxy config into the library
-    # (explicit TELEPRESS_* still wins), telepress pin 0.16.4 adds a loud
+    # (explicit TELEPRESS_* still wins), telepress pin 0.17.0 adds a loud
     # warning when a manifest proxies to nothing, and the TELEPRESS_* env
     # stopgap below stays as belt-and-braces. Also carries 2.73.11 (per-bot
     # release version diagnostics). Rollback = 2.73.10.
@@ -329,7 +329,7 @@ primary_region = 'iad'
     # the IV card in the discussion thread. Multi-document caption trailing
     # form is preserved with the bare link as its own tail item.
     # Rollback = 2.76.0.
-    # 2.76.2 (2026-10-02): telepress 0.16.4 dependency bump (pagination
+    # 2.76.2 (2026-10-02): telepress dependency bump (pagination
     # page-turn frequency reduced for long markdown payloads).
     # Rollback = 2.76.1.
     # Pinned from versions.json (TelePost v2.80.0, synced 2026-10-04). Rollback = 2.79.0.
@@ -446,7 +446,6 @@ primary_region = 'iad'
 
 [[restart]]
   policy = 'always'
-
 
 
 
