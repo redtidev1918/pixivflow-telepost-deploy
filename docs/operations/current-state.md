@@ -15,6 +15,28 @@ Media code evolution: PixivFlow `src/domain/media/MediaAsset.ts` landed on maste
 
 TelePost RBAC 演化模型（root/sudoers/Role Binding）见 [telepost-rbac-evolution.md](../architecture/telepost-rbac-evolution.md)。代码级迁移计划（MediaAsset）见 [media-code-evolution-plan.md](../development/media-code-evolution-plan.md)。
 
+
+## 2026-10-07 小说阅读按钮缺失：TelePress 页面超限
+
+状态：IN_PROGRESS（上游修复测试通过，尚待发布与运行时验收）。
+
+- 线上 TelePost 2.81.1 / `aaa5869`，内嵌 TelePress 0.17.0。bot2 审核
+  #129（novel 29313228）已成功发布为 `https://t.me/voreShare/536`；
+  `publication_previews` 为 failed / 空 URL，所以没有 root 阅读按钮。
+- 持久日志明确记录 `Failed to publish Part 1/2 after 5 attempts: CONTENT_TOO_BIG`。
+  相邻小说的 preview 均 succeeded，排除全局功能禁用和按钮字段透传缺陷。
+- 根因在 TelePress：20,000 源字符目标没有检查转换后的 UTF-8 节点 JSON 大小；
+  中文、短段落及格式节点使单页超过 Telegraph content 上限。
+- 上游 [TelePress PR #73](https://github.com/redtidev1918/TelePress/pull/73)
+  复用既有 renderer/client：正文按 60 KiB 分页，保留文本与格式，导航后二次
+  校验 64 KiB；全页索引过大时使用紧凑索引，CONTENT_TOO_BIG 不重试相同请求。
+  官方依据：[Telegraph API](https://telegra.ph/api)。
+- 本地上游全量测试：429 passed / 1 skipped（libvips BMP loader），coverage 81.67%。
+- 恢复只针对 publication enrichment：生成阅读页、持久化成功 URL，再编辑消息
+  536 的 reply_markup；不重新投稿或重新批准，不修改已成功的 publication ledger。
+  recovery started/completed 审计关联 review 129 与 publication key；成功 URL
+  在按钮编辑前落库，重入只复用 URL。回滚镜像基线为 TelePost 2.81.1。
+
 ---
 
 # 1. Status Vocabulary
