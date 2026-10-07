@@ -1,6 +1,6 @@
 # PixivFlow Ecosystem Current Production State
 
-Snapshot: 2026-09-29
+Snapshot: 2026-10-07
 Authority: Current production evidence overrides this file
 
 本文件保存动态状态。
@@ -18,9 +18,9 @@ TelePost RBAC 演化模型（root/sudoers/Role Binding）见 [telepost-rbac-evol
 
 ## 2026-10-07 小说阅读按钮缺失：TelePress 页面超限
 
-状态：IN_PROGRESS（上游修复测试通过，尚待发布与运行时验收）。
+状态：VERIFIED（上游发版、生产部署、原帖按钮与真实阅读页均已验收）。
 
-- 线上 TelePost 2.81.1 / `aaa5869`，内嵌 TelePress 0.17.0。bot2 审核
+- 故障时线上 TelePost 2.81.1 / `aaa5869`，内嵌 TelePress 0.17.0。bot2 审核
   #129（novel 29313228）已成功发布为 `https://t.me/voreShare/536`；
   `publication_previews` 为 failed / 空 URL，所以没有 root 阅读按钮。
 - 持久日志明确记录 `Failed to publish Part 1/2 after 5 attempts: CONTENT_TOO_BIG`。
@@ -32,10 +32,53 @@ TelePost RBAC 演化模型（root/sudoers/Role Binding）见 [telepost-rbac-evol
   校验 64 KiB；全页索引过大时使用紧凑索引，CONTENT_TOO_BIG 不重试相同请求。
   官方依据：[Telegraph API](https://telegra.ph/api)。
 - 本地上游全量测试：429 passed / 1 skipped（libvips BMP loader），coverage 81.67%。
-- 恢复只针对 publication enrichment：生成阅读页、持久化成功 URL，再编辑消息
-  536 的 reply_markup；不重新投稿或重新批准，不修改已成功的 publication ledger。
-  recovery started/completed 审计关联 review 129 与 publication key；成功 URL
-  在按钮编辑前落库，重入只复用 URL。回滚镜像基线为 TelePost 2.81.1。
+- 上游 PR #73、[发版 PR #74](https://github.com/redtidev1918/TelePress/pull/74)、
+  [文档 PR #75](https://github.com/redtidev1918/TelePress/pull/75) 均已合并。
+  [TelePress 0.17.1](https://github.com/redtidev1918/TelePress/releases/tag/v0.17.1)
+  的 tag 指向 `9fc83fbf03bc387ea2b4e903902cfc1847081012`，wheel/sdist/checksums
+  已发布，PyPI 精确版本返回 200，发布流水线成功。
+- TelePost [依赖 PR #301](https://github.com/redtidev1918/TelePost/pull/301) 与
+  [发版 PR #302](https://github.com/redtidev1918/TelePost/pull/302) 已合并。
+  [2.81.2](https://github.com/redtidev1918/TelePost/releases/tag/v2.81.2) tag / 双架构
+  GHCR revision 均为 `fe54cff6f7c29803ef93979e13e5127b400b999e`；正式 Release、
+  三平台产物、PyPI 和所有 post-release actions 均成功（Release run 37582280930）。
+  TelePost CI 全量 1324 passed / 1 skipped；网页、浏览器和三平台构建检查均通过。
+- 部署 [PR #217](https://github.com/redtidev1918/pixivflow-telepost-deploy/pull/217)
+  固定独立 TelePress 0.17.1；`telepress-publish` 的 machine `84edd6dc154028`
+  实际 import 版本为 0.17.1，镜像 digest 为
+  `sha256:df9de6c713ecf66fd26a863f83edcf61bf43b22cee0e389e32de6060c53ad4d1`。
+  本机 GET `/` 200，无鉴权 POST `/publish/text` 401；保持私网与按需停机拓扑。
+- 部署 [PR #218](https://github.com/redtidev1918/pixivflow-telepost-deploy/pull/218)
+  已合并，`versions.json` 与全部派生模板均固定 TelePost 2.81.2。
+  [自动生产部署](https://github.com/redtidev1918/TelePost/actions/runs/37584114928)
+  成功；machine `683032ec6617e8` started / 512 MiB，实际镜像
+  `ghcr.io/redtidev1918/telepost:2.81.2`，amd64 digest 为
+  `sha256:7654be19477785a0dc910575ec31362ca0bb5116a05213dcbe7595191a7f10b6`。
+  OCI index digest 为 `sha256:fa9be21251bd1437db5ed1e3e1a9677776325de9bf00262e3053c7674fa824a5`。
+  `/health` version/commit 与 release 一致，`telepress_version=0.17.1`，bots `[1,2]`；
+  `/ready` 两个 bot 均 true，两条 per-bot API health 均 200 / 2.81.2。
+- 真实恢复只针对既有 publication enrichment，复用 TelePost 的 TXT resolver、
+  NovelPreviewEnricher、preview repository 与导航 markup；保存成功 URL 后编辑原消息
+  536。Telegram 返回的原消息包含目标 URL，`button_verified=true`。
+  `publication_previews` 已 succeeded；review 与 delivery ledger 仍 published / 536。
+  `publication.preview_recovery_started/completed` 审计已落库，execution_id 为
+  `novel-preview-repair:129:2026-10-07`；远程临时恢复脚本已清理。
+- 阅读页共 3 页，公开页面与 getPage 均 200，上/下一页双向链接与索引完整。
+  getPage 返回节点 JSON 的 UTF-8 大小为 62,485 / 6,304 / 47,453 bytes（全部低于 64 KiB）；
+  验收只输出大小和导航元数据，未记录小说正文或凭据。
+- 生产配置自检、smoke-telepost 与基线同步后的 verify-production 均通过。
+  webhook 归属已在机器内核对；Cloudflare 时钟 SKIP 为缺少只读凭据，未修改时钟。
+  架构仍由 TelePress 拥有分页，TelePost 拥有预览 enrichment 与频道发布；本次没有
+  投稿 API 字段、审核语义或 CONTRACT 的变更。
+- 回滚：按 `fly/deploy.telepost.toml` 部署
+  `ghcr.io/redtidev1918/telepost:2.81.1`，保持现有数据卷。部署前 volume
+  `vol_4y5e58mylle1nnjr` 快照 `vs_xx6OLgVaqO9SwbRAzb6JwB`
+  （2026-10-07T06:12:33Z）已保留。已成功的阅读页 URL 与原帖不随代码回滚清除。
+
+关联 KNOWN_DEBT（P2，PyPI 升级路径）：TelePost 2.81.2 的 wheel metadata 仍声明
+`telepress>=0.17.0`，已有 0.17.0 的 pip 环境可能不自动升级。当前生产的
+`requirements.txt`、部署 pin 和运行时都为 0.17.1，本次生产故障已恢复；后续上游
+包装改动应同步 `pyproject.toml` 的最低依赖与版本检查，避免 pip 客户端保留旧分页实现。
 
 ---
 
@@ -66,7 +109,15 @@ TelePost RBAC 演化模型（root/sudoers/Role Binding）见 [telepost-rbac-evol
 最近明确记录的生产 baseline：
 
 ```text
-TelePost: 2.74.0 / 78a645454e9aebefefbed802a2d2094d7199e93b — VERIFIED
+TelePost: 2.81.2 / fe54cff6f7c29803ef93979e13e5127b400b999e — VERIFIED
+  (TelePress 0.17.1 rendered-byte pagination; GHCR revision == release commit;
+   deploy pin PR #218, automatic Fly deployment onto machine 683032ec6617e8;
+   /health + /ready + per-bot API health verified. Original bot2 review #129
+   remains published at message 536; successful preview + online-reading button
+   recovered, all 3 public reading pages and bidirectional navigation verified.
+   Rollback = 2.81.1. Detailed evidence and packaging debt are in the incident
+   section above.)
+TelePost: 2.74.0 / 78a645454e9aebefefbed802a2d2094d7199e93b — SUPERSEDED
   (Mini App review-queue empty state explains itself: up to three recent
    terminal records + review-history link, silent degrade on peek failure;
    pure frontend, zero API contract change. GHCR 2.74.0 revision == release
