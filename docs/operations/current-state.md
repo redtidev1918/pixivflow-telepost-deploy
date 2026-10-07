@@ -16,6 +16,57 @@ Media code evolution: PixivFlow `src/domain/media/MediaAsset.ts` landed on maste
 TelePost RBAC 演化模型（root/sudoers/Role Binding）见 [telepost-rbac-evolution.md](../architecture/telepost-rbac-evolution.md)。代码级迁移计划（MediaAsset）见 [media-code-evolution-plan.md](../development/media-code-evolution-plan.md)。
 
 
+## 2026-10-07 TelePost README 与发布耗时优化
+
+状态：VERIFIED（正式发版、部署基线和运行时已核对）。
+
+- [TelePost PR #303](https://github.com/redtidev1918/TelePost/pull/303) 整理中英文
+  README 的安装入口、虚拟环境、首次投稿步骤和审核规则，修正 Docsify 下载页链接。
+  聊天投稿默认直发、API 必须审核、Mini App 独立审核开关的语义未变。
+- 根因是双架构镜像重复在 QEMU 下安装和编译静态前端，以及变化的发布 ARG
+  在 apt/pip 之前声明导致依赖缓存失效。前端改用 `$BUILDPLATFORM`，Python wheels
+  仍按目标架构构建；版本、提交和日期参数移至依赖层之后。
+- 复用已发布的 [ReleaseGraph 1.5.18](https://github.com/redtidev1918/releasegraph/releases/tag/v1.5.18)，
+  固定提交 `a3c070f1b2ea89784027fd09e71c845fb0329923`，采用 Go 缓存和单次引擎构建；
+  无须另做上游实现。TelePost 仍先完成测试，再并行构建三平台产物。
+  官方依据和缓存维护说明见 [TelePost OPERATIONS](https://github.com/redtidev1918/TelePost/blob/main/docs/OPERATIONS.md)。
+- 原 2.81.2 镜像存在 `/app/.releasegraph/.git/config`；检查仅核对文件存在，未读取内容。
+  [发版 PR #304](https://github.com/redtidev1918/TelePost/pull/304) 排除发布工具目录和嵌套
+  Git 目录，避免构建工作区进入运行时。新镜像中 `.releasegraph`、其 `.git/config`、
+  `.releasegraph-engine`、`.release-please-action` 均不存在。
+- 本地全量测试 1316 passed / 2 skipped；ReleaseGraph 工作流测试 47 passed。
+  PR 全量 Python、网页、浏览器和三平台构建检查通过。
+  [实际镜像回归检查](https://github.com/redtidev1918/TelePost/actions/runs/37587629928)
+  连续构建两个发布信息不同的镜像，第二次 apt、pip wheels、pip install、npm ci
+  和网页构建均 CACHED；启动镜像确认新版本信息、依赖可导入和模拟发布工具目录被排除。
+- [2.81.3 正式 Release](https://github.com/redtidev1918/TelePost/actions/runs/37588198303)
+  全部成功：三平台下载产物、校验文件、双架构 GHCR、PyPI、下载页、Fly 部署、
+  Pages 和部署仓库通知。完整执行耗时由 2.81.2 的 21m16s 降至 15m38s（减少 26.5%）；
+  GHCR 阶段由 9m47s 降至 4m01s（减少 58.9%）；post-release actions 为 3m50s。
+  口径为首个非跳过 job 开始至最后 job 完成，不含触发前排队。
+  这是一次正式发布的观察值；新层首次构建仍有冷缓存成本，网络和排队也影响耗时，
+  不把所有变化归因于单一优化，不承诺未来每次固定耗时。
+- [2.81.3](https://github.com/redtidev1918/TelePost/releases/tag/v2.81.3) tag、双架构
+  OCI revision 和运行时 commit 均为 `b53cb9c8695a35deb95b0c7a67eb2c10ce9a2414`。
+  OCI index 为 `sha256:7ec81f5096bc56c5ae26f0699f3b663483cca9acf3f73451af610ba85ffc74bc`；
+  amd64 为 `sha256:8c444b8445206cd68db35bf3df69839b7d06aea392d5d72728f9a27b1ac6a8ad`。
+  [部署 PR #220](https://github.com/redtidev1918/pixivflow-telepost-deploy/pull/220)
+  已合并，`versions.json` 和全部派生模板固定 2.81.3。
+- [自动生产部署](https://github.com/redtidev1918/TelePost/actions/runs/37589648265) 成功；
+  machine `683032ec6617e8` started / 512 MiB，运行上述 amd64 镜像。
+  `/health` 为 2.81.3 / 预期 commit / TelePress 0.17.1 / bots `[1,2]`，
+  `/ready` 两个 bot 均 true，两个 per-bot API health 均 200 / 2.81.3。
+  只读持久状态核对：原 bot2 review #129 和 delivery ledger 仍 published / 536，
+  novel preview 仍 succeeded / 非空 URL；本次没有再次发布或编辑原帖。
+- 基线同步后的 `smoke-telepost.sh` 与 `verify-production.sh` 均通过。两条投稿 API
+  无令牌返回 401；webhook 归属在机器内核对通过。Cloudflare 时钟因缺只读凭据
+  SKIP，不视为已验证，也未修改外部时钟。
+- 架构、投稿 API、审核语义、数据库和生产配置没有变更；AGENTS 与 CONTRACT 无需修改。
+  下方既有 PyPI 最低 TelePress 依赖 KNOWN_DEBT 仍保留。
+- 回滚：使用 `ghcr.io/redtidev1918/telepost:2.81.2` 和现有数据卷。
+  上线前快照 `vs_K1o5aPLnJ5Qfyy8x2Zp7BZG` 已 created，
+  volume `vol_4y5e58mylle1nnjr`，时间 `2026-10-07T07:28:56Z`，保留 5 天。
+
 ## 2026-10-07 小说阅读按钮缺失：TelePress 页面超限
 
 状态：VERIFIED（上游发版、生产部署、原帖按钮与真实阅读页均已验收）。
@@ -109,7 +160,13 @@ TelePost RBAC 演化模型（root/sudoers/Role Binding）见 [telepost-rbac-evol
 最近明确记录的生产 baseline：
 
 ```text
-TelePost: 2.81.2 / fe54cff6f7c29803ef93979e13e5127b400b999e — VERIFIED
+TelePost: 2.81.3 / b53cb9c8695a35deb95b0c7a67eb2c10ce9a2414 — VERIFIED
+  (README quickstart + ReleaseGraph 1.5.18 + native static frontend + stable
+   dependency cache; release 15m38s, GHCR 4m01s. Deploy pin PR #220;
+   machine 683032ec6617e8 / health / readiness / per-bot APIs verified;
+   embedded TelePress 0.17.1; original review #129 remains published at 536
+   with succeeded preview. Rollback = 2.81.2. Evidence above.)
+TelePost: 2.81.2 / fe54cff6f7c29803ef93979e13e5127b400b999e — SUPERSEDED
   (TelePress 0.17.1 rendered-byte pagination; GHCR revision == release commit;
    deploy pin PR #218, automatic Fly deployment onto machine 683032ec6617e8;
    /health + /ready + per-bot API health verified. Original bot2 review #129
