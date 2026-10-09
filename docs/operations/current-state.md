@@ -18,7 +18,7 @@ TelePost RBAC 演化模型（root/sudoers/Role Binding）见 [telepost-rbac-evol
 
 ## 2026-10-09 在线阅读中间短页与正文完整性核对
 
-状态：IN_PROGRESS（修复 PR 已创建，尚未发版或部署）。
+状态：IN_PROGRESS（修复 PR #76 与 0.17.2 发版 PR #77 已合并，待产物与部署）。
 
 - bot1 review #175 / channel message 3206 的线上阅读页共 9 页，正文字符数
   19206 / 594 / 18504 / 1184 / 18521 / 1211 / 18676 / 1109 / 3890。
@@ -27,7 +27,9 @@ TelePost RBAC 演化模型（root/sudoers/Role Binding）见 [telepost-rbac-evol
 - 只读下载已发布投稿的 Telegram TXT，按完整文档与旧分块方式分别渲染；
   两者与线上 9 页去掉导航后合并的正文均为 82,895 字符，SHA-256 均为
   `bb4b18a90182bbc256785c9c00b9012fe41efa7335db0a340dd939a39eec141c`。
-  证明投稿 TXT → 阅读页无缺字；未声称验证 Pixiv 源站 → 投稿 TXT 的上游抓取。
+  证明投稿 TXT → 阅读页无缺字。进一步只读查询 Pixiv 源站正文：
+  83,408 原始字符，去空白后 82,561 字符完整、有序出现在阅读页正文中；
+  完整渲染后的源站正文也与阅读页的连续子串逐字匹配。该案例未发现源文丢失。
   TXT 原始 83,756 字符 / 248,750 bytes，包含换行和格式字符。
 - [TelePress PR #76](https://github.com/redtidev1918/TelePress/pull/76)
   完整渲染一次，以正文字符与节点 JSON 字节预算统一分页，保留跨旧边界的 Markdown。
