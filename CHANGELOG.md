@@ -3,6 +3,13 @@
 > 发布说明面向普通用户：写「对用户有什么改变」，不写内部实现细节（模块名、CI job、配置键）；
 > 技术细节放进代码注释或 `docs/`。每个 Release 的正文由本文件对应版本段自动生成。
 
+## [1.14.1](https://github.com/redtidev1918/pixivflow-telepost-deploy/compare/v1.14.0...v1.14.1) (2026-10-09)
+
+
+### Bug Fixes
+
+* **deploy:** pin TelePress 0.17.2 pagination repair ([#224](https://github.com/redtidev1918/pixivflow-telepost-deploy/issues/224)) ([9790c07](https://github.com/redtidev1918/pixivflow-telepost-deploy/commit/9790c07db21b95ae5082b75903a4baa2114b261d))
+
 ## [1.14.0](https://github.com/redtidev1918/pixivflow-telepost-deploy/compare/v1.13.0...v1.14.0) (2026-10-07)
 
 
