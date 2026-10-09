@@ -1,6 +1,6 @@
 # PixivFlow Ecosystem Current Production State
 
-Snapshot: 2026-10-07
+Snapshot: 2026-10-09
 Authority: Current production evidence overrides this file
 
 本文件保存动态状态。
@@ -18,7 +18,7 @@ TelePost RBAC 演化模型（root/sudoers/Role Binding）见 [telepost-rbac-evol
 
 ## 2026-10-09 在线阅读中间短页与正文完整性核对
 
-状态：IN_PROGRESS（修复 PR #76 与 0.17.2 发版 PR #77 已合并，待产物与部署）。
+状态：VERIFIED（上游发版、两个生产应用、部署基线与独立复核均已完成）。
 
 - bot1 review #175 / channel message 3206 的线上阅读页共 9 页，正文字符数
   19206 / 594 / 18504 / 1184 / 18521 / 1211 / 18676 / 1109 / 3890。
@@ -31,6 +31,15 @@ TelePost RBAC 演化模型（root/sudoers/Role Binding）见 [telepost-rbac-evol
   83,408 原始字符，去空白后 82,561 字符完整、有序出现在阅读页正文中；
   完整渲染后的源站正文也与阅读页的连续子串逐字匹配。该案例未发现源文丢失。
   TXT 原始 83,756 字符 / 248,750 bytes，包含换行和格式字符。
+- 独立复核（不依赖上游测试，mock Telegraph client，不创建真实页面）：
+  用同一份 Pixiv 原稿分别在 TelePress 0.17.1 与 0.17.2 下发布，
+  两版渲染正文均为 82,561 字符且**逐字一致**——「漏字」假设不成立，
+  差异只在分页。0.17.1 = 9 页
+  19283 / 414 / 18473 / 1282 / 18359 / 1412 / 18721 / 911 / 3706（4 个短页）；
+  0.17.2 = 5 页 19283 / 18562 / 18510 / 18727 / 7479，无短页，
+  最大页 61,406 bytes ≤ 61,440（Telegraph body 上限）。
+  同一复核对发布出来的 0.17.2 wheel（SHA-256 与 `SHA256SUMS` 一致）重复通过，
+  证明修复在**发行产物**中生效，而不只是源码树里生效。
 - [TelePress PR #76](https://github.com/redtidev1918/TelePress/pull/76)
   完整渲染一次，以正文字符与节点 JSON 字节预算统一分页，保留跨旧边界的 Markdown。
   复用现有 renderer / paginator / Telegraph client；依据仍为 Telegraph 官方
@@ -38,8 +47,31 @@ TelePost RBAC 演化模型（root/sudoers/Role Binding）见 [telepost-rbac-evol
 - 正文完整性、密集分页、长格式段落和认证 `/publish/text` 路径新增回归；
   旧实现上复现失败，新分页套件 9 passed。Windows 全量 429 passed / 1 skipped /
   2 failed，两处图片测试失败在未修改基线上复现；Linux CI 为全量发布门禁。
-- 计划同步独立服务 pin 与 TelePost requirements/PyPI 最低依赖，防止 pip
-  升级保留旧分页实现。已有发布 URL 和 review/delivery 数据未改写。
+- [TelePress 0.17.2 正式 Release](https://github.com/redtidev1918/TelePress/releases/tag/v0.17.2)
+  产物齐备：wheel / sdist / `SHA256SUMS` / `RELEASE-METADATA.json`，PyPI 亦有
+  两个发行包；wheel 校验和与 `SHA256SUMS` 一致。
+- 上线证据（两个生产应用，均运行 0.17.2）：
+  - `telepress-publish`（独立服务，PixivFlow rich-novel 路径）：release v15，
+    机器内 `import telepress` 报 0.17.2。
+  - `telesubmit-multi-bot`：TelePost 发布流水线的
+    [Deploy to Fly.io production](https://github.com/redtidev1918/TelePost/actions/runs/37866787761)
+    自动部署 2.81.4（`ghcr.io/redtidev1918/telepost:2.81.4`）。
+    `/health` = version 2.81.4 / commit `78fae88` / `telepress_version` 0.17.2 /
+    bots `[1,2]`；`/ready` bot1 与 bot2 均为 true。
+  - 部署仓库基线 `versions.json` 与全部派生模板固定 2.81.4（PR #227）。
+- 顺带修复一处此前无人看管的漂移：`docker/telepost.Dockerfile` 的
+  `ARG TELEPRESS_VERSION` 停在 0.17.0，而跨仓契约只读
+  `docker/telepress.Dockerfile`，因此 compose / scaffold 路径会继续使用
+  修复前的分页实现。PR #226 把 overlay 默认值抬到 0.17.2，并让部署契约测试
+  从 service pin 推导期望（旧值上复现失败）；TelePost PR #307 让跨仓检查
+  同时校验两个 deploy pin，而不是只校验第一个匹配。
+- TelePress PR #79 修掉一处测试自身的不隔离：认证 `/publish/text` 回归
+  会读写真实 `~/.telepress_cache.json`，在同一台机器上第二次连续运行时
+  静默短路成缓存命中（`assert 0 > 1`），CI 因 home 目录干净而从不见到。
+  现在该测试使用独立缓存文件，连续三次运行均 9 passed。
+- 边界与未做：既有已发布阅读页**不会**因升级自动重排，本次没有编辑任何既有
+  频道帖或 Telegraph 页面；`publication_previews` 的终态复用语义未改。
+  未验证 Pixiv 源站抓取阶段的通用完整性，只核对了本案这一篇。
 - 回滚基线：TelePress 0.17.1、TelePost 2.81.3；保持数据卷和既有 URL。
 
 ## 2026-10-07 TelePost README 与发布耗时优化
