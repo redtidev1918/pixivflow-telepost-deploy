@@ -332,8 +332,9 @@ TelePress 的**部署基线不在本仓**（独立服务从 PyPI 装包；TelePo
 守护这两侧的是两个测试，两边都要绿：
 
 ```text
-TelePost 仓   scripts/verify_telepress_version_sync.py   （Version sync check CI）
+TelePost 仓   verify_telepress_version_sync.py   （Version sync check CI）
               读 TelePost requirements.txt，比对本仓两个 Dockerfile 的 pin
+              https://github.com/redtidev1918/TelePost/blob/main/scripts/verify_telepress_version_sync.py
 本仓           control-plane/test/deployment-contract.test.ts
               从 service pin 推导期望，要求 overlay pin 与它一致
 ```
