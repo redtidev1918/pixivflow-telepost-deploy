@@ -16,6 +16,30 @@ Media code evolution: PixivFlow `src/domain/media/MediaAsset.ts` landed on maste
 TelePost RBAC 演化模型（root/sudoers/Role Binding）见 [telepost-rbac-evolution.md](../architecture/telepost-rbac-evolution.md)。代码级迁移计划（MediaAsset）见 [media-code-evolution-plan.md](../development/media-code-evolution-plan.md)。
 
 
+## 2026-10-09 在线阅读中间短页与正文完整性核对
+
+状态：IN_PROGRESS（修复 PR 已创建，尚未发版或部署）。
+
+- bot1 review #175 / channel message 3206 的线上阅读页共 9 页，正文字符数
+  19206 / 594 / 18504 / 1184 / 18521 / 1211 / 18676 / 1109 / 3890。
+  根因是 TelePress 0.17.1 先按 20,000 源字符切块，再逐块按字节分页，
+  每块溢出的短尾页被固定留在正文中间。
+- 只读下载已发布投稿的 Telegram TXT，按完整文档与旧分块方式分别渲染；
+  两者与线上 9 页去掉导航后合并的正文均为 82,895 字符，SHA-256 均为
+  `bb4b18a90182bbc256785c9c00b9012fe41efa7335db0a340dd939a39eec141c`。
+  证明投稿 TXT → 阅读页无缺字；未声称验证 Pixiv 源站 → 投稿 TXT 的上游抓取。
+  TXT 原始 83,756 字符 / 248,750 bytes，包含换行和格式字符。
+- [TelePress PR #76](https://github.com/redtidev1918/TelePress/pull/76)
+  完整渲染一次，以正文字符与节点 JSON 字节预算统一分页，保留跨旧边界的 Markdown。
+  复用现有 renderer / paginator / Telegraph client；依据仍为 Telegraph 官方
+  64 KB content 契约，不引入新发布器或业务状态。
+- 正文完整性、密集分页、长格式段落和认证 `/publish/text` 路径新增回归；
+  旧实现上复现失败，新分页套件 9 passed。Windows 全量 429 passed / 1 skipped /
+  2 failed，两处图片测试失败在未修改基线上复现；Linux CI 为全量发布门禁。
+- 计划同步独立服务 pin 与 TelePost requirements/PyPI 最低依赖，防止 pip
+  升级保留旧分页实现。已有发布 URL 和 review/delivery 数据未改写。
+- 回滚基线：TelePress 0.17.1、TelePost 2.81.3；保持数据卷和既有 URL。
+
 ## 2026-10-07 TelePost README 与发布耗时优化
 
 状态：VERIFIED（正式发版、部署基线和运行时已核对）。
