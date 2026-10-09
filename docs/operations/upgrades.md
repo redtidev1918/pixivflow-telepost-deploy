@@ -223,14 +223,15 @@ docker compose up -d --no-deps --force-recreate stack
 
 ### 唯一来源
 
-TelePost 的默认部署版本只有一个权威来源：`versions.json`。
+TelePost 的默认部署版本只有一个权威来源：`versions.json`。文件结构如下
+（下面的版本号是**格式示例**，不是当前值；当前值永远以仓库里的 `versions.json` 为准）：
 
 ```json
 {
   "telepost": {
-    "version": "2.78.0",
-    "tag": "v2.78.0",
-    "image": "ghcr.io/redtidev1918/telepost:2.78.0",
+    "version": "X.Y.Z",
+    "tag": "vX.Y.Z",
+    "image": "ghcr.io/redtidev1918/telepost:X.Y.Z",
     "minSupported": "2.71.0"
   }
 }
