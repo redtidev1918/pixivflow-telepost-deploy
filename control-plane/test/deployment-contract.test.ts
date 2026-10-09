@@ -243,6 +243,19 @@ describe('telepress service topology', () => {
       /pip install[^\n]+"telepress\[api\]==0\.17\.2"/,
     );
   });
+
+  it('layers the same TelePress release over the immutable TelePost image', () => {
+    // Two pins name the same runtime package, so they can drift apart: the
+    // overlay default stayed on 0.17.0 while the service moved to 0.17.2, and a
+    // compose deployment would have kept the broken pagination. Derive the
+    // expectation from the service pin instead of repeating the version.
+    const service = read('docker/telepress.Dockerfile');
+    const pinned = service.match(/telepress\[api\]==([0-9][0-9.]*)/)?.[1];
+    expect(pinned, 'docker/telepress.Dockerfile has no telepress[api]== pin').toBeTruthy();
+    expect(read('docker/telepost.Dockerfile')).toMatch(
+      new RegExp(`ARG TELEPRESS_VERSION=${pinned!.replace(/\./g, '\\.')}\\b`),
+    );
+  });
 });
 
 describe('telepost service topology', () => {
