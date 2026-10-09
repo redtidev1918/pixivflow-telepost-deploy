@@ -1,24 +1,24 @@
 <!-- docsite-release-repo: redtidev1918/pixivflow-telepost-deploy -->
-<!-- docsite-release-tag: v1.14.1 -->
+<!-- docsite-release-tag: v1.14.2 -->
 # 📥 Download pixivflow-telepost-deploy
 
 **Language / 语言:** [中文](/download.md) · English
 
-<!-- docsite: generated from redtidev1918/pixivflow-telepost-deploy release v1.14.1; do not edit by hand -->
+<!-- docsite: generated from redtidev1918/pixivflow-telepost-deploy release v1.14.2; do not edit by hand -->
 
 This page is **generated automatically** by GitHub Actions on every release and always points at the latest one.
 
-## Latest version: `v1.14.1` (2026-10-09)
+## Latest version: `v1.14.2` (2026-10-09)
 
-👉 [Release notes and checksums](https://github.com/redtidev1918/pixivflow-telepost-deploy/releases/tag/v1.14.1)
+👉 [Release notes and checksums](https://github.com/redtidev1918/pixivflow-telepost-deploy/releases/tag/v1.14.2)
 
 | Platform | File | Size | Download |
 |---|---|---|---|
-| Linux · amd64 | `deploy-linux-amd64.tar.gz` | 2.4 MB | [⬇️ Download](https://github.com/redtidev1918/pixivflow-telepost-deploy/releases/download/v1.14.1/deploy-linux-amd64.tar.gz) |
-| Linux · arm64 | `deploy-linux-arm64.tar.gz` | 2.2 MB | [⬇️ Download](https://github.com/redtidev1918/pixivflow-telepost-deploy/releases/download/v1.14.1/deploy-linux-arm64.tar.gz) |
-| Windows · amd64 | `deploy-windows-amd64.tar.gz` | 2.4 MB | [⬇️ Download](https://github.com/redtidev1918/pixivflow-telepost-deploy/releases/download/v1.14.1/deploy-windows-amd64.tar.gz) |
-| Windows · arm64 | `deploy-windows-arm64.tar.gz` | 2.2 MB | [⬇️ Download](https://github.com/redtidev1918/pixivflow-telepost-deploy/releases/download/v1.14.1/deploy-windows-arm64.tar.gz) |
-| macOS · amd64 | `deploy-darwin-amd64.tar.gz` | 2.4 MB | [⬇️ Download](https://github.com/redtidev1918/pixivflow-telepost-deploy/releases/download/v1.14.1/deploy-darwin-amd64.tar.gz) |
-| macOS · arm64 | `deploy-darwin-arm64.tar.gz` | 2.2 MB | [⬇️ Download](https://github.com/redtidev1918/pixivflow-telepost-deploy/releases/download/v1.14.1/deploy-darwin-arm64.tar.gz) |
-| 通用 | `RELEASE-METADATA.json` | 3 KB | [⬇️ Download](https://github.com/redtidev1918/pixivflow-telepost-deploy/releases/download/v1.14.1/RELEASE-METADATA.json) |
-| 通用 | `SHA256SUMS` | 1 KB | [⬇️ Download](https://github.com/redtidev1918/pixivflow-telepost-deploy/releases/download/v1.14.1/SHA256SUMS) |
+| Linux · amd64 | `deploy-linux-amd64.tar.gz` | 2.4 MB | [⬇️ Download](https://github.com/redtidev1918/pixivflow-telepost-deploy/releases/download/v1.14.2/deploy-linux-amd64.tar.gz) |
+| Linux · arm64 | `deploy-linux-arm64.tar.gz` | 2.2 MB | [⬇️ Download](https://github.com/redtidev1918/pixivflow-telepost-deploy/releases/download/v1.14.2/deploy-linux-arm64.tar.gz) |
+| Windows · amd64 | `deploy-windows-amd64.tar.gz` | 2.4 MB | [⬇️ Download](https://github.com/redtidev1918/pixivflow-telepost-deploy/releases/download/v1.14.2/deploy-windows-amd64.tar.gz) |
+| Windows · arm64 | `deploy-windows-arm64.tar.gz` | 2.2 MB | [⬇️ Download](https://github.com/redtidev1918/pixivflow-telepost-deploy/releases/download/v1.14.2/deploy-windows-arm64.tar.gz) |
+| macOS · amd64 | `deploy-darwin-amd64.tar.gz` | 2.4 MB | [⬇️ Download](https://github.com/redtidev1918/pixivflow-telepost-deploy/releases/download/v1.14.2/deploy-darwin-amd64.tar.gz) |
+| macOS · arm64 | `deploy-darwin-arm64.tar.gz` | 2.2 MB | [⬇️ Download](https://github.com/redtidev1918/pixivflow-telepost-deploy/releases/download/v1.14.2/deploy-darwin-arm64.tar.gz) |
+| 通用 | `RELEASE-METADATA.json` | 3 KB | [⬇️ Download](https://github.com/redtidev1918/pixivflow-telepost-deploy/releases/download/v1.14.2/RELEASE-METADATA.json) |
+| 通用 | `SHA256SUMS` | 1 KB | [⬇️ Download](https://github.com/redtidev1918/pixivflow-telepost-deploy/releases/download/v1.14.2/SHA256SUMS) |
