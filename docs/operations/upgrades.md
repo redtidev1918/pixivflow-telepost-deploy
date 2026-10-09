@@ -316,3 +316,43 @@ curl -X POST \
 1. 看该版本 Release notes 是否有 Workflow Protocol / HTTP API 破坏性变更。
 2. 若协议升级涉及两侧，**先升执行端 PixivFlow，后升业务端 TelePost**（理由见上一节）。
 3. 合并后用 `./scripts/verify-images.sh` 复核线上镜像与仓库 pin 一致。
+
+## TelePress 版本：一个包，三处 pin
+
+TelePress 的**部署基线不在本仓**（独立服务从 PyPI 装包；TelePost 镜像自带同一个包），
+但同一个版本号在本仓和 TelePost 仓里被写了三处。升级时三处必须**同时**改：
+
+| 位置 | 声明 | 作用 |
+| --- | --- | --- |
+| TelePost `requirements.txt` | `telepress==X.Y.Z` | 权威来源；决定 TelePost 镜像里实际装哪个版本 |
+| TelePost `pyproject.toml` | `telepress>=X.Y.Z` | PyPI 最低依赖，防止 `pip install -U` 把旧实现留在原地 |
+| 本仓 `docker/telepress.Dockerfile` | `telepress[api]==X.Y.Z` | 独立服务 `telepress-publish` 的运行时身份 |
+| 本仓 `docker/telepost.Dockerfile` | `ARG TELEPRESS_VERSION=X.Y.Z` | 把 TelePress 覆盖到不可变 TelePost 镜像上的 compose / scaffold 路径 |
+
+守护这两侧的是两个测试，两边都要绿：
+
+```text
+TelePost 仓   scripts/verify_telepress_version_sync.py   （Version sync check CI）
+              读 TelePost requirements.txt，比对本仓两个 Dockerfile 的 pin
+本仓           control-plane/test/deployment-contract.test.ts
+              从 service pin 推导期望，要求 overlay pin 与它一致
+```
+
+升级顺序：
+
+```text
+TelePress 发新版本（上游 Release PR → vX.Y.Z + PyPI）
+      ↓
+TelePost：requirements.txt + pyproject.toml 改 pin → PR（契约检查会先红后绿）
+      ↓
+本仓：docker/telepress.Dockerfile + docker/telepost.Dockerfile 改 pin → PR
+      ↓
+独立服务：fly deploy -c fly/deploy.telepress.toml --ha=false
+      ↓
+TelePost 发版（Release PR）→ deploy-fly.yml 自动部署并核对 /health
+```
+
+**反例（2026-10-09 实际发生）**：`docker/telepost.Dockerfile` 的默认值停在 `0.17.0`，
+而契约只读 `docker/telepress.Dockerfile`，于是它横跨两个 TelePress 版本漂移都没人发现，
+compose / scaffold 路径继续使用带短尾页缺陷的旧分页实现，所有检查却都是绿的。
+**一个没人检查的 pin 就是一个会漂移的 pin**——新增 pin 时必须同时加检查。
