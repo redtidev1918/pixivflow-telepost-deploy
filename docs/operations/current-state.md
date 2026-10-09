@@ -120,7 +120,8 @@ TelePost RBAC 演化模型（root/sudoers/Role Binding）见 [telepost-rbac-evol
   无令牌返回 401；webhook 归属在机器内核对通过。Cloudflare 时钟因缺只读凭据
   SKIP，不视为已验证，也未修改外部时钟。
 - 架构、投稿 API、审核语义、数据库和生产配置没有变更；AGENTS 与 CONTRACT 无需修改。
-  下方既有 PyPI 最低 TelePress 依赖 KNOWN_DEBT 仍保留。
+  下方既有 PyPI 最低 TelePress 依赖 KNOWN_DEBT 当时仍保留，已于 2026-10-09 清偿
+  （见该条）。
 - 回滚：使用 `ghcr.io/redtidev1918/telepost:2.81.2` 和现有数据卷。
   上线前快照 `vs_K1o5aPLnJ5Qfyy8x2Zp7BZG` 已 created，
   volume `vol_4y5e58mylle1nnjr`，时间 `2026-10-07T07:28:56Z`，保留 5 天。
@@ -184,10 +185,14 @@ TelePost RBAC 演化模型（root/sudoers/Role Binding）见 [telepost-rbac-evol
   `vol_4y5e58mylle1nnjr` 快照 `vs_xx6OLgVaqO9SwbRAzb6JwB`
   （2026-10-07T06:12:33Z）已保留。已成功的阅读页 URL 与原帖不随代码回滚清除。
 
-关联 KNOWN_DEBT（P2，PyPI 升级路径）：TelePost 2.81.2 的 wheel metadata 仍声明
-`telepress>=0.17.0`，已有 0.17.0 的 pip 环境可能不自动升级。当前生产的
-`requirements.txt`、部署 pin 和运行时都为 0.17.1，本次生产故障已恢复；后续上游
-包装改动应同步 `pyproject.toml` 的最低依赖与版本检查，避免 pip 客户端保留旧分页实现。
+关联 KNOWN_DEBT（P2，PyPI 升级路径）：TelePost 2.81.2 的 wheel metadata 当时仍声明
+`telepress>=0.17.0`，已有 0.17.0 的 pip 环境可能不自动升级。
+
+**已清偿（2026-10-09）**：TelePost 2.81.4 的 `pyproject.toml` 已声明
+`telepress>=0.17.2`；`requirements.txt`、本仓两个部署 pin
+（`docker/telepress.Dockerfile` 与 `docker/telepost.Dockerfile`）以及两个生产应用的
+运行时全部为 0.17.2。该 KNOWN_DEBT 关闭，升级路径见
+[upgrades.md](./upgrades.md) 的「TelePress 版本：一个包，三处 pin」。
 
 ---
 
@@ -218,7 +223,16 @@ TelePost RBAC 演化模型（root/sudoers/Role Binding）见 [telepost-rbac-evol
 最近明确记录的生产 baseline：
 
 ```text
-TelePost: 2.81.3 / b53cb9c8695a35deb95b0c7a67eb2c10ce9a2414 — VERIFIED
+TelePost: 2.81.4 / 78fae8879a06671ad5b276bb23c857bad5c77043 — VERIFIED
+  (TelePress 0.17.2 unified pagination: the complete Markdown document is
+   rendered once, then paginated against both the ~20,000 text-character target
+   and the node-JSON byte budget, so a full CJK chunk no longer strands a short
+   overflow page. Deploy pin PR #227; automatic Fly deployment onto machine
+   683032ec6617e8 → /health version=2.81.4 / telepress_version=0.17.2 /
+   bots [1,2], /ready bot1+bot2 true. Rollback = 2.81.3. Evidence in the
+   2026-10-09 section above; the standalone telepress-publish service is on
+   0.17.2 as well.)
+TelePost: 2.81.3 / b53cb9c8695a35deb95b0c7a67eb2c10ce9a2414 — SUPERSEDED
   (README quickstart + ReleaseGraph 1.5.18 + native static frontend + stable
    dependency cache; release 15m38s, GHCR 4m01s. Deploy pin PR #220;
    machine 683032ec6617e8 / health / readiness / per-bot APIs verified;
@@ -280,7 +294,13 @@ TelePost: 2.73.3 / 4f434f34236986514b6723ea9c71096e10de90a8 — SUPERSEDED
    code → new pending review #114 with the correct 「4 个媒体 / 4 个文档（含 4 份
    原图）」card (see §2026-09-30 2.73.3 section below). Bug158's format fix
    (N 个文档（含 M 份原图）) confirmed on #114. Rollback = 2.72.0.)
-PixivFlow: 3.5.0 / 644b3dfb555160a6fd2dc96439f524a992225e3e — VERIFIED
+PixivFlow: 3.6.0 / 650a0bacba9023ee68df4c2f29df44393f74c635 — VERIFIED
+  (generalized `work_id` naming across the wire contract: `work_id` is the
+   canonical submission field, `pixiv_id` kept as a deprecated alias.
+   Pin PR #199 → `fly/deploy.pixivflow.toml` PIXIVFLOW_VERSION=3.6.0 /
+   PIXIVFLOW_REF=650a0bac…; machine startup log reports
+   `PIXIVFLOW_REVISION=3.6.0+650a0bac…`. Evidence in the 2026-10-02 section.)
+PixivFlow: 3.5.0 / 644b3dfb555160a6fd2dc96439f524a992225e3e — SUPERSEDED
   (series-novel display title: DeliveryContext gained `seriesTitle` from
    `detail.series?.title`, and HttpMultipartDelivery exposes `{{seriesTitle}}`
    (parent series name) + `{{displayTitle}}` — 《系列名》 章节名 for series
@@ -397,7 +417,6 @@ Pixiv Media Proxy (worker version 3fd098a7):
   `https://telegra.ph/px-proxy-runtime-recheck-09-19` references the proxy URL).
 - Full real-novel end-to-end (novel image validity) still requires an external
   acceptance run with a live Pixiv novel and credentials: `EXTERNAL_ACCEPTANCE_REQUIRED`.
-```
 
 这是 handoff 信息。
 
@@ -915,7 +934,7 @@ DeliveryVariant
 * canonical MediaAsset / Artifact / ResolvedWork / MaterializationPolicy
 * cross-service rich-novel manifest（TelePress 用 remote MediaReference，不强制下载）
 * on-demand preview：`download.materializationPolicy` 已从配置接入 DownloadManager
-  （2.41.0 引入，当前运行 2.42.0），生产配置为 `on-demand`，ZIP/归档仍按需物化
+  （2.41.0 引入；当前 PixivFlow 为 3.6.0，见 §2 与 2026-10-02 节），生产配置为 `on-demand`，ZIP/归档仍按需物化
 
 仍未正式完成：
 
@@ -1083,7 +1102,7 @@ Cloudflare Worker Free
 
 # 22. Rich Novel Preview
 
-Status: `IN_PROGRESS`（2.41.0 引入 on-demand 配置，当前运行 2.42.0；真实带图 novel 端到端验收待下次执行）
+Status: `IN_PROGRESS`（2.41.0 引入 on-demand 配置；当前 PixivFlow 为 3.6.0，本节正文的 2.42.0-era 描述尚未整体复核）
 
 最终不应强制：
 
