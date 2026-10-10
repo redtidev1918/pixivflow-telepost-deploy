@@ -1,6 +1,6 @@
 # PixivFlow Ecosystem Current Production State
 
-Snapshot: 2026-10-09
+Snapshot: 2026-10-10
 Authority: Current production evidence overrides this file
 
 本文件保存动态状态。
@@ -15,6 +15,20 @@ Media code evolution: PixivFlow `src/domain/media/MediaAsset.ts` landed on maste
 
 TelePost RBAC 演化模型（root/sudoers/Role Binding）见 [telepost-rbac-evolution.md](../architecture/telepost-rbac-evolution.md)。代码级迁移计划（MediaAsset）见 [media-code-evolution-plan.md](../development/media-code-evolution-plan.md)。
 
+
+## 2026-10-10 TelePost 2.81.5：文档整理与 Windows 首次启动修复
+
+状态：生产发行链 VERIFIED；Windows 会话库异常路径 KNOWN_DEBT（PR #315 处理中）。
+
+- [PR #311](https://github.com/redtidev1918/TelePost/pull/311) 整理中英文 README、安装、配置、API、审核与运维入口，统一配置默认值与独立部署说明；补齐 Windows 权限接口、信号测试、SQLite 文件释放、UTF-8/BOM 配置、路径与协议文件换行兼容。
+- [PR #312](https://github.com/redtidev1918/TelePost/pull/312) 用标准库 `TextIOWrapper.reconfigure` 配置 Windows UTF-8 标准流，解决冻结解释器忽略环境编码设置后打印成功提示崩溃的问题。[PR #313](https://github.com/redtidev1918/TelePost/pull/313) 在数据库初始化入口创建缺失父目录，首次安装不再因 `data/` 缺失失败。[PR #314](https://github.com/redtidev1918/TelePost/pull/314) 使并发 SQLite 测试使用生产 WAL/NORMAL 模式，并保证异常路径释放连接、核对全部 50 条写入记录。
+- 最终发布 PR 的 Linux / Windows CI 全量均为 **1333 passed / 1 skipped**；API 与会话选测 **38 passed**；合成配置自检通过。并发回归在本机独立执行 10 次全部通过。正式 Windows 程序在本机完成配置向导、中文 BOM 配置保留、首次数据库建库及审核表检查；无效令牌在本地拒绝，不调用 Telegram，也不产生投稿。
+- [正式 Release v2.81.5](https://github.com/redtidev1918/TelePost/releases/tag/v2.81.5) / [发布流水线](https://github.com/redtidev1918/TelePost/actions/runs/38045529220) 已完成三平台程序、校验和、双架构 GHCR、[PyPI](https://pypi.org/project/telepost-bot/2.81.5/) 与文档站发布。Windows 程序 SHA-256：`d46999c8f0216f4c7fc616ed3bccf72b4d81178b590f97e980d53ca081a5059f`，`--version` 为 `2.81.5 / 98dbffb0bd90b66b0dd11f177cba417931936cbd`。
+- [生产部署](https://github.com/redtidev1918/TelePost/actions/runs/38046471100) 使用固定镜像 `ghcr.io/redtidev1918/telepost:2.81.5`。机器 `683032ec6617e8` 为 started / 512 MiB；`/health` 与两个 Bot 的 `/version` 均为上述版本和提交，内嵌 TelePress 为 0.17.2，`/ready` 的 bot1 / bot2 均为 true。
+- `verify-production.sh`、`smoke-telepost.sh`、`verify-webhooks.sh` 只读复核通过，两个 webhook 均归属 TelePost；无令牌投稿仍返回 401。机内 doctor 为 **18 OK / 0 WARN / 0 CRIT / 0 SKIP，exit 0**，无卡住的重抓和投递积压。Cloudflare 时钟因缺只读凭据跳过，属于既有 KNOWN_DEBT，不记作已验证。
+- [部署基线 PR #233](https://github.com/redtidev1918/pixivflow-telepost-deploy/pull/233) 用既有同步脚本更新 `versions.json` 与派生模板；协议、审核处置、身份归属、数据库 schema 与 Fly 拓扑均未变。仍为常驻 / 512 MiB / `force_https=false`，PixivFlow 独立运行。
+- **KNOWN_DEBT：** 合并后的主分支额外 Windows CI 在会话库并发保存中出现锁超时；旧 `utils.database` 只在成功路径关闭连接，导致临时文件不能释放。会话库配置与查询异常释放的修复及 16 项强引用回归正在 [PR #315](https://github.com/redtidev1918/TelePost/pull/315) 验证，后续 patch release 收口。2.81.5 正式 Windows CLI 冒烟已通过；不把该并发异常路径记作已修复。
+- 依据：[PyInstaller 冻结解释器选项](https://pyinstaller.org/en/stable/spec-files.html#specifying-python-interpreter-options)、[Python 标准流重配置](https://docs.python.org/3/library/io.html#io.TextIOWrapper.reconfigure) 与生产 SQLite 配置；复用标准库与现有服务边界。Windows CLI 已完成实际发行包验收，无新增业务交互验收项。回滚固定镜像与部署基线至 **2.81.4**，不需要数据库回滚迁移。
 
 ## 2026-10-09 在线阅读中间短页与正文完整性核对
 
@@ -223,7 +237,15 @@ TelePost RBAC 演化模型（root/sudoers/Role Binding）见 [telepost-rbac-evol
 最近明确记录的生产 baseline：
 
 ```text
-TelePost: 2.81.4 / 78fae8879a06671ad5b276bb23c857bad5c77043 — VERIFIED
+TelePost: 2.81.5 / 98dbffb0bd90b66b0dd11f177cba417931936cbd — VERIFIED
+  (Windows UTF-8/BOM configuration, frozen CLI setup and first-start storage;
+   README/config/API/operations documentation aligned with current behavior.
+   Linux and Windows: 1333 passed / 1 skipped; native Windows release smoke
+   and SHA-256 verified. Deploy baseline PR #233; machine 683032ec6617e8
+   started / 512 MiB; /health and bot1+bot2 /version match the release commit;
+   /ready both true; embedded TelePress 0.17.2; doctor 18 OK / exit 0.
+   Rollback = 2.81.4. Evidence in the 2026-10-10 section above.)
+TelePost: 2.81.4 / 78fae8879a06671ad5b276bb23c857bad5c77043 — SUPERSEDED
   (TelePress 0.17.2 unified pagination: the complete Markdown document is
    rendered once, then paginated against both the ~20,000 text-character target
    and the node-JSON byte budget, so a full CJK chunk no longer strands a short
