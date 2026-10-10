@@ -16,9 +16,19 @@ Media code evolution: PixivFlow `src/domain/media/MediaAsset.ts` landed on maste
 TelePost RBAC 演化模型（root/sudoers/Role Binding）见 [telepost-rbac-evolution.md](../architecture/telepost-rbac-evolution.md)。代码级迁移计划（MediaAsset）见 [media-code-evolution-plan.md](../development/media-code-evolution-plan.md)。
 
 
+## 2026-10-10 TelePost 2.81.6：Windows 会话库连接释放
+
+状态：VERIFIED。
+
+- [PR #315](https://github.com/redtidev1918/TelePost/pull/315) 在 `utils.database` 的统一 context manager 中关闭成功及异常路径的 SQLite 连接，启用既有 WAL/NORMAL 配置，并新增 16 项真实连接释放回归。根因是异常路径遗漏关闭连接，Windows 文件锁使并发保存及临时目录清理失败。
+- Linux / Windows CI 全量均为 **1349 passed / 1 skipped**，API 与会话选测 **38 passed**，会话并发回归独立重复 10 次通过。[发布 PR #316](https://github.com/redtidev1918/TelePost/pull/316) 已合并；[正式 Release v2.81.6](https://github.com/redtidev1918/TelePost/releases/tag/v2.81.6)、[发行流水线](https://github.com/redtidev1918/TelePost/actions/runs/38094095381) 与 [PyPI](https://pypi.org/project/telepost-bot/2.81.6/) 已完成。
+- 正式 Windows 程序 SHA-256 为 `90c78ae657d89e520d41090272bbba05f76185aa65b3011395805a1e517d62c4`；本机通过配置向导、GBK 环境、中文 BOM 配置和首次建库冒烟，版本为 `2.81.6 / 75db3d3bc6e78cbfd3aa1b53d5f4d6436a047fcf`。
+- [生产部署](https://github.com/redtidev1918/TelePost/actions/runs/38094715016) 使用固定镜像 `ghcr.io/redtidev1918/telepost:2.81.6`；`/health` 为上述版本和提交，两个 Bot 的 `/ready` 均为 true。`verify-production.sh`、`smoke-telepost.sh`、`verify-webhooks.sh` 通过；两个 webhook 待处理更新均为 0。机内 doctor 为 **18 OK / 0 WARN / 0 CRIT / 0 SKIP**，无重抓和投递积压。
+- [部署基线 PR #234](https://github.com/redtidev1918/pixivflow-telepost-deploy/pull/234) 同步版本及派生模板。审核处置、身份归属、schema 和独立常驻 Fly 拓扑保持原契约；依据为标准库 SQLite 连接关闭语义和已有生产 WAL 配置。Windows CLI 发行包验收已完成；Cloudflare 时钟缺少只读凭据仍为 KNOWN_DEBT。回滚镜像及部署基线至 **2.81.5**，保留数据卷。
+
 ## 2026-10-10 TelePost 2.81.5：文档整理与 Windows 首次启动修复
 
-状态：生产发行链 VERIFIED；Windows 会话库异常路径 KNOWN_DEBT（PR #315 处理中）。
+状态：生产发行链 VERIFIED；当时的 Windows 会话库异常路径已由上方 2.81.6 修复。
 
 - [PR #311](https://github.com/redtidev1918/TelePost/pull/311) 整理中英文 README、安装、配置、API、审核与运维入口，统一配置默认值与独立部署说明；补齐 Windows 权限接口、信号测试、SQLite 文件释放、UTF-8/BOM 配置、路径与协议文件换行兼容。
 - [PR #312](https://github.com/redtidev1918/TelePost/pull/312) 用标准库 `TextIOWrapper.reconfigure` 配置 Windows UTF-8 标准流，解决冻结解释器忽略环境编码设置后打印成功提示崩溃的问题。[PR #313](https://github.com/redtidev1918/TelePost/pull/313) 在数据库初始化入口创建缺失父目录，首次安装不再因 `data/` 缺失失败。[PR #314](https://github.com/redtidev1918/TelePost/pull/314) 使并发 SQLite 测试使用生产 WAL/NORMAL 模式，并保证异常路径释放连接、核对全部 50 条写入记录。
