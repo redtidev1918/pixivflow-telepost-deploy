@@ -315,8 +315,11 @@ kill_timeout = 60
     # 4497a94 = v3.6.2: one effective CLI/WebUI configuration, credential-free
     # scheduler empty states and bundled WebUI 2.0.2; English operator guides.
     # Rollback: 3.6.1 / 248f1e408dfe6215a486bbdbcc51516e8ed45a94.
-    PIXIVFLOW_REF = '4497a94b08e8798189c37e27d4027bec3c153fb8'
-    PIXIVFLOW_VERSION = '3.6.2'
+    # b2bba98 = v3.6.3: archiver 8 native ESM loading, stable novel ZIP entry
+    # order, Windows gateway/OneBot entry points and native-path assertions.
+    # Rollback: 3.6.2 / 4497a94b08e8798189c37e27d4027bec3c153fb8.
+    PIXIVFLOW_REF = 'b2bba983382615f7625e39a915c045693e97edba'
+    PIXIVFLOW_VERSION = '3.6.3'
 
 [[mounts]]
   source = 'pixivflow_data'
