@@ -1,6 +1,6 @@
 # PixivFlow Ecosystem Current Production State
 
-Snapshot: 2026-10-10
+Snapshot: 2026-10-11
 Authority: Current production evidence overrides this file
 
 本文件保存动态状态。
@@ -15,6 +15,21 @@ Media code evolution: PixivFlow `src/domain/media/MediaAsset.ts` landed on maste
 
 TelePost RBAC 演化模型（root/sudoers/Role Binding）见 [telepost-rbac-evolution.md](../architecture/telepost-rbac-evolution.md)。代码级迁移计划（MediaAsset）见 [media-code-evolution-plan.md](../development/media-code-evolution-plan.md)。
 
+
+## 2026-10-11 TelePost 2.82.0：可配置中文 / 英文 Bot 与 Mini App
+
+状态：发行、部署与只读生产复核 VERIFIED；真实 Telegram 英文会话 EXTERNAL_ACCEPTANCE_REQUIRED。
+
+- [功能 PR #317](https://github.com/redtidev1918/TelePost/pull/317) 支持 `BOT_LANGUAGE=zh|en` / INI `[BOT] LANGUAGE`，多 Bot 以 `BOTn_LANGUAGE` 独立覆盖（`BOTn_LANGUAGE` > `BOT_LANGUAGE` > INI > 默认 zh）。Mini App 在验证 Telegram `initData` 后读取 session 返回的非敏感 `bot_language`；启动 URL 语言参数只用于首次展示，鉴权与 RBAC 仍全部在服务器。命令名、callback 标识与审核路由不变，中文按钮仍兼容。
+- 架构边界保持原契约：Bot 与 Mini App 共享同一 application service，审核处置、幂等、投稿归属与状态机未改变；用户的标题、标签、文件名与正文保留原文。翻译层复用 [Python gettext](https://docs.python.org/3/library/gettext.html)，前端用 [react-i18next](https://react.i18next.com/)，附件管理器用 [Uppy 官方语言包](https://uppy.io/docs/uppy/#locale)；运行时无外部翻译服务，Uppy 继续拥有附件状态。
+- Windows 托管 CI 暴露一处旧计时测试假设：用真实 50 ms 睡眠并假定最多重试两次，Windows 定时器唤醒误差导致重试三次。已改为可控时钟直接验证截止后不再发送，生产重试逻辑不变。英文底部导航在 Linux 字体下 320px 宽度截断，标签从 Popular 缩短为 Hot 并补窄屏截图检查。
+- 正式 Windows 构建发现包搜索路径依赖：冻结程序通过包名发现 `ui` 目录失败，漏打包 gettext 英文目录；本机 editable 安装掩盖了该问题。[PR #319](https://github.com/redtidev1918/TelePost/pull/319) 改为 PyInstaller 显式 `--add-data` 打包语言目录，并在干净 Python 3.12 环境验证英文启动。
+- Linux / Windows CI 全量均为 **1361 passed / 1 skipped**；本机 Windows Python 3.12 与 3.14 全量通过，API / 会话选测 **38 passed**。前端 typecheck / lint / build 与 **80** 单测通过，320 / 390 / 768 / 1280 px 浏览器 E2E 通过；英文投稿测试确认中文标题、标签与文件名原样提交。
+- [发布 PR #318](https://github.com/redtidev1918/TelePost/pull/318) 合并为 e8cdd44；[正式 Release v2.82.0](https://github.com/redtidev1918/TelePost/releases/tag/v2.82.0)（非草稿，publishedAt 2026-10-11T01:00:43Z）与[发行流水线](https://github.com/redtidev1918/TelePost/actions/runs/38099906876) 已完成三平台程序、SHA256SUMS、双架构 GHCR OCI index（amd64/arm64）、[PyPI](https://pypi.org/project/telepost-bot/2.82.0/)（2.82.0）与下载页更新。正式 Windows 程序 SHA-256 为 `73c587b0ba4bf9736649f64f10035ca75aa42e5447670e19eb12e3138d4cae19`，`--version` 为 `2.82.0 / e8cdd446611925635fc3f2afb771c74019b84f8e`；仓库 `scripts/smoke-windows-release.py` 对正式下载包通过 GBK 控制台、配置向导、中文 BOM 配置保留、`BOT_LANGUAGE=en` 启动检查与首次建库。
+- [生产部署](https://github.com/redtidev1918/TelePost/actions/runs/38100505920) 使用固定镜像 `ghcr.io/redtidev1918/telepost:2.82.0`。只读复核：`/health` version=2.82.0 / commit=e8cdd446611925635fc3f2afb771c74019b84f8e / build_date=2026-10-11T00:59:13Z，bots=[1,2]，TelePress 0.17.2，三进程 RSS 79.1 / 72.7 / 57.4 MB，卷占用 0.3%；`/ready` bot1 / bot2 均 true；`/api/bot1/v1/health` 与 `/api/bot2/v1/health` 均 200 且 bot_version=2.82.0，处置默认值未变（api/miniapp review=true，chat review=false）。仍为常驻 / 512 MiB / `force_https=false`，PixivFlow 独立运行。
+- 机内 `doctor --all-bots` 为 **HEALTHY：18 OK / 0 WARN / 0 CRIT / 0 SKIP**，两个数据库 integrity_check=ok，无活跃或卡住重抓，无 publishing 卡住与投递积压。bot2 审核队列 `failed=1` 在部署前 2.81.6 基线即存在，非本次发布引入；legacy 缺 terminal_reason 历史行 bot1=9 / bot2=3，按既有策略仅 informational。
+- [部署基线 PR #235](https://github.com/redtidev1918/pixivflow-telepost-deploy/pull/235) 已合并，同步 `versions.json` 及 docker-compose / .env.example / Dockerfile / fly 模板（clock、build、branch-contract、gitleaks、quality 全绿）。无数据库 schema 变更，无需回滚迁移。
+- **KNOWN_DEBT：** Cloudflare 时钟仍缺只读凭据，未记作已验证。**EXTERNAL_ACCEPTANCE_REQUIRED：** 真实 Telegram 内英文 Bot 的登录、投稿与审核交互仍需用户在手机端验收；浏览器 E2E 与 `/app` HTTP 200 不能代替。回滚固定镜像及部署基线至 **2.81.6**（commit 75db3d3），保留数据卷。
 
 ## 2026-10-10 TelePost 2.81.6：Windows 会话库连接释放
 
@@ -247,7 +262,22 @@ TelePost RBAC 演化模型（root/sudoers/Role Binding）见 [telepost-rbac-evol
 最近明确记录的生产 baseline：
 
 ```text
-TelePost: 2.81.5 / 98dbffb0bd90b66b0dd11f177cba417931936cbd — VERIFIED
+TelePost: 2.82.0 / e8cdd446611925635fc3f2afb771c74019b84f8e — VERIFIED
+  (Selectable zh/en Bot and Mini App (PR #317); frozen gettext bundling
+   fixed for clean Windows builds (PR #319). Release PR #318; 1361 passed /
+   1 skipped on Linux and Windows CI; webapp 80 unit + 4-width browser E2E.
+   PyPI 2.82.0, GHCR multi-arch index, download page published; Windows exe
+   SHA-256 73c587b0ba4bf9736649f64f10035ca75aa42e5447670e19eb12e3138d4cae19 verified with scripts/smoke-windows-release.py.
+   Machine 683032ec6617e8 started / 512 MiB; /health, /ready and per-bot
+   health match the release commit; doctor 18 OK / exit 0. Deploy baseline
+   PR #235. Rollback = 2.81.6. Evidence in the 2026-10-11 section.)
+TelePost: 2.81.6 / 75db3d3bc6e78cbfd3aa1b53d5f4d6436a047fcf — SUPERSEDED
+  (SQLite connection release on exception paths in utils.database, 16 new
+   file-lock regressions. Release PR #316; 1349 passed / 1 skipped both
+   platforms. Deploy baseline PR #234; machine 683032ec6617e8 / health /
+   readiness / per-bot APIs verified; doctor 18 OK / exit 0. Rollback was
+   2.81.5. Evidence in the 2026-10-10 section above.)
+TelePost: 2.81.5 / 98dbffb0bd90b66b0dd11f177cba417931936cbd — SUPERSEDED
   (Windows UTF-8/BOM configuration, frozen CLI setup and first-start storage;
    README/config/API/operations documentation aligned with current behavior.
    Linux and Windows: 1333 passed / 1 skipped; native Windows release smoke
