@@ -91,3 +91,8 @@ TelePost alone owns the configured file denylist/allowlist. Bot chat, multipart 
 When a document type policy is enabled, JSON documents entries require filename alongside file_id. Missing metadata returns HTTP 400 file_metadata_required; a blocked extension or MIME returns blocked_file_type. Producers retain original filenames. API review requirements and verified submitter attribution are unchanged.
 
 File type admission is not antivirus scanning and never constitutes a malware-free guarantee. Allowed formats may contain malicious content; the service does not unpack or scan archives.
+
+PixivFlow TelePost multipart targets declare `archiveDelivery: local-only`: eager ZIP companions
+remain local under the existing cache lifecycle, while TXT and media references enter delivery.
+Selection is per route and frozen in its durable intent; default `attach` preserves other receivers.
+Shared cache cleanup waits for all work deliveries to be confirmed. Receiver blacklists remain unchanged.

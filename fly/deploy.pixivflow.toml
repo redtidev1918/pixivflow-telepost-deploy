@@ -318,8 +318,10 @@ kill_timeout = 60
     # b2bba98 = v3.6.3: archiver 8 native ESM loading, stable novel ZIP entry
     # order, Windows gateway/OneBot entry points and native-path assertions.
     # Rollback: 3.6.2 / 4497a94b08e8798189c37e27d4027bec3c153fb8.
-    PIXIVFLOW_REF = 'b2bba983382615f7625e39a915c045693e97edba'
-    PIXIVFLOW_VERSION = '3.6.3'
+    # fea5b8d = v3.6.4: per-route local-only ZIP projection preserves inline
+    # media references; shared cache cleanup waits for all delivery routes.
+    PIXIVFLOW_REF = 'fea5b8d81916cd98b01ab15ab10e39aa213bba47'
+    PIXIVFLOW_VERSION = '3.6.4'
 
 [[mounts]]
   source = 'pixivflow_data'
