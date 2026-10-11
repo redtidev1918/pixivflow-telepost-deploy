@@ -16,6 +16,23 @@ Media code evolution: PixivFlow `src/domain/media/MediaAsset.ts` landed on maste
 TelePost RBAC 演化模型（root/sudoers/Role Binding）见 [telepost-rbac-evolution.md](../architecture/telepost-rbac-evolution.md)。代码级迁移计划（MediaAsset）见 [media-code-evolution-plan.md](../development/media-code-evolution-plan.md)。
 
 
+## 2026-10-11 TelePost 2.83.0 / PixivFlow 3.6.1：文件拦截与 Bot1 投稿故障修复
+
+状态：VERIFIED（代码、正式产物、两个生产应用与只读巡检）；真实 Telegram 大相册与后续定时小说验收为 EXTERNAL_ACCEPTANCE_REQUIRED。
+
+- **故障事实：** Bot1 的 `bot1-daily@2026-10-11T1000` 已执行，最终为 partial。插画 150681788 已提交，小说 29347192 失败；持久记录的具体原因是日语正文不符合中文筛选规则。恢复日志显示程序继续处理已锁定的日语候选，旧版通知把它归成 internal_error。修复覆盖语言检查期间中断后的恢复路径；最初进程中断的直接触发原因未复核，不把它记为已修复。
+- **相册事实：** Bot1 #180 原稿有 14 张图片，已经发布。10:12:45 的日志显示第一组 10 张遭遇 Request Entity Too Large，随后整组退成逐张消息。10:41 的重复投稿复用了已发布记录，未再发布；这条幂等提示正常。没有重投 #180，也没有改写原审核或今天的调度记录；今天失败的小说尚未补投。
+- **改动：** [TelePost #322](https://github.com/redtidev1918/TelePost/pull/322) 为私聊、Mini App 与 HTTP API 默认拦截可执行文件、常见脚本与压缩包，检查文件名和 MIME；开启文档过滤时，JSON 文档必须带原文件名。[#324](https://github.com/redtidev1918/TelePost/pull/324) 将明确被拒的过大相册按原顺序拆成较小相册，网络超时不盲目重发，已发送部分立即留下清理 ID。[PixivFlow #198](https://github.com/redtidev1918/PixivFlow/pull/198) 在全文资格检查之后、首个文件写入之前锁定小说；竞争失败不写文件，已锁定作品仍保持身份，语言拒绝报告 filter_exhausted。API 审核、Mini App 独立审核开关、身份归属、幂等与数据库 schema 均未改变。
+- **测试：** TelePost 最终发布 PR [#323](https://github.com/redtidev1918/TelePost/pull/323) 的 Linux / Windows CI 全量各为 1386 passed / 1 skipped；本机全量同结果，API / 会话 45 passed，相关审核测试 62 passed，配置自检通过。前端 81 项单测通过，浏览器四种宽度 125 passed / 15 skipped。PixivFlow Node 22 / 24 各为 1541 passed，三平台 tarball 冒烟通过，TypeScript 检查与本机 93 项相关回归通过。
+- **正式发布：** [TelePost v2.83.0](https://github.com/redtidev1918/TelePost/releases/tag/v2.83.0) / [发行流水线](https://github.com/redtidev1918/TelePost/actions/runs/38107956562) 成功，提交 `854175d480a22fa9267a648dbe4190b43ddf46d6`；三平台程序、校验和、双架构镜像、[PyPI 2.83.0](https://pypi.org/project/telepost-bot/2.83.0/) 与下载页已发布。正式 Windows 程序 SHA-256 为 `0a74befefae54051624ce30ac57e7191016b2aaa52af701932b4b9fa69fa5e74`；本机对正式下载包验证 GBK 控制台、中文 BOM 配置保留、英文首次启动建库，均通过。[PixivFlow 发布 #199](https://github.com/redtidev1918/PixivFlow/pull/199) / [v3.6.1](https://github.com/redtidev1918/PixivFlow/releases/tag/v3.6.1) / [流水线](https://github.com/redtidev1918/PixivFlow/actions/runs/38107195502) 成功，npm、正式 tarball、校验和与镜像已发布。
+- **部署与运行：** [部署配置 #237](https://github.com/redtidev1918/pixivflow-telepost-deploy/pull/237) 固定 PixivFlow `3.6.1 / 248f1e408dfe6215a486bbdbcc51516e8ed45a94`，保留两 Bot 完整共享黑名单；[基线 #238](https://github.com/redtidev1918/pixivflow-telepost-deploy/pull/238) 同步 TelePost 2.83.0。TelePost [生产部署](https://github.com/redtidev1918/TelePost/actions/runs/38108523584) 成功，机器 `683032ec6617e8` started / 512 MiB，/health 与两个 Bot 的 health 为 2.83.0，提交匹配正式发布；/ready 两 Bot 均 true。实际两个子进程的黑名单均启用、语言均 zh；exe、伪装图片 MIME 的 exe 与压缩包被拦截，TXT / PDF / JPG 允许。两个 Bot 各三次无害 API 探针分别返回 blocked_file_type、file_metadata_required、blocked_file_type（HTTP 400），未产生真实投稿。相册拆分代码已在运行镜像中核对。
+- **执行端复核：** 机器 `83d1650bd23948` 沿用原卷与生产配置，运行日志和只读探针均为 `PIXIVFLOW_REVISION=3.6.1+248f1e408dfe6215a486bbdbcc51516e8ed45a94`，修复代码存在，materializationPolicy=on-demand。当前 active slots=0、待投递=0；内置 delivery status 正常输出两个 gateway 的账本。累计 dead outbox=47、failed delivery=8+1 均为既有历史，本次部署后新增数均为 0；未清除历史失败。首次切换时 Fly Proxy 唤醒超时一次，随后健康请求为 200，运行版本正确。
+- **独立生产验证：** verify-production.sh、smoke-telepost.sh、verify-webhooks.sh 均通过；两个 webhook 归属 TelePost，pending_update_count=0，无令牌投稿返回 401。机内 doctor 为 18 OK / 0 WARN / 0 CRIT / 0 SKIP，两个数据库完整，无活跃或卡住重抓、无孤儿审核、无 publishing 积压、无待确认发布；legacy 缺原因 9+3 仍为 informational。常驻、512 MiB、force_https=false 与独立执行端拓扑保持不变。
+- **文档与依据：** 中英文入门、配置、API、OpenAPI、故障排查与长期架构 / CONTRACT 已同步。复用既有 validator、审核 staging adapter、SQLite CAS 与单目标恢复 API；依据 [Telegram 相册约束](https://core.telegram.org/bots/api#sendmediagroup)、[OWASP 文件上传指导](https://cheatsheetseries.owasp.org/cheatsheets/File_Upload_Cheat_Sheet.html) 与 [SQLite 事务](https://www.sqlite.org/lang_transaction.html)，未添加第二套文件管理器、扫描器或调度器。
+- **KNOWN_DEBT / 限制：** Cloudflare 时钟缺只读凭据，未验证。PixivFlow 本机原生 Windows 全量曾报告 27 项路径、网关和 HTTP 测试失败；小说路径断言已修正并通过相关复验，其余 Windows 全量问题未记作已修复，以 Linux Node 22 / 24 CI 为本轮业务回归证据。文件类型过滤不能检测改名文件或恶意的允许格式，不等于病毒扫描。最初执行中断的触发原因仍未确认。
+- **EXTERNAL_ACCEPTANCE_REQUIRED：** 下次合法大相册在真实 Telegram 保持分组；下一次正常中文小说计划 / 明确发起的单目标恢复能找到合格候选；英文 Bot 与 Mini App 的真实 Telegram 交互。今天的缺稿可经既有单目标恢复入口另行处理，不能重跑整计划或直接改库来补。
+- **回滚：** TelePost 固定镜像与基线回退到 2.82.0；PixivFlow 回退到 `3.6.0 / 650a0bacba9023ee68df4c2f29df44393f74c635`。无需数据库回滚迁移。TelePost 旧版不执行这次黑名单，回退前需另行管控危险附件；PixivFlow 旧版重新暴露语言检查前锁定的问题。持久审核、调度与幂等记录保持原样。
+
 ## 2026-10-11 TelePost 2.82.0：可配置中文 / 英文 Bot 与 Mini App
 
 状态：发行、部署与只读生产复核 VERIFIED；真实 Telegram 英文会话 EXTERNAL_ACCEPTANCE_REQUIRED。
@@ -262,7 +279,12 @@ TelePost RBAC 演化模型（root/sudoers/Role Binding）见 [telepost-rbac-evol
 最近明确记录的生产 baseline：
 
 ```text
-TelePost: 2.82.0 / e8cdd446611925635fc3f2afb771c74019b84f8e — VERIFIED
+TelePost: 2.83.0 / 854175d480a22fa9267a648dbe4190b43ddf46d6 — VERIFIED
+  (File admission denylist and oversized review-album splitting; source #322 / #324,
+   release #323, production deploy 38108523584, baseline #238. Both actual Bot
+   policies and inert API rejections verified; doctor 18 OK. Rollback = 2.82.0.
+   Evidence and remaining external acceptance in the 2026-10-11 section.)
+TelePost: 2.82.0 / e8cdd446611925635fc3f2afb771c74019b84f8e — SUPERSEDED
   (Selectable zh/en Bot and Mini App (PR #317); frozen gettext bundling
    fixed for clean Windows builds (PR #319). Release PR #318; 1361 passed /
    1 skipped on Linux and Windows CI; webapp 80 unit + 4-width browser E2E.
@@ -357,7 +379,11 @@ TelePost: 2.73.3 / 4f434f34236986514b6723ea9c71096e10de90a8 — SUPERSEDED
    code → new pending review #114 with the correct 「4 个媒体 / 4 个文档（含 4 份
    原图）」card (see §2026-09-30 2.73.3 section below). Bug158's format fix
    (N 个文档（含 M 份原图）) confirmed on #114. Rollback = 2.72.0.)
-PixivFlow: 3.6.0 / 650a0bacba9023ee68df4c2f29df44393f74c635 — VERIFIED
+PixivFlow: 3.6.1 / 248f1e408dfe6215a486bbdbcc51516e8ed45a94 — VERIFIED
+  (Novel eligibility before first artifact binding; source #198, release #199,
+   deploy pin #237. Runtime revision and repair code verified; active slots=0,
+   pending delivery=0. Existing failure history preserved. Rollback = 3.6.0.)
+PixivFlow: 3.6.0 / 650a0bacba9023ee68df4c2f29df44393f74c635 — SUPERSEDED
   (generalized `work_id` naming across the wire contract: `work_id` is the
    canonical submission field, `pixiv_id` kept as a deprecated alias.
    Pin PR #199 → `fly/deploy.pixivflow.toml` PIXIVFLOW_VERSION=3.6.0 /
@@ -997,7 +1023,7 @@ DeliveryVariant
 * canonical MediaAsset / Artifact / ResolvedWork / MaterializationPolicy
 * cross-service rich-novel manifest（TelePress 用 remote MediaReference，不强制下载）
 * on-demand preview：`download.materializationPolicy` 已从配置接入 DownloadManager
-  （2.41.0 引入；当前 PixivFlow 为 3.6.0，见 §2 与 2026-10-02 节），生产配置为 `on-demand`，ZIP/归档仍按需物化
+  （2.41.0 引入；当前 PixivFlow 为 3.6.1，见 §2 与 2026-10-11 节），生产配置为 `on-demand`，ZIP/归档仍按需物化
 
 仍未正式完成：
 
@@ -1165,7 +1191,7 @@ Cloudflare Worker Free
 
 # 22. Rich Novel Preview
 
-Status: `IN_PROGRESS`（2.41.0 引入 on-demand 配置；当前 PixivFlow 为 3.6.0，本节正文的 2.42.0-era 描述尚未整体复核）
+Status: `IN_PROGRESS`（2.41.0 引入 on-demand 配置；当前 PixivFlow 为 3.6.1，本节正文的 2.42.0-era 描述尚未整体复核）
 
 最终不应强制：
 
