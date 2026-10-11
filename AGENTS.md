@@ -797,13 +797,13 @@ Recovery 必须：
 
 ```text
 Telegram human
-→ DIRECT_PUBLISH
+→ CHAT_REVIEW_REQUIRED（默认 false → DIRECT_PUBLISH）
 
 Mini App human
-→ DIRECT_PUBLISH
+→ MINIAPP_REVIEW_REQUIRED（独立开关，默认 true → REVIEW_REQUIRED）
 
 API automated
-→ REVIEW_REQUIRED
+→ REVIEW_REQUIRED（固定；API_REVIEW_REQUIRED 不允许绕过审核）
 ```
 
 除非用户明确改变产品策略，否则不得修改。
