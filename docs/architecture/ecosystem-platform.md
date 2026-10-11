@@ -279,6 +279,17 @@ WebUI 不拥有 execution truth。
 
 禁止浏览器直接访问生产数据库。
 
+控制入口的配置路径由 CLI / embedded host 一次解析并发布：`--config` >
+`PIXIV_DOWNLOADER_CONFIG` > 默认路径。WebUI 启动、API 与下载/调度消费者必须读取同一
+有效配置，显式缺失文件不能静默回退。选择其他配置的正式操作更新同一进程路径。
+
+`GET /api/scheduler` 的 `slots` 是 Slot Ledger 投影，旁附
+`scheduler: {enabled, configuredCount}` 只读配置摘要。全新安装及未登录 Pixiv 时，
+空记录仍为正常读取结果；前端区分未配置计划、已配置但未启用与尚无执行记录。
+旧后端缺摘要时只显示通用空状态；配置/数据库/API 真实异常仍保留错误与服务端诊断。
+复用现有 Express 处理器、配置加载器、TanStack Query 与 Ant Design Empty/Alert，
+不新增配置真值、执行状态或调度器。
+
 ---
 
 ## 3.5 Deploy

@@ -312,8 +312,11 @@ kill_timeout = 60
     # fresh cell, then bind before artifact persistence. Existing locked works
     # retain their identity; language rejection reports filter_exhausted.
     # Rollback: 3.6.0 / 650a0bacba9023ee68df4c2f29df44393f74c635.
-    PIXIVFLOW_REF = '248f1e408dfe6215a486bbdbcc51516e8ed45a94'
-    PIXIVFLOW_VERSION = '3.6.1'
+    # 4497a94 = v3.6.2: one effective CLI/WebUI configuration, credential-free
+    # scheduler empty states and bundled WebUI 2.0.2; English operator guides.
+    # Rollback: 3.6.1 / 248f1e408dfe6215a486bbdbcc51516e8ed45a94.
+    PIXIVFLOW_REF = '4497a94b08e8798189c37e27d4027bec3c153fb8'
+    PIXIVFLOW_VERSION = '3.6.2'
 
 [[mounts]]
   source = 'pixivflow_data'
