@@ -377,6 +377,8 @@ primary_region = 'iad'
   # publishing. off = feature dormant (default). Anonymous humans are still
   # notified privately; service submissions (no human submitter) never are.
   SUBMITTER_PUBLISH_NOTIFY = 'with_changes'
+  # Shared risky-file type denylist for bot1 and bot2; not antivirus scanning.
+  BLOCKED_FILE_TYPES = '.exe,.msi,.com,.scr,.bat,.cmd,.ps1,.vbs,.js,.jar,.sh,.apk,.app,.deb,.rpm,.dmg,.iso,.elf,.bin,.msp,.gadget,.pif,.hta,.jse,.vbe,.wsf,.lnk,.zip,.rar,.7z,.tar,.gz,.tgz,.bz2,.xz,.cab,application/x-msdownload,application/x-msdos-program,application/x-msi,application/vnd.android.package-archive,application/java-archive,application/javascript,text/javascript,application/x-sh,application/zip,application/x-zip-compressed,application/vnd.rar,application/x-rar-compressed,application/x-7z-compressed,application/x-tar,application/gzip,application/x-bzip2,application/x-xz'
   SEARCH_ENABLED = 'false'
   SEARCH_ANALYZER = 'simple'
   DB_CACHE_KB = '1024'

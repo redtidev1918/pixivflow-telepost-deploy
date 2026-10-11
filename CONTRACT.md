@@ -83,3 +83,11 @@
 # 10. Current Verified Baseline
 
 最新 verified baseline 以 `docs/operations/current-state.md` 为准（不要在本文件更新版本号，避免双状态源）。
+
+## Submission file type admission
+
+TelePost alone owns the configured file denylist/allowlist. Bot chat, multipart API and Mini App enforce the same rules; declaring a blocked filename as media cannot bypass its extension. Both production Bots inherit the explicit shared denylist in the Fly configuration.
+
+When a document type policy is enabled, JSON documents entries require filename alongside file_id. Missing metadata returns HTTP 400 file_metadata_required; a blocked extension or MIME returns blocked_file_type. Producers retain original filenames. API review requirements and verified submitter attribution are unchanged.
+
+File type admission is not antivirus scanning and never constitutes a malware-free guarantee. Allowed formats may contain malicious content; the service does not unpack or scan archives.

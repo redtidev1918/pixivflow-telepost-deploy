@@ -1779,3 +1779,21 @@ Control Plane 只消费正式 domain state。
 ## Documentation is agent memory
 
 未来 Agent 应能够仅通过仓库恢复核心上下文，而不是依赖历史聊天。
+
+## Submission file type policy
+
+TelePost owns submission file admission. Bot chat, HTTP API and Mini App enforce the same configured denylist and optional allowlist on the server. A blocked extension or MIME wins over the allowlist and media classification. Windows filename suffix spaces/dots and MIME parameters are normalized. Media infrastructure, review disposition, submission ownership and persistence remain separate responsibilities.
+
+`BLOCKED_FILE_TYPES` defaults to executables, common scripts and archives. `BOTn_BLOCKED_FILE_TYPES` can override the shared policy; custom lists replace defaults and `none` disables it. Both Fly deployment configurations explicitly retain the complete shared default for the two production Bots.
+
+With a document type policy enabled, JSON file_id document submissions must provide filename; absent metadata returns HTTP 400 file_metadata_required. Multipart rejected types return blocked_file_type. Producers must preserve original filenames instead of omitting them. Existing PixivFlow multipart text/media delivery follows the same endpoint shape; TelePost does not change source ownership or API review requirements.
+
+This is type filtering, not content scanning. Renamed executables and malicious allowed formats remain possible. Archives are not unpacked or scanned and are rejected by default. [OWASP File Upload guidance](https://cheatsheetseries.owasp.org/cheatsheets/File_Upload_Cheat_Sheet.html) distinguishes type checks from antivirus scanning and treats client MIME as untrusted. This change reuses the existing validator; it adds no scanner daemon, remote file disclosure or second admission service.
+
+## Review album rejection and novel eligibility
+
+TelePost review staging splits an explicitly rejected oversized upload into smaller albums in source order. [Telegram sendMediaGroup](https://core.telegram.org/bots/api#sendmediagroup) permits 2–10 items; that count alone does not ensure the aggregate upload succeeds. A known 413 rejection permits splitting, while a timeout or connection failure leaves acceptance uncertain and must not cause blind resending. Each completed part immediately contributes its message IDs to cleanup evidence. Caption, reply threading and media identity remain with the existing staging adapter.
+
+PixivFlow performs full-text novel eligibility checks before binding a fresh scheduled cell. Binding still precedes the first artifact write and uses the existing SQLite CAS; a competing winner prevents persistence. A restart during language detection therefore leaves an unbound cell, while a restart after binding resumes the same eligible work. Existing locked work never silently changes identity. A locked novel rejected by its language rule reports filter_exhausted, not internal_error. The single-target manual recovery API opens a separate durable recovery request without rerunning a submitted sibling or rewriting the original occurrence.
+
+Production uses download.materializationPolicy=on-demand: novel previews carry text plus remote media references, and do not create image ZIP attachments. This keeps ordinary automated novel delivery compatible with the default archive denylist. Eager producers that send ZIP files must adapt their delivery projection or explicitly configure a different admission policy; the receiver never silently exempts service uploads.
