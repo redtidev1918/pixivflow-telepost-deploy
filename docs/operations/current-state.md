@@ -5,7 +5,14 @@ Authority: Current production evidence overrides this file
 
 ## 2026-10-11 PixivFlow eager ZIP 与 TelePost 黑名单兼容
 
-状态：IN_PROGRESS。生产仍为下方已验证的 3.6.3 / on-demand；3.6.4 发行候选与新目标配置待正式发布部署。
+状态：VERIFIED（代码、正式发行、生产部署与只读验收）。
+
+- 正式发布：[v3.6.4](https://github.com/redtidev1918/PixivFlow/releases/tag/v3.6.4) 非草稿（publishedAt 2026-10-11T15:13:59Z），npm 3.6.4 可用；发行流水线 [38149628645](https://github.com/redtidev1918/PixivFlow/actions/runs/38149628645) 成功。
+- 部署：[Deploy #244](https://github.com/redtidev1918/pixivflow-telepost-deploy/pull/244) 已合并（`0bedf23`），pin `PIXIVFLOW_REF=fea5b8d81916cd98b01ab15ab10e39aa213bba47` / 3.6.4。`fly deploy -c fly/deploy.pixivflow.toml --ha=false` exit 0，镜像 `registry.fly.io/pixivflow-scheduler:deployment-01M4NSTWW65BZG25W7KWYJ9PZF`，原机器 `83d1650bd23948` 滚动更新、smoke checks 通过（Fly DNS AAAA 校验告警照旧，Cloudflare DoH 已确认 AAAA 存在）。
+- 配置：部署前卷上副本备份 `/app/data/production.json.bak-3.6.4`（部署前哈希 `d738bb39edae…c9c55`）。按字节级替换只新增两个 target 各一行 `"archiveDelivery": "local-only"`（+98 字节），临时名上传、远端 JSON 校验后原子 `mv`，回读逐字节一致；新哈希 `fa2c7bb443828964baaffd7e710c8ce934f0143128be4f307c0b61d1f1fe20f7`。3.6.3 热重载容忍新键（generation 2，无报错），3.6.4 重启后从卷上副本激活 generation 1。运行 `materializationPolicy` 仍为 `on-demand`。
+- 运行验证：`/health` = 3.6.4 / `fea5b8d81916`；日志 `PIXIVFLOW_REVISION=3.6.4+fea5b8d81916cd98b01ab15ab10e39aa213bba47`；机内 package 3.6.4，`archiveDelivery` 实现存在于 `dist/delivery/DeliveryService.js` 等；`verify-images.sh` 四项全 OK（含执行端提交匹配）。
+- 账本：部署前后只读一致——终态 slots failed/partial/success=31/6/77，items failed/no_candidate/submitted=32/8/146，outbox dead/done=47/232，active slots=0、待投递=0；未新增业务执行。
+- 回滚：PixivFlow 固定 3.6.3 / `b2bba983382615f7625e39a915c045693e97edba`；配置回滚 `mv /app/data/production.json.bak-3.6.4 /app/data/production.json`。历史插图反代 403 仅影响默认 Python 探针（浏览器 UA 200），与本次无关，维持既有记录。
 
 - TelePost 两个实际 Bot 子进程同时禁止 `.zip` 和 `application/zip`，TXT 允许。3.6.3 只修复打包；eager 生成的 ZIP 仍会进入旧投递列表并导致整份请求被拒绝。
 - PixivFlow 新增每个 httpMultipart 目标的 `archiveDelivery: local-only`，冻结意图前同步排除 ZIP 附件、预览与内容投影，保留 TXT / 媒体引用。默认 attach 保持其他接收端兼容；eager 的本地产物和 TelePost 黑名单不变。
