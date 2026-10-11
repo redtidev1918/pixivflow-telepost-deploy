@@ -3,6 +3,18 @@
 Snapshot: 2026-10-11
 Authority: Current production evidence overrides this file
 
+## 2026-10-11 PixivFlow 配置路径、登录帮助、调度空状态与英文指南
+
+状态：IN_PROGRESS（上游修复与前端正式发布已验证，PixivFlow 正式发行和生产部署正在交付）。
+
+- PixivFlow [PR #202](https://github.com/redtidev1918/PixivFlow/pull/202)：CLI/embedded WebUI 发布有效配置路径，显式文件缺失或 JSON 错误不回退；canonical `web` 与别名免登录启动；登录帮助准确描述 pixiv-token-getter → Puppeteer → Python gppt fallback。
+- `/api/scheduler` 复用 Slot Ledger 并附只读配置摘要，未登录与空库返回正常数据；真实数据库异常仍报错，初始化失败释放连接。前端 [PR #37](https://github.com/redtidev1918/pixivflow-webui/pull/37) 合并 ce21d277，显示未配置/未启用/无记录三种状态，兼容旧后端；[发布 PR #38](https://github.com/redtidev1918/pixivflow-webui/pull/38) 合并 d115aff6，版本 2.0.2。
+- 复用原配置加载器、Express、SQLite、TanStack Query、Ant Design 与 i18n；无新状态机/数据库/调度器。新增组件与 Chromium 契约回归、真实本机 CLI→HTTP→浏览器联测；最终内置前端同步后，功能与发行 PR 的 Node 22/24 全量、GIF 转换、三平台安装包、镜像、branch-contract 与 gitleaks 全通过。前端 577 项 Jest、4 项 Chromium 回归与 lint/build 通过；包的 12 项 clean-install 门禁通过。
+- 六份英文 Docker/Termux/Gateway/Apprise/Migration/Architecture 指南已补齐并接入导航；旧 Apprise 文件 outbox 与成功静默说明以当前 SQLite/structured schedule-outcome 契约明确区分。20 份相关 Markdown 本地链接无缺失；正式 Pages 的六份 Markdown、浏览器正文、英文侧栏与中文切换全部验证。
+- KNOWN_DEBT：本机 Windows 全量的 26 个失败在未修改 master 基线全部复现（Unix 路径断言与网关示例子进程启动）；未禁用或跳过，Linux 全量 CI 仍为 gate。联测另确认 `--static-path` 的 kebab 参数与 WebUI `staticPath` 消费键不一致，使用已有 `STATIC_PATH` 验证；该独立既有问题未混入本轮修复。
+- 前端 [v2.0.2](https://github.com/redtidev1918/pixivflow-webui/releases/tag/v2.0.2) 正式发布，内置 bundle 已同步。[PixivFlow 发行 PR #203](https://github.com/redtidev1918/PixivFlow/pull/203) 合并到 `4497a94b08e8798189c37e27d4027bec3c153fb8`（3.6.2）；正式发布流水线 [38118881633](https://github.com/redtidev1918/PixivFlow/actions/runs/38118881633) 进行中。
+- 部署 pin 准备为上述完整 release commit；发布与部署验证完成前，实际生产基线仍是 PixivFlow 3.6.1 / 248f1e408dfe6215a486bbdbcc51516e8ed45a94。部署前只读复核 active slots=0、待投递=0，终态 slots=114、dead/done outbox=47/232；配置 SHA-256 已留作部署后对比。不覆盖生产配置或历史账本，回滚固定 3.6.1 并保留数据卷。
+
 本文件保存动态状态。
 
 它不是永久事实。
