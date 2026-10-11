@@ -1193,18 +1193,23 @@ Review 不是 Submission 本身。
 
 ```text
 Telegram human submission
-→ DIRECT_PUBLISH
+→ CHAT_REVIEW_REQUIRED（默认 false → DIRECT_PUBLISH）
 
 Mini App human submission
-→ DIRECT_PUBLISH
+→ MINIAPP_REVIEW_REQUIRED（独立开关，默认 true → REVIEW_REQUIRED）
 
 API automated submission
-→ REVIEW_REQUIRED
+→ REVIEW_REQUIRED（固定；API_REVIEW_REQUIRED 不允许绕过审核）
 ```
 
 Admission Policy 必须集中实现。
 
 禁止散落在多个 Telegram handler。
+
+需要审核的请求必须有审核群；未配置时在解析上传和预览 staging 之前失败关闭
+（HTTP `409 review_chat_not_configured`），不能降级直发或受理不可见审核。
+审核群持久化值的未配置形式为 `""`，旧 `"None"` / `"null"` 值在相关读取路径归一；
+不以兼容为由批量改写生产历史。
 
 ---
 
@@ -1235,6 +1240,13 @@ Admin Notification
 ---
 
 # 33. Mini App
+
+页面与静态资源的 CSP 由 TelePost 既有 aiohttp 响应层统一设置，路由进程透传。
+脚本与 API 只允许同源；TelegramUI 保留内联样式，Uppy 本地预览保留 blob 媒体；
+Telegram Web 客户端允许内嵌，不用 `X-Frame-Options: SAMEORIGIN` 阻断它。
+复用 [aiohttp middleware](https://docs.aiohttp.org/en/stable/web_advanced.html#middlewares)
+与 [W3C CSP](https://www.w3.org/TR/CSP/)，不新增代理或业务状态机。
+生产 wiring + 构建产物的浏览器回归是发行门禁，不能替代真实 Telegram WebView 验收。
 
 必须明确分：
 
