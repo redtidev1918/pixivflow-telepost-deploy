@@ -3,14 +3,28 @@
 Snapshot: 2026-10-11
 Authority: Current production evidence overrides this file
 
+## 2026-10-11 PixivFlow eager ZIP 与 TelePost 黑名单兼容
+
+状态：IN_PROGRESS。生产仍为下方已验证的 3.6.3 / on-demand；3.6.4 发行候选与新目标配置待正式发布部署。
+
+- TelePost 两个实际 Bot 子进程同时禁止 `.zip` 和 `application/zip`，TXT 允许。3.6.3 只修复打包；eager 生成的 ZIP 仍会进入旧投递列表并导致整份请求被拒绝。
+- PixivFlow 新增每个 httpMultipart 目标的 `archiveDelivery: local-only`，冻结意图前同步排除 ZIP 附件、预览与内容投影，保留 TXT / 媒体引用。默认 attach 保持其他接收端兼容；eager 的本地产物和 TelePost 黑名单不变。
+- 同时修复多目标共享缓存过早清理：仍有未确认或失败意图时不删除文件；历史 duplicate_existing 的缓存保留行为不变。无 schema 变更，不改写旧 outbox 或调度历史。
+- 使用现有 DeliveryService、multipart adapter、SQLite delivery/outbox 与缓存生命周期；未引入另一套接收策略或文件过滤服务。真实 HTTP + SQLite 回归覆盖附件选择、重启重试、两目标先后确认与失败兄弟保留文件。
+- 在线阅读图片不依赖 ZIP：eager 保留的 MediaAsset sourceUrl 通过 multipart media_assets 传入 TelePost，TXT 标记与链内媒体引用关联后，由 TelePress 改写反代地址。新增真实 multipart 回归验证无 ZIP 时图片 ID / URL 仍发送；TelePost 46 项小说预览回归通过。生产只读运行原有 build_rich_snapshot / proxy_url，确认标记解析、媒体清单与当前反代改写均成功，没有真实投稿。
+- 从现有 media_asset_refs 只读抽取历史小说插图，经当前反代用浏览器 User-Agent GET 验证 HTTP 200 / image/png（读取前 64 字节）；默认 Python / Range 探针返回 403，不能把该探针等同于浏览器图片损坏。没有新增 Telegraph 页面、投稿或修改审核记录。
+- [修复 #206](https://github.com/redtidev1918/PixivFlow/pull/206) 与 [发行 #207](https://github.com/redtidev1918/PixivFlow/pull/207) 全门禁通过并合并；release commit `fea5b8d81916cd98b01ab15ab10e39aa213bba47` / 3.6.4。Windows 本机全量 144 suites / 1583 tests、typecheck、13 项 clean-install smoke 通过；最终 Linux Node 22/24、Windows Node 24、三平台 tarball、镜像、branch-contract 与 gitleaks 均通过。
+
 ## 2026-10-11 PixivFlow 3.6.3：archiver ESM 与 26 项 Windows 失败
 
-状态：代码与发行候选验证通过；正式发布与生产部署待复核。
+状态：VERIFIED（代码、正式发行、生产部署与隔离 ZIP 验收）。
 
 - [修复 PR #204](https://github.com/redtidev1918/PixivFlow/pull/204) 已合并，关闭 issue #189。archiver 升级为 8，通过 native dynamic import 加载 ZipArchive；CommonJS/Jest 配置不变。输出失败关闭流并清理半成品，串行文件 stat 保持输入顺序。
 - Windows 原有 26 项失败分为：OneBot 7、Gateway reference 4、Gateway contract 10 项受错误 file URL 入口判断阻塞；FileService 3、Webhook 1、文件定位 1 项为 POSIX 路径断言。改用 pathToFileURL、等待自测 HTTP 服务关闭后自然退出及平台原生路径断言，没有跳过测试或延长超时。
 - 本机两次全量均为 **143 suites / 1569 tests passed**，typecheck 与 **13 项** clean-install package smoke 通过。[功能 CI](https://github.com/redtidev1918/PixivFlow/actions/runs/38145789231) Linux Node 22/24 与新增 Windows Node 24 全量通过，三平台 tarball、镜像、branch-contract、gitleaks 全绿。[发行 PR #205](https://github.com/redtidev1918/PixivFlow/pull/205) 同门禁全绿，合并为 `b2bba983382615f7625e39a915c045693e97edba`（3.6.3）。
-- Deploy pin 固定上述 release commit。部署前运行 3.6.2 / `4497a94b08e8`，配置 SHA-256 为 `9a81565c29ed014ebc70daba48952d1ce5b30e3bcc9dbb9d03ca22cdf7a3a708`；active slots=0、待投递=0，终态 slots failed/partial/success=31/6/77，outbox dead/done=47/232。未改变生产配置、数据库 schema、调度与投稿历史。
+- [正式 v3.6.3](https://github.com/redtidev1918/PixivFlow/releases/tag/v3.6.3) 与 [发行流水线](https://github.com/redtidev1918/PixivFlow/actions/runs/38146240873) 成功，npm 3.6.3 已发布。正式 tarball SHA-256 为 `c285daa38a740604013b44414b853810848bdb015bc405e6d8a3a58c1a326fc4`，与 SHA256SUMS / npm integrity 一致；干净安装真实 Unicode ZIP 顺序与内容通过。
+- [Deploy #243](https://github.com/redtidev1918/pixivflow-telepost-deploy/pull/243) 全门禁通过并合并，pin 固定上述 release commit。原机器 `83d1650bd23948` / 原卷按 digest 部署，镜像为 `registry.fly.io/pixivflow-scheduler:deployment-01M4NMZF143EBKZANDARV6NSVP` / `sha256:a325e5c4e297fd53aa3417f5bd49d5e4ef1a215b75fd9cff7b9c7d1d7c1df11f`。/health=200 / 3.6.3 / b2bba9833826；package、PIXIVFLOW_COMMIT 与运行 revision `3.6.3+b2bba983382615f7625e39a915c045693e97edba` 一致。机内隔离 ZIP 四文件 Unicode / 顺序 / 内容验收通过。
+- 部署前后配置 SHA-256 均为 `9a81565c29ed014ebc70daba48952d1ce5b30e3bcc9dbb9d03ca22cdf7a3a708`；active slots=0、待投递=0，终态 slots failed/partial/success=31/6/77，outbox dead/done=47/232。未改变生产配置、数据库 schema、调度与投稿历史。运行 materializationPolicy=on-demand，正常小说不产生 ZIP；eager 投递兼容缺陷由上方新任务解决。
 - 回滚固定 3.6.2 / `4497a94b08e8798189c37e27d4027bec3c153fb8` 并保留数据卷。下方 3.6.2 条目的 Windows 26 项 KNOWN_DEBT 已在本次代码与 CI 中解决；独立 `--static-path` 与 Cloudflare 凭据问题保持原状态。
 
 ## 2026-10-11 TelePost 2.83.1：审核配置、安装入口与 Mini App 安全响应一致性
