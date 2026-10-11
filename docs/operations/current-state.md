@@ -3,6 +3,16 @@
 Snapshot: 2026-10-11
 Authority: Current production evidence overrides this file
 
+## 2026-10-11 PixivFlow 3.6.3：archiver ESM 与 26 项 Windows 失败
+
+状态：代码与发行候选验证通过；正式发布与生产部署待复核。
+
+- [修复 PR #204](https://github.com/redtidev1918/PixivFlow/pull/204) 已合并，关闭 issue #189。archiver 升级为 8，通过 native dynamic import 加载 ZipArchive；CommonJS/Jest 配置不变。输出失败关闭流并清理半成品，串行文件 stat 保持输入顺序。
+- Windows 原有 26 项失败分为：OneBot 7、Gateway reference 4、Gateway contract 10 项受错误 file URL 入口判断阻塞；FileService 3、Webhook 1、文件定位 1 项为 POSIX 路径断言。改用 pathToFileURL、等待自测 HTTP 服务关闭后自然退出及平台原生路径断言，没有跳过测试或延长超时。
+- 本机两次全量均为 **143 suites / 1569 tests passed**，typecheck 与 **13 项** clean-install package smoke 通过。[功能 CI](https://github.com/redtidev1918/PixivFlow/actions/runs/38145789231) Linux Node 22/24 与新增 Windows Node 24 全量通过，三平台 tarball、镜像、branch-contract、gitleaks 全绿。[发行 PR #205](https://github.com/redtidev1918/PixivFlow/pull/205) 同门禁全绿，合并为 `b2bba983382615f7625e39a915c045693e97edba`（3.6.3）。
+- Deploy pin 固定上述 release commit。部署前运行 3.6.2 / `4497a94b08e8`，配置 SHA-256 为 `d738bb39edae8abf3f016b57e9ede98efc339c45af17cb7a9fb2c5c3ffca9c55`；active slots=0、待投递=0，终态 slots failed/partial/success=31/6/77，outbox dead/done=47/232。未改变生产配置、数据库 schema、调度与投稿历史。
+- 回滚固定 3.6.2 / `4497a94b08e8798189c37e27d4027bec3c153fb8` 并保留数据卷。下方 3.6.2 条目的 Windows 26 项 KNOWN_DEBT 已在本次代码与 CI 中解决；独立 `--static-path` 与 Cloudflare 凭据问题保持原状态。
+
 ## 2026-10-11 TelePost 2.83.1：审核配置、安装入口与 Mini App 安全响应一致性
 
 状态：VERIFIED（代码、正式发行、生产部署与只读验收）；真实 Telegram WebView 交互为 EXTERNAL_ACCEPTANCE_REQUIRED。
