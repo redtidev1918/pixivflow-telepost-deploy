@@ -3,6 +3,18 @@
 Snapshot: 2026-10-11
 Authority: Current production evidence overrides this file
 
+## 2026-10-11 TelePost 2.83.1：审核配置、安装入口与 Mini App 安全响应一致性
+
+状态：VERIFIED（代码、正式发行、生产部署与只读验收）；真实 Telegram WebView 交互为 EXTERNAL_ACCEPTANCE_REQUIRED。
+
+- **根因与修复：** [功能 PR #328](https://github.com/redtidev1918/TelePost/pull/328) 修正旧菜单注释与不存在的 `/commands` 文档；审核群未配置时不再把 `None` 写成字符串。新持久化值统一为 `""`，相关 legacy 读取兼容 `"None"` / `"null"`，没有批量改写生产历史。需要审核的 HTTP 请求在解析上传、Telegram staging 与入队之前返回 `409 review_chat_not_configured`，不降级直发。API 始终审核，`API_REVIEW_REQUIRED` 仅保留启动校验与显示兼容；Chat 默认 false，Mini App 独立默认 true。跨仓库 AGENTS 与长期架构中的旧 Mini App 直发描述同步修正，实际策略未改变。
+- **安装与文档：** Windows / Linux 安装入口最低 Python 3.10，以版本元组比较；失败返回非零，libvips 为可选探测与安装指导。Compose 默认不映射宿主端口，容器内 Python HTTP 健康检查；中英文安装、配置与 Mini App 文档说明可选 localhost 映射、独立审核开关、环境变量专用 session secret / TTL。OpenAPI 与生成的前端类型同步新增 409 契约。CI 在 Linux 核对 Compose 配置和 shell 语法；本机无 Docker CLI，不宣称本机容器启动验收。
+- **安全与回归：** 复用现有 aiohttp middleware 统一安全响应头与 Mini App CSP，脚本和 API 同源，禁止 eval；TelegramUI 内联样式、Uppy blob/data 预览及 Telegram Web 内嵌按实际资源需要放行，下载 sandbox 继续保留。构建产物通过生产 `build_web_app()` wiring 启动的 Chromium 回归，验证 session mock、blob 图片解码、caption、multipart 提交及审核导航零 CSP violation。Telegram bridge / session 为测试 fixture，不冒充真实 WebView 登录验收。gitleaks 配置改为 CI 已固定的 8.24.3 支持的全局 allowlist 语法，保持原有精确合成 fixture 范围，不关闭扫描。
+- **检查：** [发布候选 CI](https://github.com/redtidev1918/TelePost/actions/runs/38118179379) Linux / Windows 全量各 **1441 passed / 1 skipped**；前端 typecheck / lint / build、**81** 单测、**125 passed / 15 skipped** 浏览器测试和 **1** 生产 CSP 回归通过。配置自检与正式三平台构建通过；主分支 CI 亦成功。
+- **正式发行与部署：** [发布 PR #329](https://github.com/redtidev1918/TelePost/pull/329) 合并为 `ae2d6f13d59b137d306f26d98e23c9715908b691`；[v2.83.1](https://github.com/redtidev1918/TelePost/releases/tag/v2.83.1) 为正式非草稿版本，[发行流水线](https://github.com/redtidev1918/TelePost/actions/runs/38118848375) 成功。三平台程序、SHA256SUMS、[PyPI 2.83.1](https://pypi.org/project/telepost-bot/2.83.1/)、下载页与文档站已发布。GHCR 双架构 amd64 / arm64 index 为 `sha256:b59ec180cb681d0e487906faa4260f87655e8f7f74e91ee513c37bd8226eb02b`。正式 Windows 程序 SHA-256 为 `1b77244a98d13773ea37345af73440dc43161132d0f47eeef824e2d5108f55e7`，本机版本、GBK 配置向导、中文 BOM 配置保留和首次建库冒烟通过。[生产部署](https://github.com/redtidev1918/TelePost/actions/runs/38119429560) 使用固定 2.83.1 镜像成功；[基线 PR #241](https://github.com/redtidev1918/pixivflow-telepost-deploy/pull/241) 通过既有同步脚本更新版本与派生模板。
+- **部署后只读验收：** `/health`、两个 Bot 的 `/version` 与 `/health` 均为 2.83.1 / 上述 release commit；`/ready` 两 Bot 均 true。两个 Bot 的 API / Mini App review=true、Chat review=false；`/app/?bot=bot1|bot2` 返回实际 CSP，无令牌投稿和空 initData 均返回 401，没有产生真实投稿。`smoke-telepost.sh` 通过；webhook 归属均为 TelePost、pending_update_count=0。机内 `doctor --all-bots` **exit 0，18 OK / 0 WARN / 0 CRIT / 0 SKIP**，两个数据库完整，无活跃/卡住重抓、孤儿审核、publishing 或 delivery 积压。Bot2 既有 failed=1、legacy 缺原因 9+3 保持原样。
+- **限制与回滚：** 真实 Telegram 内登录、投稿预览与审核点击仍需手机端外部验收；HTTP 200 和 mock 浏览器回归不能替代。Cloudflare 时钟仍缺只读凭据，维持既有 KNOWN_DEBT。常驻 / 512 MiB / `force_https=false` 与独立 PixivFlow 拓扑保持原契约。无数据库 schema 变更；回滚固定镜像与部署基线至 **2.83.0**，保留持久数据卷。
+
 ## 2026-10-11 PixivFlow 配置路径、登录帮助、调度空状态与英文指南
 
 状态：IN_PROGRESS（上游修复与前端正式发布已验证，PixivFlow 正式发行和生产部署正在交付）。
