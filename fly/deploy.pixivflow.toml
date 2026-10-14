@@ -320,8 +320,14 @@ kill_timeout = 60
     # Rollback: 3.6.2 / 4497a94b08e8798189c37e27d4027bec3c153fb8.
     # fea5b8d = v3.6.4: per-route local-only ZIP projection preserves inline
     # media references; shared cache cleanup waits for all delivery routes.
-    PIXIVFLOW_REF = 'fea5b8d81916cd98b01ab15ab10e39aa213bba47'
-    PIXIVFLOW_VERSION = '3.6.4'
+    # 7be6074 = v3.7.0: opt-in local novel EPUB/PDF ebook export (novelExport
+    # target option, novel-export CLI, series compilation). Off by default in
+    # production; TXT/ZIP/TelePost delivery selection is unchanged, and this
+    # scheduler image gains no browser/fonts (EPUB is pure Node, PDF needs an
+    # explicitly configured browser that stays absent here).
+    # Rollback: 3.6.4 / fea5b8d81916cd98b01ab15ab10e39aa213bba47.
+    PIXIVFLOW_REF = '7be6074778bbc4132aa8888b86e8a954b72481b7'
+    PIXIVFLOW_VERSION = '3.7.0'
 
 [[mounts]]
   source = 'pixivflow_data'
