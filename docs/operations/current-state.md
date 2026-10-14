@@ -1,7 +1,19 @@
 # PixivFlow Ecosystem Current Production State
 
-Snapshot: 2026-10-11
+Snapshot: 2026-10-14
 Authority: Current production evidence overrides this file
+
+## 2026-10-14 PixivFlow 3.7.0 小说 EPUB/PDF 导出
+
+状态：IMPLEMENTED_NOT_VERIFIED（发行与部署 pin 已完成；`fly deploy` 与运行验证待回填）。
+
+- 正式发布：[v3.7.0](https://github.com/redtidev1918/PixivFlow/releases/tag/v3.7.0) 非草稿（publishedAt 2026-10-14T06:16:40Z），npm 3.7.0 可用；发行流水线 [38520142235](https://github.com/redtidev1918/PixivFlow/actions/runs/38520142235) 成功。功能 PR [PixivFlow #208](https://github.com/redtidev1918/PixivFlow/pull/208)（squash `ef00b04`），release PR [#209](https://github.com/redtidev1918/PixivFlow/pull/209)（`7be6074`）。
+- 功能：可选的本地小说电子书导出——target 字段 `novelExport`（epub/pdf/合订）、`novel-export` 离线重导出 CLI、系列按 Pixiv 章节顺序合订。统一 NovelDocument 中间模型，EPUB 为纯 Node 打包（EPUBCheck 5.4.0 零错误），PDF 走显式配置的浏览器（本拓扑不提供，报 `PDF_BROWSER_MISSING`）。无新增运行时依赖。
+- 生产影响：默认零——`novelExport` 未出现在生产配置；TXT/Markdown/ZIP/TelePress/TelePost 投递选择不变（`deliveryFilePaths` 白名单未动且有回归）；导出失败只记警告不拖垮 TXT。无 schema 变更。
+- 验证：全量 jest 146 suites / 1599 tests、kit 6/67、typecheck 干净；CI 新增「Full image (Alpine) CJK PDF」作业在官方完整镜像内以 root 用捆绑 Chromium 真实渲染单篇+系列 EPUB/PDF（5/8 页、书签、NotoSansCJK 嵌入、poppler+pypdf 双通道文本提取）；完整镜像补 `font-noto-cjk`（本生产拓扑用 scheduler 镜像，不受影响）。
+- 部署：[Deploy #247](https://github.com/redtidev1918/pixivflow-telepost-deploy/pull/247) pin `PIXIVFLOW_REF=7be6074778bbc4132aa8888b86e8a954b72481b7` / 3.7.0。（`fly deploy` 结果与运行验证待回填）
+- 配置：无生产配置变更；`production.json` 不动，无卷上备份需求。
+- 回滚：PixivFlow 固定 3.6.4 / `fea5b8d81916cd98b01ab15ab10e39aa213bba47`；无配置回滚步骤。
 
 ## 2026-10-11 PixivFlow eager ZIP 与 TelePost 黑名单兼容
 
