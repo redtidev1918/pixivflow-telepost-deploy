@@ -3,6 +3,20 @@
 > 发布说明面向普通用户：写「对用户有什么改变」，不写内部实现细节（模块名、CI job、配置键）；
 > 技术细节放进代码注释或 `docs/`。每个 Release 的正文由本文件对应版本段自动生成。
 
+## [1.15.0](https://github.com/redtidev1918/pixivflow-telepost-deploy/compare/v1.14.2...v1.15.0) (2026-10-15)
+
+
+### Features
+
+* pin PixivFlow 3.7.0 novel EPUB/PDF export ([#247](https://github.com/redtidev1918/pixivflow-telepost-deploy/issues/247)) ([87177a2](https://github.com/redtidev1918/pixivflow-telepost-deploy/commit/87177a2af781db7913558e6587af89d323dbbfc9))
+
+
+### Bug Fixes
+
+* **deploy:** keep novel ZIP local on TelePost delivery targets ([#244](https://github.com/redtidev1918/pixivflow-telepost-deploy/issues/244)) ([0bedf23](https://github.com/redtidev1918/pixivflow-telepost-deploy/commit/0bedf23a38864cf04bd9d35a2fa28fa121131b5c))
+* **deploy:** pin PixivFlow 3.6.2 and align WebUI contract ([#239](https://github.com/redtidev1918/pixivflow-telepost-deploy/issues/239)) ([d272a4a](https://github.com/redtidev1918/pixivflow-telepost-deploy/commit/d272a4a731d65abf4e340666708145319ba32e59))
+* pin PixivFlow 3.6.3 archiver and Windows fixes ([#243](https://github.com/redtidev1918/pixivflow-telepost-deploy/issues/243)) ([fe9f593](https://github.com/redtidev1918/pixivflow-telepost-deploy/commit/fe9f59305672c31e380f829a5c8caea4e4bd7274))
+
 ## [1.14.2](https://github.com/redtidev1918/pixivflow-telepost-deploy/compare/v1.14.1...v1.14.2) (2026-10-09)
 
 
