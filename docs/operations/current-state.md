@@ -1,7 +1,19 @@
 # PixivFlow Ecosystem Current Production State
 
-Snapshot: 2026-10-14
+Snapshot: 2026-10-15
 Authority: Current production evidence overrides this file
+
+## 2026-10-15 TelePost 2.83.2：并发 SQLite 测试与生产 WAL 对齐
+
+状态：VERIFIED（代码、正式发行、生产部署与只读验收）。
+
+- **根因与修复：** [功能 PR #331](https://github.com/redtidev1918/TelePost/pull/331)。`tests/test_integration.py::test_concurrent_database_operations` 此前在默认 DELETE/FULL 日志模式下让 10 线程共 500 次逐条提交竞争，慢速 CI runner（该轮 Windows 全量 528 秒）上会耗尽 30 秒 busy timeout 报 `database is locked`。修复把测试库初始化为与生产一致的持久 WAL、`synchronous=NORMAL`（连接级设置，逐 writer 生效），初始化连接全路径关闭；保留 10 线程、500 次独立提交、错误传播与逐线程完整性断言，不新增超时。仅改测试：应用代码、数据库 schema、配置与生产行为零变化。
+- **测试：** PR #331 的 Linux / Windows CI 全量通过（[PR run](https://github.com/redtidev1918/TelePost/actions/runs/38781971570)、[push run](https://github.com/redtidev1918/TelePost/actions/runs/38783152151)）；本机全量 1441 passed / 1 skipped、并发用例连续 10 次通过、API/会话选测 45 passed。发布流水线 build-plan 的 Test 步骤同为 **1441 passed / 1 skipped**（95 秒）。
+- **发行：** [发布 PR #332](https://github.com/redtidev1918/TelePost/pull/332) 合并为 `d5d859ef6e79cfa69961a7555210052ff20a8326`；[v2.83.2](https://github.com/redtidev1918/TelePost/releases/tag/v2.83.2) 正式非草稿（publishedAt 2026-10-15T18:28:26Z），[发行流水线](https://github.com/redtidev1918/TelePost/actions/runs/38784549037) 成功：三平台程序与压缩包、SHA256SUMS、双架构 GHCR index、[PyPI 2.83.2](https://pypi.org/project/telepost-bot/2.83.2/)、下载页与文档站全部完成。正式 Windows 程序 SHA-256 为 `76c95c1ab98388c16a75dca8834983e1a1e631b1a174d26d6d2f8e5a72aac0d8`；GHCR 双架构 index digest `sha256:2c1a523988a9e429dfcfe3ad038f484a8aaa3b0fde3c838ee8849aa9a9a5a000`。
+- **部署与只读验收：** [deploy-fly](https://github.com/redtidev1918/TelePost/actions/runs/38786237714) 以固定镜像部署成功；机器 `683032ec6617e8` started 且运行 `ghcr.io/redtidev1918/telepost:2.83.2`（平台 manifest `sha256:c1e791097e5ee1b753587b4eda1b2fe281c8fde1f2ffe961800b9fb378ace4d6`，属于上述 index）。`/health` = 2.83.2 / `d5d859e` / bots [1,2]，三进程 RSS 73.3 / 73.1 / 56.0 MB，卷占用 0.3%；`/ready` 两 Bot 均 true。`smoke-telepost.sh` 4/4 通过（两 Bot 投稿接口无令牌 401）；`verify-webhooks.sh` 机器内核对两 webhook 均归属 telesubmit-multi-bot.fly.dev、待处理更新 0；机内 `doctor --all-bots` **18 OK / 0 WARN / 0 CRIT / 0 SKIP**，两库 integrity ok、无卡住重抓、无孤儿审核、无 publishing/投递积压；bot2 审核队列 failed=1 与 legacy 缺 terminal_reason 9+3 均为既有历史。无数据库 schema 变更、无生产配置变更。
+- **基线同步：** notify-deploy 触发 `update-telepost.yml`（repository_dispatch，[run](https://github.com/redtidev1918/pixivflow-telepost-deploy/actions/runs/38786652027)），[基线 PR #250](https://github.com/redtidev1918/pixivflow-telepost-deploy/pull/250) 全部检查通过并合并为 `d5655bc`，`versions.json` 与派生模板固定 2.83.2。
+- **同批部署仓库维护：** [#246](https://github.com/redtidev1918/pixivflow-telepost-deploy/pull/246) 升级 releasegraph reusable workflows（branch-contract / release）1.5.15→1.5.19；[#240](https://github.com/redtidev1918/pixivflow-telepost-deploy/pull/240) 发布部署 CLI [v1.15.0](https://github.com/redtidev1918/pixivflow-telepost-deploy/releases/tag/v1.15.0)（打包 3.6.2–3.7.0 各次 pin 与 ZIP local-only 修复，六平台 tarball + 校验和齐备；旧 stable 按 retention=1 清理，回退 tag `v1.14.2`）；[#249](https://github.com/redtidev1918/pixivflow-telepost-deploy/pull/249) control-plane 开发依赖 wrangler 4.146.0→4.151.0（含 sharp / workerd 二进制），clock / build / quality / gitleaks / branch-contract 全绿，仅开发工具链，不改生产拓扑。
+- **回滚：** TelePost 固定镜像与部署基线回退 **2.83.1**（`ae2d6f1`），保留持久数据卷；无数据库迁移。测试专用发布对生产行为零增量，回滚仅为版本号回退。
 
 ## 2026-10-14 PixivFlow 3.7.0 小说 EPUB/PDF 导出
 
