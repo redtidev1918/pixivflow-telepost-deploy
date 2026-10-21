@@ -354,7 +354,7 @@ primary_region = 'iad'
   CHANNEL_ALBUM_REPLY = 'discussion'
   WEBHOOK_PATH = '/webhook'
   ROUTER_CHILD_READY_TIMEOUT = '120'
-  PENDING_REVIEW_RETENTION_DAYS = '1'
+  PENDING_REVIEW_RETENTION_DAYS = '14'
   PENDING_REVIEW_CLEANUP_BATCH_SIZE = '20'
   # Replaced (superseded) review cards are deleted after this many days;
   # refetch lineage (attempts / seen candidates) is kept regardless. 0 disables.

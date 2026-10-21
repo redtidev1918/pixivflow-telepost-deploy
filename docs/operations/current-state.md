@@ -3,6 +3,21 @@
 Snapshot: 2026-10-15
 Authority: Current production evidence overrides this file
 
+## 2026-10-21 TelePost 审核过期可靠性修复（待合并部署）
+
+状态：IN_PROGRESS。此次仅准备 PR，不合并、不发版、不部署；上方 Snapshot 与既有生产基线不变。
+
+- 拟将 TelePost 主仓 Fly 与本仓 Fly / Compose / `.env.example` 的待审保留统一为 14 天，批次仍为 20。
+  `init.go` 直接 embed 这些模板，脚手架不另存一套值；已有安装 `.env` 和 Fly secrets 的显式覆盖
+  不会被模板修改覆盖，部署前必须只核对该配置键的有效值，不能打印凭据。
+- TelePost 代码 PR 先交付过期事务、可恢复副作用、只读控制卡和可信投稿者通知，再提升部署保留期。
+  既有终态不回填。默认审核历史 30 天、审计 30 天不改；Telegram 群内卡片不承诺永久保存。
+- Telegram Bot API `deleteMessage` 的 48 小时限制与“14 天后删除原媒体”冲突。过期仍可编辑控制卡，
+  受限媒体明确提示人工清理，不能宣称已自动删除。不引入用户账号、额外进程或提前删除待审媒体。
+- Webhook 原始 Update 仍只入内存队列。当前投稿 ConversationHandler 未启用持久化，
+  媒体追加缺少 Update 幂等键；仅加 Inbox 后自动重放不安全，完整恢复方案仍为 KNOWN_DEBT。
+  独立修复非法请求、保留 Telegram 待处理更新的默认值及静态路径约束，不声称 P0 已解决。
+
 ## 2026-10-15 TelePost 2.83.2：并发 SQLite 测试与生产 WAL 对齐
 
 状态：VERIFIED（代码、正式发行、生产部署与只读验收）。

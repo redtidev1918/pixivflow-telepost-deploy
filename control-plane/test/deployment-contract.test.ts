@@ -261,6 +261,13 @@ describe('telepress service topology', () => {
 describe('telepost service topology', () => {
   const fly = read('fly/deploy.telepost.toml');
 
+  it('keeps pending reviews for 14 days in all embedded deployment templates', () => {
+    expect(quoted(fly, 'PENDING_REVIEW_RETENTION_DAYS')).toBe('14');
+    expect(read('.env.example')).toMatch(/^PENDING_REVIEW_RETENTION_DAYS=14$/m);
+    expect(read('docker-compose.yml')).toContain('${PENDING_REVIEW_RETENTION_DAYS:-14}');
+    expect(quoted(fly, 'PENDING_REVIEW_CLEANUP_BATCH_SIZE')).toBe('20');
+  });
+
   it('never sleeps: a cold start is user-visible', () => {
     expect(fly).toMatch(/auto_stop_machines\s*=\s*false/);
     expect(fly).toMatch(/min_machines_running\s*=\s*1/);
