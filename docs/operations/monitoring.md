@@ -41,6 +41,12 @@
 | `storage.volume` | 持久卷占用 | 与 `cacheMaxSizeMB` / `cacheRetentionDays` 一起判断是不是缓存撑满 |
 | `storage.pixivflow_cache` | 下载缓存占用 | 缓存有界就不会随运行时长膨胀 |
 
+Webhook 的耐久 Inbox（`webhook_inbox`）**不在** `/health` 里：健康检查不开库，避免把
+每个探针都变成一次 SQLite 读。要看 pending / processing / dead 计数与最后错误，用
+`python -m telepost.observability.cli doctor --all-bots` 的 Inbox 段（只读连接）。
+重试 5 次仍失败的更新是死信，保留 30 天、**不会自动重放**；处理前先核对 `last_error`，
+不要手动改 `state` 让旧回调再跑一遍（业务动作会重复执行）。
+
 生产执行端与业务端分别有自己的 `/health`：
 
 ```bash
