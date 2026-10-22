@@ -87,8 +87,12 @@
 | `DB_CACHE_KB` | `1024` | SQLite 缓存 |
 | `MALLOC_ARENA_MAX` | `2` | 防 glibc arena 膨胀 |
 | `REVIEW_ALBUM_SIZE` | `10` | 审核群每个相册的媒体数（Telegram 上限）；512 MiB 小内存机器可调回 4–5 压低上传峰值 |
-| `PENDING_REVIEW_RETENTION_DAYS` | `1` | pending 保留；>2 会超出 Telegram 48h 删除窗口 |
+| `PENDING_REVIEW_RETENTION_DAYS` | `14` | 待审稿件保留天数（TelePost 2.84.0 起模板显式写 14）。过期只改控制卡与留痕，不承诺删除 48 小时窗口之外的群内媒体 |
 | `PENDING_REVIEW_CLEANUP_BATCH_SIZE` | `20` | 每轮过期清理条数 |
+| `REVIEW_MEDIA_TTL_HOURS` | `36` | 审核预览媒体验尸清理时长，自**实际发送时间**起算；`0` 关闭新清理（历史已排队的仍按原值处理）。只删审核预览，不改变稿件状态 |
+| `REVIEW_MEDIA_DELETE_DEADLINE_HOURS` | `47` | 删除失败的兜底时限；超过即转 `restricted` 需人工清理，不虚报成功（Telegram `deleteMessage` 上限 48 小时） |
+| `REVIEW_MEDIA_REGEN_TIMEOUT_MINUTES` | `5` | 「恢复预览」中途中断的判定窗口，超时转 `uncertain` 供人工核对 |
+| `REVIEW_MEDIA_CLEANUP_BATCH_SIZE` | `10` | 每次清理最多处理的审核条数（clamp 1–50） |
 | `MEDIA_GROUP_CAPACITY` | `10` | 频道发布的 media-group 容量 SSOT（Telegram 上限）。11 张 → root 10 + reply 1；21 → 10 + 10 + 1。缺省即可，仅当 Telegram 上限变化时调整（clamp 到 10） |
 | `BOT{n}_MINIAPP_SUBMIT_CTA` | `false` | 频道 CTA 直达该 bot 的 Mini App 投稿页（`https://t.me/<bot>?startapp=submit`；startapp 只导航，身份仍由服务器校验 initData 决定）。未启用/链接缺失回退旧 bot 深链，绝不生成坏链接 |
 | `NOVEL_PREVIEW_ENABLED` | `false` | TXT 小说通过 TelePress 发布到 Telegraph，频道 caption 增加「🔗 在线阅读」链接（2.31.0）。可选发布增强：TXT document 仍是权威下载产物；Telegraph 失败/超时绝不回滚发布；每个发布幂等一个 Telegraph 页。需配合 `TELEGRAPH_ACCESS_TOKEN` secret；未配置 token/库时特性休眠（不计失败） |

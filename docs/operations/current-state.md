@@ -1,22 +1,39 @@
 # PixivFlow Ecosystem Current Production State
 
-Snapshot: 2026-10-15
+Snapshot: 2026-10-22
 Authority: Current production evidence overrides this file
 
-## 2026-10-21 TelePost 审核过期可靠性修复（待合并部署）
+## 2026-10-22 TelePost 2.84.2：耐久 Inbox、审核媒体 36 小时生命周期与审核卡恢复
 
-状态：IN_PROGRESS。此次仅准备 PR，不合并、不发版、不部署；上方 Snapshot 与既有生产基线不变。
+状态：VERIFIED（代码、正式发行、生产部署与只读验收）。
 
-- 拟将 TelePost 主仓 Fly 与本仓 Fly / Compose / `.env.example` 的待审保留统一为 14 天，批次仍为 20。
-  `init.go` 直接 embed 这些模板，脚手架不另存一套值；已有安装 `.env` 和 Fly secrets 的显式覆盖
-  不会被模板修改覆盖，部署前必须只核对该配置键的有效值，不能打印凭据。
-- TelePost 代码 PR 先交付过期事务、可恢复副作用、只读控制卡和可信投稿者通知，再提升部署保留期。
-  既有终态不回填。默认审核历史 30 天、审计 30 天不改；Telegram 群内卡片不承诺永久保存。
-- Telegram Bot API `deleteMessage` 的 48 小时限制与“14 天后删除原媒体”冲突。过期仍可编辑控制卡，
-  受限媒体明确提示人工清理，不能宣称已自动删除。不引入用户账号、额外进程或提前删除待审媒体。
-- Webhook 原始 Update 仍只入内存队列。当前投稿 ConversationHandler 未启用持久化，
-  媒体追加缺少 Update 幂等键；仅加 Inbox 后自动重放不安全，完整恢复方案仍为 KNOWN_DEBT。
-  独立修复非法请求、保留 Telegram 待处理更新的默认值及静态路径约束，不声称 P0 已解决。
+- Webhook Update 先写 SQLite `webhook_inbox`（按 Bot 分库，`(bot_id, update_id)` 唯一，
+  独立连接 `synchronous=FULL`），**落库成功后才返回 HTTP 200**；串行 worker 按
+  `update_id` 处理队首，完成前刷新 `PicklePersistence`，刷新失败不记 done。语义为
+  **至少一次**：崩溃/失败由 Telegram 重投，业务回执靠投稿幂等键、审核 CAS 与发布账本
+  收敛，不承诺外部 API exactly-once。重试 5 次后进入死信（保留 30 天，不自动重放）；
+  Polling 模式不在该保证范围内。（#334 → #335）
+- 审核媒体 36 小时生命周期：按实际发送时间 `preview_sent_at` 清理审核预览媒体，控制卡
+  保留；管理员可按需恢复预览（CAS 防重复）。删除失败按 gone/restricted/transient 分类，
+  47 小时后转 `restricted` 需人工处理，不虚报删除成功。14 天过期
+  （`PENDING_REVIEW_RETENTION_DAYS=14`、批次 20）、通知与审计不变。（#333 → #336）
+- 审核卡不再被异常销毁：每个回调只应答一次（`answer_callback`），终态/权限冲突在业务
+  调用前弹窗，迟到的状态冲突改为只读卡片同步；UI-only 分类只限消息编辑的
+  `BadRequest`，业务异常继续上抛给 error observer 与 Durable Inbox 有界重试。已销毁的
+  卡片用 `/restore_card <ID> [--dry-run]` 就地重建（命令发给目标 Bot）。（#340）
+- 发布证据：release v2.84.2（版本提交 `dbab9cd`，main `28d0f4f`，ReleaseGraph run
+  `39774317162`），GHCR `sha256:4f421ca6…dcfd2ab`，PyPI `telepost-bot 2.84.2`；
+  Fly 机器 `683032ec6617e8` 镜像 2.84.2、实例 `01M5HRA9VJH7DW653T2EZ07V35`；
+  `/health` version=2.84.2 / bots=[1,2]，`/ready` bot1/bot2=true，
+  Webhook `/webhook/bot1|bot2` `pending=0`、无 `last_error`。
+- `doctor --all-bots`：22 项，20 OK / 0 WARN / 2 CRIT。两条 CRIT 是部署前既有死信
+  （bot1 `dead:8`、bot2 `dead:7`，`last_error=TypeError`，最后更新早于 2.84.1 部署），
+  非本次回归；审核队列、publishing、投递账本、预览生命周期、DB 完整性均 OK。
+- 部署基线 PR #258 → `e9827b9`；`versions.json` telepost 2.84.2。回滚点 = 2.84.1
+  （镜像 `ghcr.io/redtidev1918/telepost:2.84.1`，机器版本
+  `01M5HFJ90JZ2GXM7HSES7TMH4Q`）。
+- KNOWN_DEBT：既有 Webhook 死信不重放，需人工核对；Bot1 #202 与 Bot2 #159 的事故
+  卡片尚未重建，管理员可在对应 Bot 执行 `/restore_card 202` / `/restore_card 159`。
 
 ## 2026-10-15 TelePost 2.83.2：并发 SQLite 测试与生产 WAL 对齐
 
