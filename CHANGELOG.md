@@ -3,6 +3,13 @@
 > 发布说明面向普通用户：写「对用户有什么改变」，不写内部实现细节（模块名、CI job、配置键）；
 > 技术细节放进代码注释或 `docs/`。每个 Release 的正文由本文件对应版本段自动生成。
 
+## [1.15.1](https://github.com/redtidev1918/pixivflow-telepost-deploy/compare/v1.15.0...v1.15.1) (2026-10-22)
+
+
+### Bug Fixes
+
+* **build:** source pinned static ffmpeg 7.0.2 instead of johnvansickle download ([7693259](https://github.com/redtidev1918/pixivflow-telepost-deploy/commit/7693259da38d53d2c3f8e9c6170bff77c38a5e9e))
+
 ## [1.15.0](https://github.com/redtidev1918/pixivflow-telepost-deploy/compare/v1.14.2...v1.15.0) (2026-10-15)
 
 
