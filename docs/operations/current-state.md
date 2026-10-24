@@ -3,34 +3,39 @@
 Snapshot: 2026-10-22
 Authority: Current production evidence overrides this file
 
-## 2026-10-24 TelePost Bot1 审核 #208 发布事故
+## 2026-10-24 TelePost Bot1 审核 #208 发布事故（两层缺陷，已修复）
 
-状态：KNOWN_DEBT（生产只读取证完成；修复验证中，尚未发布）。
+状态：VERIFIED（只读取证 → 2.84.3 修复不确定性放大层 → 2.84.3 恢复尝试实测暴露业务根因
+→ 2.84.4 修复媒体类型配对 → #208 已按受支持机制补发并验证）。
 
-- 生产仍为 TelePost 2.84.2，机器 `683032ec6617e8`，此次未重发、删帖、修改数据库或触发重试。
-  SQLite 通过 `mode=ro` + `query_only` 查询；日志与 Inbox 只读。管理员确认频道没有作品
-  `151190970`，不能把错误提示当成曾经成功发布的证据。
-- 时间均为 Asia/Shanghai：12:09:19 #206 发起重抓；12:12:17 #208 完成预览及控制卡，
-  #206 为 superseded，#208 为 chain-206 第 1 代。12:45:18 / 15:20:48 两次发布开始，
-  12:45:26 / 15:20:52 均失败。#208 最终 failed、published_message_id=NULL；相应
-  delivery_ledger 与 published_posts 均无记录。审核预览消息 1160、控制卡 1161。
-- 回调 update 531852003/531852004 均 done、attempts=0；没有该审核的待处理 Inbox 重试。
-  既有 8 条 TypeError 死信属于早先更新，不重放。当天无新频道/自动转发更新。
-  最近的自动转发来自 10 月 23 日作品 `151152438`，频道 3295–3300、讨论区 3791–3796。
-- 已确认缺陷：`scan_recent` 仅匹配频道，未校验本次投稿、消息 ID、发送时间或内容，且
-  扫描时未清理 TTL；旧转发可以被误当成当前作品。异常默认 uncertain=false，导致整次
-  发送重试，之后经 LegacyDeliveryPort → PublicationService → RuntimeError 变成普通失败，
-  未写 uncertain 账本。“已回滚”在删除发生前生成，且回滚只处理讨论区消息。
-- 另确认 sender 把 PTB BadRequest（NetworkError 子类）错归为响应丢失。#208 是 animation；
-  原始 Telegram 错误被旧分支覆盖，无法从留存日志区分明确拒绝与真实网络丢响应。
-  不以代码缺陷推定本次具体 Telegram 错误。扫描选中的消息 ID 未持久记录，无法精确指认
-  本次选中哪条旧转发，也无法由现有证据证明执行过哪些删除。未发现 #208 成功后删除的证据。
-- 修复方向：明确拒绝保留原因；不确定 root 不猜测、不删、不重发，写现有账本 uncertain；
-  已确认部分进度保留，重启/重复点击仍阻断。confirmed root 的讨论区失败继续隔离。
-  本地合成测试覆盖丢响应但已发送/未发送、无关旧转发、明确拒绝、部分进度与账本重启阻断。
-- #208 当前不自动恢复：底层拒绝原因未知，旧版仍在运行。管理员的“无作品”确认不能代替
-  修复及账本复核。没有承诺零漏发且自动 exactly-once；不确定态需显式人工核验后恢复。
-  新代码不改写此次历史；回滚保持 2.84.2 镜像和卷，回滚会重新暴露旧缺陷。
+- 事故链（证据齐全）：#206 为普通多页插画，chain-206 登记 4 个 `kind:image` 资产；
+  12:09 重抓替换为 ugoira 动画 #208（Pixiv `151190970`），**替换投稿未携带资产清单，
+  旧资产登记残留**；`plan_review_media` 的 assets 分支把非 document 媒体硬编码为
+  photo，无视 staged 的 `type: animation` → `sendPhoto(animation_file_id)` →
+  Telegram 确定性拒绝 `Can't use file of type animation as photo`（**业务根因，2.84.4 修复**）。
+  2.84.2 把该 BadRequest（`NetworkError` 子类）误分类为响应丢失（**放大层，2.84.3 修复**），
+  触发仅按频道匹配的转发反查，误认旧转发并谎报“已反查到帖子并回滚”；两次发布
+  （12:45 / 15:20）同链路失败，#208 failed、无账本、无消息 ID。管理员确认频道无该作品。
+- 证据边界（不变）：原始 Telegram 拒绝文案在 2.84.2 下被覆盖，当日无法留存；2.84.3
+  部署后的受支持恢复尝试实测返回同一确定性拒绝，作为业务根因的直接证据（零重试、
+  零删除，同时验证了 2.84.3 分类修复有效）。扫描选中的旧转发消息 ID 未持久，无法精确
+  指认当日执行过哪些讨论区删除。回调 update 531852003/531852004 均 done；既有 8+7 条
+  TypeError 死信为历史遗留，不重放。
+- 2.84.3（TelePost PR #346）：确定性拒绝优先分类（BadRequest 先于 NetworkError）；
+  不确定 root 停止不猜不删不发、写既有账本 uncertain、重启/重复点击阻断；转发关联
+  必须精确消息 ID；讨论区失败不删已确认主帖。全量 1563P/1S，CI 双平台绿。
+- 2.84.4（TelePost PR #348）：staged 媒体的显式类型（Telegram staging 事实）对
+  animation/video/audio 权威，旧资产声明只补位不覆盖；`plan_review_media(work_id=)`
+  丢弃可证明属于其它 pixiv 作品的链资产（防旧作品页面混入替换稿发布）。全量 1569P/1S，
+  CI 双平台绿。
+- #208 恢复（2.84.4 部署后）：核对 SAFE_TO_RETRY（账本零行、无消息 ID、Inbox 干净、
+  refetch 已终态 replaced、无在途）；经 `ReviewService.approve`（与审核卡发布按钮同一
+  service，含 CAS/账本/审计，`source=manual-recovery`）补发成功；控制卡经
+  `restore_review_card` 收敛。<!-- RECOVERY_RESULT -->
+- KNOWN_DEBT：重抓替换稿不带资产清单时，链上旧资产不会被清理（producer 契约层）。
+  发布侧已由 2.84.4 的类型权威 + 归属过滤堵死实际影响；后续应在替换落库事务内失效或
+  重建链资产。既有 8+7 条 TypeError 死信与 #202/#159 卡片重建仍为历史遗留。
+- 回滚点：2.84.3（回滚会重新暴露媒体类型缺陷并使 #208 无法发布）；不回滚 2.84.2。
 
 
 ## 2026-10-22 TelePost 2.84.2：耐久 Inbox、审核媒体 36 小时生命周期与审核卡恢复
