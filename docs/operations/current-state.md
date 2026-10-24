@@ -1,6 +1,6 @@
 # PixivFlow Ecosystem Current Production State
 
-Snapshot: 2026-10-22
+Snapshot: 2026-10-24
 Authority: Current production evidence overrides this file
 
 ## 2026-10-24 TelePost Bot1 审核 #208 发布事故（两层缺陷，已修复）
@@ -30,11 +30,21 @@ Authority: Current production evidence overrides this file
   CI 双平台绿。
 - #208 恢复（2.84.4 部署后）：核对 SAFE_TO_RETRY（账本零行、无消息 ID、Inbox 干净、
   refetch 已终态 replaced、无在途）；经 `ReviewService.approve`（与审核卡发布按钮同一
-  service，含 CAS/账本/审计，`source=manual-recovery`）补发成功；控制卡经
-  `restore_review_card` 收敛。<!-- RECOVERY_RESULT -->
+  service，含 CAS/账本/审计，`source=manual-recovery`）补发成功：频道消息 **3301**
+  （以 animation 形态送达并归档 `animation:<file_id>`），账本
+  `review:208:…151190970…` = published/message 3301（全库恰一行，无重复），审核终态
+  published、published_posts 落档、审计闭环 publish.started → review.approved →
+  publish.completed，控制卡 1161 经 `restore_review_card` 收敛为已发布只读形态；
+  频道序列 3295→3301 连续无孤儿；bot1 failed 队列清零。管理员可视复核动画播放。
 - KNOWN_DEBT：重抓替换稿不带资产清单时，链上旧资产不会被清理（producer 契约层）。
   发布侧已由 2.84.4 的类型权威 + 归属过滤堵死实际影响；后续应在替换落库事务内失效或
   重建链资产。既有 8+7 条 TypeError 死信与 #202/#159 卡片重建仍为历史遗留。
+- 发布证据：2.84.3 = TelePost PR #346→`cf22cdf` + 发布 PR #347→`82a91b2`，release
+  v2.84.3；2.84.4 = PR #348→`59f0af9` + 发布 PR #349，release v2.84.4（commit
+  `a39ca00`），GHCR/PyPI 齐备，deploy-fly 自动按固定 tag 部署两次成功；
+  `/health` version=2.84.4 / bots=[1,2]，`/ready` 双 true，smoke 4/4，
+  verify-production 通过，doctor 20 OK / 0 WARN / 2 CRIT（既有死信，与 2.84.2 基线一致）。
+  部署基线：update-telepost 自动 PR（2.84.3 #261→`40c5169`；2.84.4 同流程）。
 - 回滚点：2.84.3（回滚会重新暴露媒体类型缺陷并使 #208 无法发布）；不回滚 2.84.2。
 
 
