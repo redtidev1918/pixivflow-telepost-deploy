@@ -604,6 +604,13 @@ TelegramMediaCache
 
 # 13. Review → Publication Media Reuse
 
+频道发送结果不确定时，TelePost 必须保留既有 Publication Ledger 的 `uncertain`，
+阻断自动重发与删除；不得把同频道最近转发当作当前投稿的发布凭证。讨论区锚点关联
+需要已确认的频道消息 ID。明确拒绝与响应丢失分别分类（PTB BadRequest 继承
+NetworkError，必须优先识别）。已确认的频道主帖不因讨论区后续失败被删除或重发。
+持久账本、审核 CAS 与 Durable Inbox 继续各司其职；没有可信确认时须人工核验，
+不能把 at-least-once 输入处理误表述为 Telegram 外部副作用 exactly-once。
+
 如果审核群已经拥有最终媒体，应优先评估：
 
 ```text
