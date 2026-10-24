@@ -611,6 +611,13 @@ NetworkError，必须优先识别）。已确认的频道主帖不因讨论区�
 持久账本、审核 CAS 与 Durable Inbox 继续各司其职；没有可信确认时须人工核验，
 不能把 at-least-once 输入处理误表述为 Telegram 外部副作用 exactly-once。
 
+发布计划的媒体类型以**已 staged 的 Telegram 事实**（`media_json.type`，来自审核群
+staging 发送成功的方法）为权威；canonical 资产声明（`media_asset_refs.kind`）只
+补位、不覆盖。重抓替换稿可能不带资产清单，链上残留上一作品的 `pixiv:<wid>:` 资产：
+发布计划必须按 `work_id` 丢弃可证明属于其它作品的资产引用，绝不能把已废弃作品的
+媒体混入替换稿发布（review #208：image→animation 替换曾同时触发类型降维与内容污染）。
+animation/audio 永远单条发送（现有 planner 的 standalone family），不进相册。
+
 如果审核群已经拥有最终媒体，应优先评估：
 
 ```text
