@@ -331,9 +331,15 @@ kill_timeout = 60
     # heuristic, and rejection error strings carry structured fields only —
     # closing the 2026-10-25 misattribution where a TelePost HTTP 400 was
     # reported as「Pixiv 服务器返回错误」.
-    # Rollback: 3.7.0 / 7be6074778bbc4132aa8888b86e8a954b72481b7.
-    PIXIVFLOW_REF = 'b12a82f5e984b7975c6f4f52682ca4ad778ee541'
-    PIXIVFLOW_VERSION = '3.7.1'
+    # bd188cb = v3.7.2: GET /internal/targets/:id/recover/:requestId status
+    # carries targetId/scheduleId/errorCode (cell.terminalReasonCode) so the
+    # consumer's recovery reconciliation can verify identity and persist a
+    # normalized failure reason; recovery_success copy no longer claims
+    # publication (delivery success is not review/publication). Additive
+    # fields — safe to deploy before or after TelePost 2.84.9.
+    # Rollback: 3.7.1 / b12a82f5e984b7975c6f4f52682ca4ad778ee541.
+    PIXIVFLOW_REF = 'bd188cb8482c1ef505405716c3de1b78feae8c39'
+    PIXIVFLOW_VERSION = '3.7.2'
 
 [[mounts]]
   source = 'pixivflow_data'
