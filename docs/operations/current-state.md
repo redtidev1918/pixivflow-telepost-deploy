@@ -1,7 +1,51 @@
 # PixivFlow Ecosystem Current Production State
 
-Snapshot: 2026-10-25
+Snapshot: 2026-10-25（第二波 2.84.6）
 Authority: Current production evidence overrides this file
+
+## 2026-10-25（第二波）幻影卡点击、恢复无响应与 Durable Inbox 回归审计（2.84.6）
+
+状态：VERIFIED（代码取证 → 双 PR → CI → v2.84.6 部署 → HTTP 验收；用户点击的
+端到端复现因未在捕获窗口内发生，标记为遗留观察项，见下）。
+
+- **幻影卡点击**：操作者点 #209 旧卡的「发布」——`claim_for_publishing` 有意允许
+  failed→publishing（#208 式恢复通道），空 payload 产生 `delivery returned no messages`，
+  **零频道副作用**（无确认消息、无账本），行回到 failed。修复：`approve` 认领后对
+  「零媒体+零文档+零链」行立即释放认领并明确拒绝（PR
+  [#352](https://github.com/redtidev1918/TelePost/pull/352)）。
+- **恢复无响应（根因 CONFIRMED）**：恢复回调在严格串行 Durable Inbox worker 内
+  **应答前**同步等待远端 HTTP（PixivFlow 冷启动实测 ~8s、最坏 120s 超时）——应答晚于
+  Telegram ~10s 回调窗口（用户「没有响应」），且等待期间队头阻塞该 Bot 全部更新；
+  fly 日志证明点击期间 PixivFlow 从未被唤醒（POST 未发出，问题在 TelePost 侧）。
+  修复（PR [#354](https://github.com/redtidev1918/TelePost/pull/354)）：
+  `admit_recovery`（本地 DB）/`submit_recovery`（远端）拆分，回调先应答「已提交」，
+  提交转后台；300s `resubmit_pending_recoveries` 同 requestId 幂等兜底重投，15 分钟
+  超龄终态化（`submit_retry_exhausted`+审计）；后台终态失败向审核群发 ❌ 通知；
+  `mark_accepted` 状态守卫防 replay 复活；处理器兜底 catch 任何异常仍应答。
+- **回归定性**：Durable Inbox 引入（2.84.2）为分类 C（时序暴露既有缺陷）而非设计
+  错误——串行语义与其前 PTB 默认一致；#209 链在 HTTP 路径与 inbox 无关。教训沉淀
+  于 TelePost `.agent/LESSONS.md`：串行消费者内的任何外部 I/O 都是队头阻塞源。
+- **可观测**：`/api/botN/v1/health` 新增 `inbox`（pending / 最老队头年龄 / dead_24h），
+  SSH 不可用时也可定位「未投递 vs 未消费」。部署后实测 bot1：pending=0、dead_24h=0。
+- **Agent 工程体系**：TelePost 新增 `.agent/`（STATUS/PLAN/TASKS/HANDOFF/MEMORY/
+  DECISIONS/LESSONS，证据标记 CONFIRMED/LIKELY/UNKNOWN/BLOCKED）+ `docs/ARCHITECTURE.md`
+  （本仓内部视图）+ `docs/TESTING.md` 层级规则 + `.agents/skills/release/SKILL.md`。
+  PixivFlow 与本仓按「复用既有」原则不重复建 .agent/（各自 AGENTS.md + 本文件即等价物）。
+- **测试**：新增 `test_recovery_answer_first.py` 5 项（含 HOL 注入：远端阻塞时处理器
+  2s 内应答——旧代码红）、`test_review_service.py` 2 项（无 payload 拒绝 + #208 通道
+  保持）、api inbox 健康字段 1 项；本机全量 1590P/1S（catalog 补齐后全绿），CI 双平台绿。
+- **发行**：v2.84.6（release PR #353，commit `cc93746`；#352 `3b71b30` + #354 `8e4883b`
+  同班次）；release run 40173231997 成功，deploy-fly 自动部署成功；PyPI 2.84.6；
+  `/health`=2.84.6/`cc93746`、`/ready` 双 true、smoke 4/4、bot1 API health 含 inbox 字段。
+  基线：update-telepost 自动 PR
+  [#266](https://github.com/redtidev1918/pixivflow-telepost-deploy/pull/266) → `2f3f65f`。
+- **遗留观察**：用户「再试一次」的原始点击未在日志捕获窗口内复现（UNKNOWN：更新是否
+  到达 webhook）。2.84.6 部署后恢复按钮已具备即时应答；若再次点击仍无响应，用
+  `/api/botN/v1/health` 的 inbox 字段一步定位（pending 增长=消费阻塞；恒 0=未投递，
+  查 webhook 注册）。旧 #209 幻影卡建议直接删除消息。
+- **回滚点**：TelePost **2.84.5**（`ghcr.io/redtidev1918/telepost:2.84.5`，回滚将恢复
+  恢复回调的队头阻塞与无 payload 发布空转）；无 schema 变更（`recovery_attempts`
+  仅新增查询方法）。
 
 ## 2026-10-25 插画审核暂存限流事故（五项缺陷，TelePost 2.84.5 + PixivFlow 3.7.1 修复）
 
