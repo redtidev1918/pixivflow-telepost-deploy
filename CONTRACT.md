@@ -51,6 +51,9 @@
   - `submitted` / `pending` / `running` → 不可恢复
 - 恢复请求必须带 UUID `requestId`（幂等键），可选 `correlationId`；并发点击重复提交由幂等键收敛。
 - 每次恢复操作必须产生 audit 记录。
+- 恢复执行的终态以 PixivFlow 的同一 requestId/target 账本为准；TelePost 本地超龄
+  或查询失败不能证明远端已停止。消费者保留活动互斥并显示待对账，禁止因此产生新执行身份。
+- `submitted` 只证明下游已受理投递，不证明人工审核或频道发布完成。发布事实属于 TelePost。
 - WebUI 写操作只能通过服务端代理调用既有 recovery dispatcher，浏览器不得持有触发凭据。
 
 # 6. Delivery / Publication Contract
