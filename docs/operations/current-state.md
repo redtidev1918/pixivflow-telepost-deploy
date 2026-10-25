@@ -1,5 +1,32 @@
 # PixivFlow Ecosystem Current Production State
 
+## 2026-10-26 PixivFlow 集中式优化轮收尾 + smoke 误报修复
+
+状态：VERIFIED（代码/CI/工具修复/真实验证）；生产版本不变（3.7.2，零行为变更不发版）。
+
+- **PixivFlow PR [#214](https://github.com/redtidev1918/PixivFlow/pull/214)（已合并）**：
+  状态词表 SSOT（`ACTIVE_CELL_STATES` 导出、RecoveryOutcome/SlotCoordinator 内联
+  集合收敛、`OUTBOX_STATUSES` 单源）、死抽象 `aggregateSlot` 删除（全仓零调用，
+  本文件组件表已同步修正）、`pixivflow recovery-status` CLI（与认证 HTTP handler
+  共享 `RecoveryStatusQuery` 同一实现）、`.agent/` 六件套 + release SKILL +
+  AGENTS.md 边界段。新增 14 测试；全量 148 suites / 1614 tests；
+  `refactor:` 类型不触发 release-please——零行为/协议变化，**生产保持 3.7.2，
+  deploy pin 无需更新**（PR #215 收尾记录）。
+- **Deploy PR [#276](https://github.com/redtidev1918/pixivflow-telepost-deploy/pull/276)（已合并）**：
+  `smoke-pixivflow.sh` 三处误报修复——①`fly apps list` 表格前导空格误判应用
+  缺失 → 结构化 `fly_app_state.py`（deployed/suspended/missing/cli_failure 四态，
+  CLI 失败绝不判缺失）；②机器列表内联 python 静默 SyntaxError 仍打 [OK] →
+  显式成败分支；③未授权探测漏 `-X POST` 永远 404（检查自始未真正验证过鉴权）
+  → 改 POST，实测无 token 401 先于执行逻辑。`test_fly_app_state.py` 9 例进入
+  validate.sh 门禁。真实验证：smoke 4/4 OK（deployed / started 256MB / 401）。
+- 生产核验（2026-10-26）：PixivFlow `/health` = 3.7.2/`bd188cb`；smoke 全绿。
+- **恢复链路活体证据（2026-10-25 晚，承接下条 #209 段）**：操作者对 #209 来源
+  target 点击恢复（request `1f66f229`），全链路真实走通：受理 → 执行 →
+  替换稿 #211 落库（7 媒体暂存成功）→ 操作者点「重抓」→ 新代际 #212
+  （作品 151271923，4 图）成为链头、#211 正确转 superseded（对 #211 的发布
+  预检被 stale guard 正确拦截）。**失败→恢复→审核→代际替换全链 VERIFIED**；
+  审核批准与频道发布待操作者对 #212 的显式决策。
+
 ## 2026-10-25 恢复执行权威收敛切片发行与验收（2.84.9 + 3.7.2）
 
 状态：VERIFIED（代码/CI/发行/部署/只读生产验收）；#209 恢复仍待人工审核授权（见下）。
