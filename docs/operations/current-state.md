@@ -3,6 +3,23 @@
 Snapshot: 2026-10-25（第二波 2.84.6）
 Authority: Current production evidence overrides this file
 
+## 2026-10-25（第三波）恢复链路可观测与「正在恢复中」卡死封堵（2.84.7）
+
+状态：VERIFIED（代码/CI/发行/部署）；恢复点击的端到端复现等待用户下一次点击（仪表已就位）。
+
+- **取证进展**：用户点击已到达并被处理（08:23:17 `收到回调查询: sched_recover|...`）；webhook
+  曾在 2.84.6 部署（07:42）后失效（Telegram 零投递、inbox pending=0/dead=0），08:14 机器重启
+  重新 setWebhook 修复。对照实验证明公网 recover 路由 + auto-start 唤醒 + 令牌摘要两端一致
+  （`7a35ba0a…`）均正常；07:46 的机器唤醒为 Cloudflare 时钟补投（schedules/run，
+  already_completed，不回填）。TelePost 后台提交从未到达 PixivFlow 的原因待 2.84.7 日志定案。
+- **修复（TelePost PR
+  [#356](https://github.com/redtidev1918/TelePost/pull/356) → v2.84.7 `3a306af`）**：
+  `submit_recovery` 全量日志（成功 INFO / 暂缓 WARNING 带错误码与细节，消除静默）；300s sweep
+  对 30 分钟无结局的 `accepted` 行终态化（`accepted_stale`）——「一直正在恢复中」永久卡死类
+  关闭；`/api/botN/v1/health` 新增 `recovery`（active 状态计数 + 最老年龄）。
+- **发行**：release PR #357；本机全量 1592P/1S，CI 双平台绿；v2.84.7 已部署
+  （`/health`=2.84.7/`3a306af`）。回滚点 2.84.6（`cc93746`）。
+
 ## 2026-10-25（第二波）幻影卡点击、恢复无响应与 Durable Inbox 回归审计（2.84.6）
 
 状态：VERIFIED（代码取证 → 双 PR → CI → v2.84.6 部署 → HTTP 验收；用户点击的
