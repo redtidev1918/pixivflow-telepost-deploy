@@ -326,8 +326,14 @@ kill_timeout = 60
     # scheduler image gains no browser/fonts (EPUB is pure Node, PDF needs an
     # explicitly configured browser that stays absent here).
     # Rollback: 3.6.4 / fea5b8d81916cd98b01ab15ab10e39aa213bba47.
-    PIXIVFLOW_REF = '7be6074778bbc4132aa8888b86e8a954b72481b7'
-    PIXIVFLOW_VERSION = '3.7.0'
+    # b12a82f = v3.7.1: delivery-endpoint verdicts classify into the delivery
+    # domain (telepost_rejected / delivery_failed) before the generic 5xx
+    # heuristic, and rejection error strings carry structured fields only —
+    # closing the 2026-10-25 misattribution where a TelePost HTTP 400 was
+    # reported as「Pixiv 服务器返回错误」.
+    # Rollback: 3.7.0 / 7be6074778bbc4132aa8888b86e8a954b72481b7.
+    PIXIVFLOW_REF = 'b12a82f5e984b7975c6f4f52682ca4ad778ee541'
+    PIXIVFLOW_VERSION = '3.7.1'
 
 [[mounts]]
   source = 'pixivflow_data'

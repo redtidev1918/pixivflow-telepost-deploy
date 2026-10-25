@@ -1,7 +1,78 @@
 # PixivFlow Ecosystem Current Production State
 
-Snapshot: 2026-10-24
+Snapshot: 2026-10-25
 Authority: Current production evidence overrides this file
+
+## 2026-10-25 插画审核暂存限流事故（五项缺陷，TelePost 2.84.5 + PixivFlow 3.7.1 修复）
+
+状态：VERIFIED（代码取证 → 双仓修复 → PR/CI → 正式发行 → 生产部署 → HTTP 只读验收；
+#209 生产账本核对因本机 Fly SSH 隧道不可用未完成，为证据边界，见下）。
+
+- **事故链（既有调查 + 本轮代码取证确认）**：Bot1 每日插画经 PixivFlow HTTP 投稿，
+  TelePost 创建审核 #209 进入 `preparing`；审核预览发送连续遭遇 Telegram 限流
+  （9/17/60 秒退避），旧实现的 `min(wait, 60)` 截断与指数放大耗尽 240 秒 staging
+  deadline，`review_stager` 抛 `submission staging timeout`；清理路径删除预览并
+  `mark_preparation_failed(clear_previews=True)`；同键重试命中 failed 行原样复用 →
+  HTTP 400 `permanent_failure`（`find_active_by_key` 对 failed 行无时间窗）；
+  PixivFlow 把错误字符串里 JSON 预览中作品 ID 的数字（如 `157812345` 含 `578`）
+  误配 `5\d\d` 正则 → `remote_http_error`「Pixiv 服务器返回错误」；reconcile 扫描
+  还会为 0 媒体 failed 行补发「投稿待审核」控制卡（幻影卡，DB↔UI 分叉）。
+- **五项修复（TelePost PR [#350](https://github.com/redtidev1918/TelePost/pull/350)
+  → `c9be5d6`，release v2.84.5 `161b039`）**：
+  1. **P0-A 有界限流**：`retry_after` 按最低等待足额支付（删除 60 秒截断与指数
+     放大）；等待放不进剩余预算时立即终止（不再 sleep 到期，杜绝定时器抖动下的
+     未付清早重发）；控制卡阶段独立预算，liveness 心跳覆盖预览+控制两阶段；
+     reconcile 发送亦有界。
+  2. **P0-B 副作用证据**：staging 失败把已观察到的 preview message ids 持久化到行
+     （`preview_message_ids` 参数），`review.failed` 审计携带重试时间线
+     （每次 attempt 的 retry_after / wait / budget_left / elapsed）。
+  3. **P0-C 受控恢复**：`claim_failed_recovery` 单写者 CAS（仅限「从未可操作」行：
+     无控制卡、无已暂存媒体、未发布、非 refetch）让同键重试复用原 review 身份
+     重新暂存；并发重试收敛 `recovery_in_progress`（HTTP 503 retry-later，
+     OpenAPI 与前端类型同步）；带媒体的发布失败（#208 类）与曾有卡片的行保持
+     稳定 400 终态。安全论证基于不可达性（发布需 pending→approve CAS），不基于
+     「媒体字段为空」。
+  4. **P0-D 卡片收敛**：reconcile 不再为 0 媒体 failed 行伪造待审核卡；崩溃残留
+     行收敛到 failed；有已暂存媒体的行仍自动重建卡片；复用提示文案改「审核准备
+     失败」（staging 从未发布）。
+  5. **P0-H 可观测**：doctor 新增 `review_staging_recoverable` 检查暴露可恢复积压。
+- **PixivFlow 修复（PR [#210](https://github.com/redtidev1918/PixivFlow/pull/210)
+  → `f4461c2`，release v3.7.1 `b12a82f`）**：非 2xx 错误字符串只携带结构化净化
+  字段（business_status/status/code），原始 payload 不再进入分类输入；
+  `classifyFailedReason` 交付域模式（permanent delivery failure / delivery
+  endpoint rejected / downstream reported terminal → `telepost_rejected`；
+  retryable delivery → `delivery_failed`）先于通用 5xx 启发式；真实上游 5xx 仍
+  `remote_http_error`。
+- **测试**：TelePost 新增 `test_staging_recovery.py` 14 项（9/17/60 序列、120 秒
+  不截断、无指数放大、预算外立即停止、同键恢复复用身份、并发 recovery_in_progress、
+  三类不可恢复行、reconcile 三态、文案），更新 2 个既有测试到新语义；本机全量
+  **1583 passed / 1 skipped**，CI 双平台绿。PixivFlow 新增 6 项回归；本机全量
+  **146 suites / 1605 tests**、tsc 干净，CI Node 22/24 + Windows 绿。
+- **发行与部署**：v2.84.5（[release run 40164240647](https://github.com/redtidev1918/TelePost/actions/runs/40164240647)
+  成功；8 项产物 + PyPI 2.84.5）deploy-fly 自动部署成功（run 40164930153）；
+  `/health` version=2.84.5 / commit `161b039` / bots=[1,2]，`/ready` 双 true，
+  smoke 4/4，RSS 73.8/73.5/56.6 MB。v3.7.1（release run 40164248894 成功；npm
+  3.7.1）`fly deploy -c fly/deploy.pixivflow.toml --ha=false` 成功，原机器
+  `83d1650bd23948` 滚动更新，`/health` = 3.7.1 / `b12a82f`（Fly DNS AAAA 告警
+  为既有记录）。部署基线：update-telepost 自动 PR
+  [#264](https://github.com/redtidev1918/pixivflow-telepost-deploy/pull/264) →
+  `e55b6f0`（versions.json 2.84.5）；pixivflow pin 本 PR 固定 3.7.1。
+- **#209 处置（隔离，未触碰）**：未读取、未重发、未发布其媒体。当日 PixivFlow
+  outbox 重试已耗尽死信，无在途重试；恢复机制的安全护栏（控制卡/媒体/refetch
+  守卫）恰好把此类已被 reconcile 触碰过的行排除在自动恢复之外。其幻影卡与审计
+  留待管理员视需要用 `/restore_card` 或忽略；不影响新投稿。
+- **证据边界**：本机 Fly SSH 隧道（WireGuard DNS）持续 i/o timeout，无法机内
+  读取 #209 行/审计/doctor 做部署后复核；HTTP 探针（/health、/ready、per-bot
+  API health、smoke、双 Fly app /health）全部通过。机内 doctor 复核待 SSH 恢复
+  后补做（`python -m telepost.observability.cli doctor --all-bots`）。
+- **回滚点**：TelePost 固定镜像/基线回退 **2.84.4**（`a39ca00`，GHCR
+  `ghcr.io/redtidev1918/telepost:2.84.4`，保留数据卷；回滚会重新暴露五项缺陷并
+  使同键恢复不可用）；PixivFlow 回退 **3.7.0**（`7be6074`）。无数据库 schema
+  破坏性变更（`claim_failed_recovery` 仅用既有列），回滚安全。
+- **KNOWN_DEBT**：相册发送失败降级为逐张的既有行为保留（本地错误/429 文本类异常
+  均有「确定未送达」证据，响应丢失类已被 NetworkError 分支拦截）；Telegram
+  RetryAfter 上限行为若未来出现 >240 秒的 retry_after 仍会按预算终止（正确的
+  有界行为）。长期架构见 ecosystem-platform.md §Staging reliability。
 
 ## 2026-10-24 TelePost Bot1 审核 #208 发布事故（两层缺陷，已修复）
 
