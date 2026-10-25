@@ -22,7 +22,7 @@ complexity score. State names alone do not measure complexity.
 | Mechanism | Code authority | Count / role | Classification |
 | --- | --- | --- | --- |
 | Execution cell FSM | PixivFlow `src/scheduler/SlotStateMachine.ts` | 8 states, 20 non-self edges; 4 terminal states | Necessary execution semantics |
-| Slot aggregate | same module, `aggregateSlot` | 5 derived values; no independent transition table | Projection, not a second FSM |
+| Slot aggregate | (removed 2026-10-26) `aggregateSlot` had no production or test callers | Dead abstraction; earlier revisions of this table wrongly listed it as a live projection | Deleted in the PixivFlow word-table SSOT slice |
 | Refetch generation | TelePost `telepost/domain/refetch_state.py` | 9 states, 26 non-self edges | Review replacement lifecycle; not equivalent to schedule recovery |
 | Recovery command | TelePost `telepost/application/recovery.py` | Before: requested/accepted/failed; two local age-based failure branches | Accidental execution-owner duplication |
 | Review/publication | TelePost `review_queue.py`, `review_service.py`, publication service and delivery ledger | Separate approval and external-send boundaries; no global state count claimed | Necessary business and Telegram uncertainty |
