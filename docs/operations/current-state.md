@@ -1,8 +1,42 @@
 # PixivFlow Ecosystem Current Production State
 
-## 2026-10-25 架构简化与恢复权威审计（进行中）
+## 2026-10-25 恢复执行权威收敛切片发行与验收（2.84.9 + 3.7.2）
 
-状态：IN_PROGRESS。下方早期 VERIFIED 仅涵盖当时注明的层面，不表示恢复端到端完成。
+状态：VERIFIED（代码/CI/发行/部署/只读生产验收）；#209 恢复仍待人工审核授权（见下）。
+
+- **发行**：TelePost [v2.84.9](https://github.com/redtidev1918/TelePost/releases/tag/v2.84.9)
+  （PR #360 → release PR #361，squash `b3a97e1`，8 产物 + PyPI telepost-bot 2.84.9）；
+  PixivFlow [v3.7.2](https://github.com/redtidev1918/PixivFlow/releases/tag/v3.7.2)
+  （PR #212 → release PR #213，`bd188cb`，tgz/metadata/SHA256SUMS）。
+- **部署**：PixivFlow 3.7.2 经 `fly deploy`（16:2x CST，机器 83d1650，DNS AAAA 告警为
+  既有传播延迟提示）；TelePost 2.84.9 经 deploy-fly 自动通道（run 40210954825）。
+- **验收（只读，2026-10-25 16:4x UTC）**：TelePost `/health` = 2.84.9/`b3a97e1`、
+  `/ready` 双 true；机内 per-bot `/ready` 双 200——该端点自本版起要求 webhook 注册
+  核验新鲜（≤180s），证明 60s 自核验任务在生产运行。per-bot API health 携带新
+  `recovery.reconciliation_required`/`last_success_at` 字段。smoke 4/4；
+  verify-webhooks 双 Bot 已注册、pending=0。PixivFlow `/health` = 3.7.2/`bd188cb`。
+- **机内 doctor（--all-bots）**：双库 integrity ok；refetch running/stuck/failed24h
+  全 0；无孤儿审核、无卡死 publishing；投递账本 0 失败；inbox 历史 dead=8/7
+  （与部署前一致，未重放，为遗留项非回归）。审核队列：bot1 failed=1/pending=1、
+  bot2 failed=1。
+- **当日失败任务核查（只读）**：bot1 #209 failed、media/documents 均空（长度 2）、
+  控制卡 1168 存在——未完成暂存，无可发布载荷；bot1 #210 pending 0.6 天（正常
+  等待人工审核，带 TXT 载荷）；bot2 #112 failed（2026-10-07 旧暂存期失败，空载荷）。
+  #209/#112 恢复需人工点击恢复按钮并完成内容审核授权；本轮未读取/未重传/未发布
+  其媒体，未向真实频道发送测试媒体。
+- **内容分类争议（Part 8.3 复核）**：全部持久化工程记录（deploy current-state、
+  TelePost .agent/、memory）中 #209 仅有来源描述（「每日插画」= 调度来源），
+  未发现任何已持久化的内容属性/合规分类结论；本会话亦未读取媒体内容，无法也
+  不试图独立判定。任何关于 #209 内容属性的具体断言均无工程证据支撑，不作为
+  事实传播；安全限制（审核未完成不恢复/发布）继续保留。
+- **回滚点**：TelePost 2.84.8（`e6cfcde`，镜像 `ghcr.io/redtidev1918/telepost:2.84.8`）；
+  PixivFlow 3.7.1（`b12a82f`）。新增列幂等 additive，旧二进制可读新库，但回滚会
+  重新引入本地超龄误判缺陷（详见 recovery-ownership.md Deferred work）。
+
+## 2026-10-25 架构简化与恢复权威审计（已完成——被上方 VERIFIED 条目取代）
+
+状态：SUPERSEDED（发行/部署/验收由上方条目承接；架构审计沉淀在
+[Recovery ownership](../architecture/recovery-ownership.md)）。
 
 - 本轮实时核查：TelePost GitHub Release 与 Fly 镜像均为 **2.84.8**，revision
   `e6cfcde968c3f1da95ebd6e2e8df598c25438a0d`；PixivFlow Release 为 **3.7.1**。
