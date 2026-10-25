@@ -1829,6 +1829,55 @@ This is type filtering, not content scanning. Renamed executables and malicious 
 
 ## Review album rejection and novel eligibility
 
+### Staging reliability (§staging-reliability, 2026-10-25 repair)
+
+Review staging uses one bounded budget per phase (previews, then a fresh budget
+for the control card), all on the monotonic clock. Telegram's `retry_after` is
+a minimum wait: it is paid in full — never truncated (the old 60s cap re-sent
+while the flood limit was still in force) and never amplified — and a wait that
+cannot fit the remaining budget stops the staging immediately with an
+explainable timeout instead of sleeping out the clock.
+
+A staging failure is PERSISTED EVIDENCE, not a blank: the preview message ids
+observed so far stay on the review row, and the `review.failed` audit carries
+the retry timeline (retry_after vs. remaining budget per attempt). Empty
+persisted media is not evidence that nothing was sent.
+
+Controlled recovery: a same-key retry of a staging-failed review reclaims the
+SAME review identity through a single-writer CAS (`failed → preparing` only for
+rows that were never actionable: no control card, no staged media, nothing
+published, not a refetch replacement). Publication is unreachable for such rows
+(pending→approve CAS), so the bounded cost of recovery is at most a duplicate
+preview message in the private review group, cleaned best-effort and audited
+(`review.recovery_claimed`). A concurrent retry converges on
+`recovery_in_progress` (HTTP 503, retry-later) instead of a premature success.
+Rows that WERE actionable (a publish-path failure with staged media, a card
+that existed) keep the stable terminal answer.
+
+The reconciler never fabricates an actionable「投稿待审核」card over a 0-media
+failed row; crash-left rows converge to `failed` and retries go through the
+controlled recovery above. Doctor surfaces the recoverable backlog
+(`review_staging_recoverable`).
+
+Cross-plane attribution: a delivery endpoint's verdict is a DELIVERY-domain
+conclusion. Error strings crossing that boundary carry structured fields
+(`business_status`/`code`), never raw payloads whose digits could be misread by
+message-shape classification — a TelePost HTTP 400 was once reported as「Pixiv
+服务器返回错误」because a work id inside the JSON preview matched a `5\d\d`
+heuristic. Delivery-domain patterns are classified before any generic 5xx
+heuristic (`telepost_rejected` / `delivery_failed`), and a genuine upstream 5xx
+keeps `remote_http_error`.
+
+Community research: retain the existing PTB transport and staging adapter.
+[Telegram ResponseParameters](https://core.telegram.org/bots/api#responseparameters)
+defines the minimum retry delay. PTB's
+[AIORateLimiter](https://docs.python-telegram-bot.org/en/stable/telegram.ext.aioratelimiter.html)
+provides rate admission but does not provide review persistence, a submission
+deadline, or external-effect reconciliation. Adding nested automatic retries
+would obscure the existing budget; this repair keeps retries at the existing
+staging boundary and adds no parallel queue. No new dependency or license is
+introduced. Failure remains explicit when the external result is unknowable.
+
 TelePost review staging splits an explicitly rejected oversized upload into smaller albums in source order. [Telegram sendMediaGroup](https://core.telegram.org/bots/api#sendmediagroup) permits 2–10 items; that count alone does not ensure the aggregate upload succeeds. A known 413 rejection permits splitting, while a timeout or connection failure leaves acceptance uncertain and must not cause blind resending. Each completed part immediately contributes its message IDs to cleanup evidence. Caption, reply threading and media identity remain with the existing staging adapter.
 
 PixivFlow performs full-text novel eligibility checks before binding a fresh scheduled cell. Binding still precedes the first artifact write and uses the existing SQLite CAS; a competing winner prevents persistence. A restart during language detection therefore leaves an unbound cell, while a restart after binding resumes the same eligible work. Existing locked work never silently changes identity. A locked novel rejected by its language rule reports filter_exhausted, not internal_error. The single-target manual recovery API opens a separate durable recovery request without rerunning a submitted sibling or rewriting the original occurrence.
