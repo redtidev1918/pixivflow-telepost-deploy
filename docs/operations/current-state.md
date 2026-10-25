@@ -1,5 +1,18 @@
 # PixivFlow Ecosystem Current Production State
 
+## 2026-10-26 PixivFlow v3.8.0 发版与部署（用户授权）
+
+状态：VERIFIED（发行/部署/生产验证）。
+
+- 用户授权发版：#216（`feat(cli)` 空提交把 #214 的用户可见 CLI 增量带入发版
+  语义）→ release-please [#217](https://github.com/redtidev1918/PixivFlow/pull/217)
+  **v3.8.0**（`78ed437`，tgz/RELEASE-METADATA/SHA256SUMS）→ deploy pin
+  [#279](https://github.com/redtidev1918/pixivflow-telepost-deploy/pull/279)
+  → `fly deploy --ha=false` → 生产 `/health` = **3.8.0/`78ed437`**，
+  smoke 4/4（含 suspended 正确分类）。
+- 回滚点：3.7.2 / `bd188cb`。
+- 内容与 DEFERRED 清单见下方 2026-10-26 优化轮条目与 PixivFlow `.agent/TASKS.md`。
+
 ## 2026-10-26 PixivFlow 集中式优化轮收尾 + smoke 误报修复
 
 状态：VERIFIED（代码/CI/工具修复/真实验证）；生产版本不变（3.7.2，零行为变更不发版）。
