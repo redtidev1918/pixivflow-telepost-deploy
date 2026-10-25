@@ -1,5 +1,5 @@
 # syntax=docker/dockerfile:1.7
-ARG TELEPOST_IMAGE=ghcr.io/redtidev1918/telepost:2.84.5
+ARG TELEPOST_IMAGE=ghcr.io/redtidev1918/telepost:2.84.6
 FROM ${TELEPOST_IMAGE}
 
 # Override the additive TelePress dependency without changing the immutable
