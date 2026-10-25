@@ -1,6 +1,6 @@
 # Recovery ownership and modularity
 
-Status: IN_PROGRESS
+Status: DELIVERED (first slice: TelePost 2.84.9 #360, PixivFlow 3.7.2 #212, deploy pin #273; production acceptance 2026-10-25 in operations/current-state.md)
 Scope: TelePost / PixivFlow / Deploy
 
 ## Decision
