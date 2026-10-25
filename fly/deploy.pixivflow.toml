@@ -337,9 +337,13 @@ kill_timeout = 60
     # normalized failure reason; recovery_success copy no longer claims
     # publication (delivery success is not review/publication). Additive
     # fields — safe to deploy before or after TelePost 2.84.9.
-    # Rollback: 3.7.1 / b12a82f5e984b7975c6f4f52682ca4ad778ee541.
-    PIXIVFLOW_REF = 'bd188cb8482c1ef505405716c3de1b78feae8c39'
-    PIXIVFLOW_VERSION = '3.7.2'
+    # 78ed437 = v3.8.0: state-wording SSOT (ACTIVE_CELL_STATES / OUTBOX_STATUSES
+    # exports), dead aggregateSlot removed, `pixivflow recovery-status` CLI
+    # sharing one implementation with the authenticated HTTP recover query
+    # (#214). No HTTP/behavior change — protocol-compatible with TelePost 2.84.9.
+    # Rollback: 3.7.2 / bd188cb8482c1ef505405716c3de1b78feae8c39.
+    PIXIVFLOW_REF = '78ed4374a9f5299de556523afad009735e9ad9dd'
+    PIXIVFLOW_VERSION = '3.8.0'
 
 [[mounts]]
   source = 'pixivflow_data'
