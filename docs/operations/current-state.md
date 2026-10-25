@@ -1,5 +1,27 @@
 # PixivFlow Ecosystem Current Production State
 
+## 2026-10-25 架构简化与恢复权威审计（进行中）
+
+状态：IN_PROGRESS。下方早期 VERIFIED 仅涵盖当时注明的层面，不表示恢复端到端完成。
+
+- 本轮实时核查：TelePost GitHub Release 与 Fly 镜像均为 **2.84.8**，revision
+  `e6cfcde968c3f1da95ebd6e2e8df598c25438a0d`；PixivFlow Release 为 **3.7.1**。
+  versions.json 基线漂移已消除：#271 已合并（2.84.8），#269 关闭（被取代）。
+- SSH 已可读取机内 doctor：Bot1/Bot2 inbox 历史 dead=8/7，无 pending；未重放。
+  Telegram getWebhookInfo 两 Bot 均已注册、pending=0、无 last_error_date。
+- #209 仅核查状态与字段长度：failed，控制消息存在，media/documents JSON 长度均为2。
+  未提取、重新抓取、重传、批准或发布其媒体。
+- 两条历史 accepted_stale 恢复请求在 PixivFlow 的 GET recover 查询中当前均为 failed。
+  不能据此推断当时没有在途执行，亦无证据宣称当时发生了重复发布。
+- 新切片移除 TelePost 两个按本地年龄判失败的分支；查询与结果通知汇入同一持久投影。
+  红测两例证实旧实现错误释放远端在途 target。交付状态：TelePost PR #360、
+  PixivFlow PR #212（GET recover 补 targetId/scheduleId/errorCode + 文案修正）；
+  本地复核全量 TelePost 1601P/1S、PixivFlow 1605P。发行/部署完成前不标 VERIFIED。
+- 架构清单、六类图、职责/方案矩阵与范围见
+  [Recovery ownership](../architecture/recovery-ownership.md)。用户最新要求本地隔离复现，
+  本轮不向真实频道发送测试媒体。
+- 回滚基线：TelePost 2.84.8 / PixivFlow 3.7.1。旧程序可读取新增列，但会恢复旧超龄裁决缺陷。
+
 Snapshot: 2026-10-25（第二波 2.84.6）
 Authority: Current production evidence overrides this file
 
