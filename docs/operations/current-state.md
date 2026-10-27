@@ -1,5 +1,36 @@
 # PixivFlow Ecosystem Current Production State
 
+## 2026-10-27 重复小说插图导致拒收与跨仓契约门禁
+
+状态：IN_PROGRESS（生产取证与本地修复；发行部署未完成）。
+
+- bot2-daily 当日小说 29478076 HTTP 400 / outbox dead；通过正式 outbox inspect
+  读取冻结意图，确认同一 `pixivimage` 的 asset id 与 URL 重复两次。正文重复引用
+  被错误地当成多个资产，触发 TelePost `invalid_media_asset` 校验；插画兄弟已 submitted。
+- 另一缺陷：PixivFlow 拒绝摘要只读 data.code，遗漏 TelePost 的 error.code，丢掉
+  明确机器诊断。修复读取受限代码，禁止原始响应内容进入日志与错误分类。
+- 系统性审计另复现 ACK 重试权威缺陷（测试证据，非本次生产 400 的归因）：
+  outbox 把已分类 ACK 抛成普通字符串再分类，408/request_expired 与
+  503/invalid_dependency_state 被误判死信，400/invalid_timeout_setting 被误判重试。
+  三例红测后改为 typed ACK failure 保存 retryable/status；HTTP harness 增加真实 503
+  故障与 ACK 丢失/重启，仍只有 3 条审核、3 次暂存。使用既有 outbox 预算，无新重试器。
+- 修复：源头有序资产去重；adapter 折叠旧 intent 的相同 wire 事实、拒绝冲突；
+  双仓真实 HTTP/SQLite 契约门禁，覆盖响应丢失后重启幂等、12 页插画与拒收路径。
+- 本地：PixivFlow 148 suites/1620 tests + kit 67 tests、typecheck；TelePost
+  1601P/1S、API/会话 46P；真实跨服务契约 + 同门禁内 Telegram 媒体回归 80P。
+- 已启用合并规则（原两仓均无 required checks/rulesets）：PixivFlow
+  `delivery-contract` ruleset **25938652** → `TelePost delivery contract`；TelePost
+  **25938992** → `PixivFlow delivery contract`。仅默认分支、Actions App 15368、
+  strict=true、无 bypass；声明在 config/github/ 两份 JSON，运维见 upgrades.md。
+  GitHub readback 已核对 active；PixivFlow #220（61efecd）+ #221（efcae9e）+
+  #222（4885ace）均已合并；TelePost #363（3cbf264）+ #364（63837fb）已合并。
+  独立审查唯一 Important（机器人作者条件跳过）已移除并复核；必需门禁不按作者跳过。
+  发行 PR #219 已合并为 eb70ceec4594ff993adfb5ced3b587a85b8d7d16 / 3.8.1，
+  正式产物与生产部署验收进行中。
+- 现场只读 doctor：双库完整、无活动 refetch/publishing/投递积压；inbox 历史 dead=8/7
+  保持。未重投当日小说、未改写 occurrence、未自动批准/发布。
+- 回滚基线：PixivFlow 3.8.0 / 78ed437；无 schema/生产配置变更。
+
 ## 2026-10-26 PixivFlow v3.8.0 发版与部署（用户授权）
 
 状态：VERIFIED（发行/部署/生产验证）。

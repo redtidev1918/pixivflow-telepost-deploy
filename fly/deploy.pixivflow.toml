@@ -342,8 +342,12 @@ kill_timeout = 60
     # sharing one implementation with the authenticated HTTP recover query
     # (#214). No HTTP/behavior change — protocol-compatible with TelePost 2.84.9.
     # Rollback: 3.7.2 / bd188cb8482c1ef505405716c3de1b78feae8c39.
-    PIXIVFLOW_REF = '78ed4374a9f5299de556523afad009735e9ad9dd'
-    PIXIVFLOW_VERSION = '3.8.0'
+    # eb70cee = v3.8.1: unique novel media identities and legacy manifest
+    # normalization; safe rejection codes; ACK/status retry authority retained.
+    # Producer/consumer HTTP + media regressions are required before merge.
+    # Rollback: 3.8.0 / 78ed4374a9f5299de556523afad009735e9ad9dd.
+    PIXIVFLOW_REF = 'eb70ceec4594ff993adfb5ced3b587a85b8d7d16'
+    PIXIVFLOW_VERSION = '3.8.1'
 
 [[mounts]]
   source = 'pixivflow_data'

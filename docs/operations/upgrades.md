@@ -6,6 +6,31 @@
 [architecture-matrix.json](https://github.com/redtidev1918/pixivflow-telepost-deploy/blob/main/docs/reference/architecture-matrix.json)
 为准；只读核对脚本见 [monitoring.md](monitoring.md)。
 
+## 投递契约合并保护
+
+PixivFlow 的默认分支要求 `TelePost delivery contract`，TelePost 的默认分支要求
+`PixivFlow delivery contract`。检查来自 GitHub Actions App（15368），strict 模式
+要求针对最新 base 验证；规则不配置 bypass actor。声明保存在
+`config/github/pixivflow-delivery-contract.json` 与
+`config/github/telepost-delivery-contract.json`，实际 ruleset id 在 current-state。
+
+现有下载页自动化也走 PR：既有 `RELEASE_PLEASE_TOKEN` 触发分支/PR 检查，等待
+必需检查注册并通过所有 CI 后普通合并，再显式重建 Pages。GitHub 不允许内置
+Actions integration 成为本仓 ruleset 的 bypass actor；不得用放开规则代替修复
+自动化。`.github/workflows/update-download-page.yml` 的本地保护适配段在 docsite
+模板刷新时必须保留。PAT 缺失、CI 失败或 base 过期会保留 PR 并明确失败。
+
+两端共用 PixivFlow 仓库的契约脚本（PixivFlow 仓库内 `scripts/` 下的
+`verify-telepost-contract.py`）：真实跨语言 HTTP/SQLite
+契约后运行 TelePost 的媒体 pipeline / 分组 / 限流 / 恢复 / 发布回归，外部 Telegram
+用测试端口，所有内容为合成 fixture。PR 日志记录两端 commit。生产验收仍需核对
+release、deploy pin 与 runtime，不能用 CI 代替实际运行。
+
+查看线上规则：`gh api repos/redtidev1918/PixivFlow/rulesets` 与
+`gh api repos/redtidev1918/TelePost/rulesets`。调整规则须同时更新声明与 current-state；
+不得因为一次红测临时删除检查或增加 bypass。GitHub 行为以
+[必需状态检查规则](https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/managing-rulesets/available-rules-for-rulesets#require-status-checks-to-pass-before-merging) 为依据。
+
 ## 镜像固定规则
 
 生产镜像只从两种引用构建：

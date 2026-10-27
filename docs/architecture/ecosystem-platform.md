@@ -1883,3 +1883,28 @@ TelePost review staging splits an explicitly rejected oversized upload into smal
 PixivFlow performs full-text novel eligibility checks before binding a fresh scheduled cell. Binding still precedes the first artifact write and uses the existing SQLite CAS; a competing winner prevents persistence. A restart during language detection therefore leaves an unbound cell, while a restart after binding resumes the same eligible work. Existing locked work never silently changes identity. A locked novel rejected by its language rule reports filter_exhausted, not internal_error. The single-target manual recovery API opens a separate durable recovery request without rerunning a submitted sibling or rewriting the original occurrence.
 
 Production uses download.materializationPolicy=on-demand: novel previews carry text plus remote media references, and do not create image ZIP attachments. TelePost multipart targets additionally declare archiveDelivery=local-only, so eager ZIP companions are excluded per route before freezing attachment, preview and content projections into the durable outbox. Archives still follow the existing local cache lifecycle; cleanup waits for all work deliveries to be confirmed and retains failed-route files for recovery. Default attach preserves archive delivery to other receivers. The receiver denylist remains unchanged and never silently exempts service uploads.
+
+Novel image markers are text occurrences, while the media manifest is an ordered
+set of identities (kind + sourceId). Repeated references retain every position in
+the text/Markdown, but resolve/materialize/register each asset once. Illustration
+page identities remain distinct even if URLs coincide. On transport, identical
+wire facts from older durable intents may be collapsed; conflicting facts under
+one asset identity fail explicitly. No durable intent, occurrence or idempotency
+key is rewritten. TelePost retains strict duplicate-asset admission.
+
+Both repositories run the same real producer/consumer contract harness in PR CI:
+PixivFlow downloader, SQLite outbox and multipart transport talk to TelePost's
+actual HTTP routes, validators, review application service and isolated SQLite.
+Authentication and external Telegram staging are fixtures; the existing Telegram
+adapter regression suites remain responsible for albums/rate limits/publication.
+ACK-loss/restart, repeated novel images, multi-page illustration, archive refusal
+and rejection-code retention are checked without contacting production. This
+reuses existing aiohttp/PTB/SQLite services and adds no runtime framework.
+
+The normalized delivery ACK owns retry eligibility. Outbox exception cleanup
+must retain that decision and the HTTP status in a typed failure; diagnostic
+words such as `invalid` or `timeout` must never reverse it. Generic error-text
+classification is only a fallback for transport exceptions without an ACK.
+Regression cases include retryable 408, 503 carrying an invalid-state code, and
+permanent 400 carrying a timeout-setting code. These cases exercise the existing
+bounded outbox budget; no second retry manager is introduced.
