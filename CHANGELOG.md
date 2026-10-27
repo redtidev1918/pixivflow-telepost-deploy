@@ -3,6 +3,13 @@
 > 发布说明面向普通用户：写「对用户有什么改变」，不写内部实现细节（模块名、CI job、配置键）；
 > 技术细节放进代码注释或 `docs/`。每个 Release 的正文由本文件对应版本段自动生成。
 
+## [1.15.2](https://github.com/redtidev1918/pixivflow-telepost-deploy/compare/v1.15.1...v1.15.2) (2026-10-27)
+
+
+### Bug Fixes
+
+* **smoke:** stop misreading fly CLI tables; classify app state structurally ([#276](https://github.com/redtidev1918/pixivflow-telepost-deploy/issues/276)) ([b78d3bc](https://github.com/redtidev1918/pixivflow-telepost-deploy/commit/b78d3bcf97bd82e4d9486443961f55140973eeec))
+
 ## [1.15.1](https://github.com/redtidev1918/pixivflow-telepost-deploy/compare/v1.15.0...v1.15.1) (2026-10-22)
 
 
