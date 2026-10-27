@@ -20,7 +20,8 @@ Actions integration 成为本仓 ruleset 的 bypass actor；不得用放开规�
 自动化。`.github/workflows/update-download-page.yml` 的本地保护适配段在 docsite
 模板刷新时必须保留。PAT 缺失、CI 失败或 base 过期会保留 PR 并明确失败。
 
-两端共用 PixivFlow `scripts/verify-telepost-contract.py`：真实跨语言 HTTP/SQLite
+两端共用 PixivFlow 仓库的契约脚本（PixivFlow 仓库内 `scripts/` 下的
+`verify-telepost-contract.py`）：真实跨语言 HTTP/SQLite
 契约后运行 TelePost 的媒体 pipeline / 分组 / 限流 / 恢复 / 发布回归，外部 Telegram
 用测试端口，所有内容为合成 fixture。PR 日志记录两端 commit。生产验收仍需核对
 release、deploy pin 与 runtime，不能用 CI 代替实际运行。
