@@ -2,7 +2,8 @@
 
 ## 2026-10-27 重复小说插图导致拒收与跨仓契约门禁
 
-状态：IN_PROGRESS（生产取证与本地修复；发行部署未完成）。
+状态：VERIFIED（发行/部署/生产验收/死信重投闭环）；重投小说 #170 待人工审核
+（EXTERNAL_ACCEPTANCE_REQUIRED——API 来源固定 REVIEW_REQUIRED，不自动批准）。
 
 - bot2-daily 当日小说 29478076 HTTP 400 / outbox dead；通过正式 outbox inspect
   读取冻结意图，确认同一 `pixivimage` 的 asset id 与 URL 重复两次。正文重复引用
@@ -25,10 +26,24 @@
   GitHub readback 已核对 active；PixivFlow #220（61efecd）+ #221（efcae9e）+
   #222（4885ace）均已合并；TelePost #363（3cbf264）+ #364（63837fb）已合并。
   独立审查唯一 Important（机器人作者条件跳过）已移除并复核；必需门禁不按作者跳过。
-  发行 PR #219 已合并为 eb70ceec4594ff993adfb5ced3b587a85b8d7d16 / 3.8.1，
-  正式产物与生产部署验收进行中。
-- 现场只读 doctor：双库完整、无活动 refetch/publishing/投递积压；inbox 历史 dead=8/7
-  保持。未重投当日小说、未改写 occurrence、未自动批准/发布。
+- **发行与部署（VERIFIED）**：发行 PR #219 合并为
+  eb70ceec4594ff993adfb5ced3b587a85b8d7d16 / [v3.8.1](https://github.com/redtidev1918/PixivFlow/releases/tag/v3.8.1)
+  （2026-10-27T08:45Z，tgz/SHA256SUMS）；deploy pin
+  [#282](https://github.com/redtidev1918/pixivflow-telepost-deploy/pull/282)
+  （`8558d0d`，quality/build/clock/branch-contract/gitleaks 全绿）合并后
+  `fly deploy -c fly/deploy.pixivflow.toml --ha=false` 成功，机器 83d1650 滚动更新
+  至 v79，smoke checks 通过（DNS AAAA 告警为既有传播延迟提示）。机内
+  `/health` = **3.8.1 / `eb70ceec4594`**，CLI `--version` 一致。
+- **死信重投（VERIFIED，正式恢复路径）**：`pixivflow delivery retry
+  590afdeb-…da9a9 --yes`（dry-run 先行）以**同一幂等键** re-arm 小说死信，
+  落 `outbox.replay_requested`（actor=cli）审计；worker 第 2 次尝试
+  LEDGER `delivered` / OUTBOX `done`——3.8.1 adapter 资产折叠对旧冻结 intent 生效，
+  TelePost 受理。历史死信 illustration:149661816（2026-09-15，
+  `refetch attempt is unknown or terminal`）按死信契约重投必被再拒，保持不动。
+- **重投验收（只读）**：TelePost bot2 审核 **#170**（work 29478076，pending，
+  source=api，actor=service，控制卡已发，无孤儿）；doctor `--all-bots`
+  22 OK / 2 CRIT（inbox 历史 dead=8/7，部署前一致，legacy 非回归）。未改写
+  occurrence、未自动批准/发布——审核授权归操作者。
 - 回滚基线：PixivFlow 3.8.0 / 78ed437；无 schema/生产配置变更。
 
 ## 2026-10-26 PixivFlow v3.8.0 发版与部署（用户授权）
