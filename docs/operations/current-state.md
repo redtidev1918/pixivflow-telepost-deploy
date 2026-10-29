@@ -1,5 +1,35 @@
 # PixivFlow Ecosystem Current Production State
 
+## 2026-10-29 PixivFlow 3.9.1（正式小说 Markdown 导出 + 认证输出安全）
+
+状态：VERIFIED（发行/部署/生产验收闭环）。
+
+- v3.9.0（PR #224，fa1a9a4）：小说正式 Markdown 导出。`novelExport.formats` 新增
+  `md` → `<base>.novel.md` + 同目录 `images/`（Artifact variant
+  `markdown-export`）。复用 parseNovel 节点流做完整标记转换（章节/分页锚点/
+  jumpuri/ruby 纯文本降级/jump 跳转/元字符转义）；缺图降级为原标记 + warning，
+  正文不丢。系列支持逐章与 --merge-series 合订（目录+唯一章节锚点）；
+  `novel-export` 离线重导出字节级幂等。
+- **兼容边界（DECISIONS D-10）**：TelePress 消费的富媒体 sidecar（`<base>.md`，
+  variant `markdown`）路径与语义不变；`findRichNovelSources` 与
+  `deliveryFilePaths` 均不命中新 variant，`.novel.md` 不进入 Telegram 投递。
+  TXT/EPUB/PDF/ZIP 行为不变。
+- v3.9.1（PR #228，合并于 ac72cdaa88f55f283e20303f52c56bed1a7fad27）：
+  认证输出安全。`login`/`login-headless`/`refresh` 不再向终端或 --json
+  输出 access/refresh token 与原始 OAuth 响应；失败路径 safeAuthError 有界分类
+  （HTTP 400-599/网络 errno），不透传上游错误原文。凭据仍写入所选配置文件，
+  服务器迁移仍用 `refresh <token>` 导入。
+- 验证：#224 CI 12/12；#228 全量 150 suites / 1653 tests + tsc、CI 全绿
+  （AuthOutputSafety canary 断言 stdout/CommandResult/文件日志三面无令牌）。
+- 发行：[v3.9.1](https://github.com/redtidev1918/PixivFlow/releases/tag/v3.9.1)
+  （tgz + SHA256SUMS + RELEASE-METADATA.json）；deploy pin PR #285。
+- 部署与验收（VERIFIED）：fly deploy（machine 83d1650bd23948，--ha=false）；
+  `/health` → `version 3.9.1, commit ac72cdaa88f5`，代码=Release=Deploy=Runtime。
+  Rollback = 3.8.1 / eb70ceec4594ff993adfb5ced3b587a85b8d7d16（pin 注释块内）。
+- 已知未闭环：真实 Pixiv 数据验收（纯文本/含图/系列三场景）仍 BLOCKED——
+  本机无有效凭据与已存真实数据；解锁条件见 PixivFlow .agent/HANDOFF.md。
+
+
 ## 2026-10-27 重复小说插图导致拒收与跨仓契约门禁
 
 状态：VERIFIED（发行/部署/生产验收/死信重投闭环）；重投小说 #170 待人工审核
