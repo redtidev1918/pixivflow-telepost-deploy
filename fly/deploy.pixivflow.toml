@@ -346,8 +346,16 @@ kill_timeout = 60
     # normalization; safe rejection codes; ACK/status retry authority retained.
     # Producer/consumer HTTP + media regressions are required before merge.
     # Rollback: 3.8.0 / 78ed4374a9f5299de556523afad009735e9ad9dd.
-    PIXIVFLOW_REF = 'eb70ceec4594ff993adfb5ced3b587a85b8d7d16'
-    PIXIVFLOW_VERSION = '3.8.1'
+        # ac72cda = v3.9.1 (supersedes v3.9.0): formal novel Markdown export
+    # (novelExport.formats md → <base>.novel.md + images/, artifact variant
+    # markdown-export; TXT/EPUB/PDF/rich-media sidecar/TelePress/TelePost
+    # delivery selection all unchanged), and auth output safety —
+    # login/login-headless/refresh never print tokens (stdout or --json) and
+    # upstream auth errors are sanitized to bounded HTTP/errno classes (#228).
+    # No delivery-protocol change; safe before/after TelePost current pin.
+    # Rollback: 3.8.1 / eb70ceec4594ff993adfb5ced3b587a85b8d7d16.
+    PIXIVFLOW_REF = 'ac72cdaa88f55f283e20303f52c56bed1a7fad27'
+    PIXIVFLOW_VERSION = '3.9.1'
 
 [[mounts]]
   source = 'pixivflow_data'
