@@ -23,6 +23,9 @@ EXTERNAL_ACCEPTANCE_REQUIRED（GitHub 内部缓存/旧 PR 引用、fork 与外�
   未移动发行标签；旧副本已私有备份，未将旧下载保留在公开 Release。
 - 第三方标准词汇不代表私有业务配置。PixivFlow 文档运行脚本恢复固定原件并加
   SHA256/语法门禁（#235）；其标准标识符不得被盲目词表替换。
+- 追收（#290，docs-only 不发版）：#289 在 `upgrades.md` 写入的「PixivFlow 配置参考」
+  链接误用静态路径 `/CONFIG/#…`（docsify 站 404），已改为 `#/CONFIG?id=<slug>`
+  哈希路由形态并附路由说明；锚点按浏览器实测渲染 id 校验。
 - GitHub 内部 PR 引用/缓存及他人 fork、克隆需外部清理；不据远端分支清理宣称互联网副本已消除。
 
 ## 2026-10-30 PixivFlow 3.10.0 通用候选策略上线
