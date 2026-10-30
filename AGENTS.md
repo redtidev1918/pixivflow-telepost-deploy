@@ -1,5 +1,14 @@
 # PixivFlow Ecosystem Agent Operating Contract
 
+## Public repository privacy
+
+Live topics, required/preferred tags, aliases, and topic-revealing target names are
+private operational configuration. Public code, templates, fixtures, documentation,
+pull requests and release notes must use neutral fictional examples. Keep real
+configuration on private volumes or gitignored `*.private.json` files; never export
+it into this repository. After a privacy history rewrite, migrate local patches to
+a fresh clone rather than pushing old history back to any remote branch or tag.
+
 适用于：
 
 * PixivFlow

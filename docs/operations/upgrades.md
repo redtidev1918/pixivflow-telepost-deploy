@@ -72,6 +72,10 @@ fly logs -a pixivflow-scheduler --no-tail | grep -o 'PIXIVFLOW_REVISION[^ ]*' | 
 
 ## 配置更新模型随预设不同
 
+公开模板仅包含虚构主题和身份。真实 `topic`、必需/偏好 tag、别名以及语义化的
+target 名称是私有运营数据，留在运行卷或 gitignored `*.private.json` 中；不要把
+生产配置、其差异或原值映射上传到公开 PR、文档或发布说明。公开例子只说明字段语义。
+
 | 预设 / 平台 | 配置位置 | `watchConfig` | 改配置等于做什么 |
 |---|---|---|---|
 | `split-worker`（Fly 生产执行端） | 卷上 `/app/data/production.json`（镜像内置版本化默认值由入口点首次启动收集到卷） | `true` | 直接编辑卷上的运行副本即可热重载 `schedules`/`targets`/`delivery`/`download`；`pixiv`/`network`/`storage` 仍要重启 |
@@ -93,6 +97,21 @@ fly logs -a pixivflow-scheduler --no-tail | grep -o 'PIXIVFLOW_REVISION[^ ]*' | 
 `.env` 注入。凭据值不写进配置文件，也不出现在任何输出里，规则见 [凭据契约](../concepts/credentials.md)。
 
 ## 安全的远程配置更新序列
+
+### 候选主题偏好（PixivFlow `candidateSelection`）
+
+这是 PixivFlow 的通用 target 配置，TelePost 不参与候选排序。bot2 的插画与小说
+保持 `topic: テーマ乙`；`requiredTags` 显式列出主主题的日文/中文/英文别名（any-of），
+`preferredTags: ["テーマ甲", "テーマ甲別名"]` 仅给同时符合主主题的候选加 25% 热度分。
+偏好不创建搜索通道，也不能绕过主主题准入或 seed tier；原有相关搜索排除列表可保留。
+例如主主题候选热度 100 与双主题候选热度 90，后者按 112.5 排序；主主题热度 200
+仍排在其前面。没有双主题作品时正常选择主主题作品。
+
+调整时同步两个 bot2 target，勿改 bot1 或排班；先发布支持此字段的 PixivFlow，
+再更新卷配置。搜索、lookback、重抓/恢复、待发池与下载前复核共用策略。
+完整字段与默认行为见 [PixivFlow 配置参考](https://redtidev1918.github.io/PixivFlow/CONFIG/#candidateselection必需-tag-与有限偏好)。
+
+### 上传、校验与热重载
 
 先本地校验，再上传到临时名，再在远端校验，最后原子 `mv` 就位。任何一步失败都不会让服务读到
 半份配置：

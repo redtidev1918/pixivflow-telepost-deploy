@@ -1,5 +1,35 @@
 # PixivFlow Ecosystem Current Production State
 
+> 业务隐私：本文及历史运维记录中的主题、别名、target 名称与内容样例均已匿名化，
+> 不代表真实运行配置。执行运维命令时从私有配置读取真实身份，不复制文中的示例值。
+
+## 2026-10-30 公开仓库隐私清理
+
+状态：IN_PROGRESS（隔离历史脱敏已完成，发布与远端验收进行中）。
+
+- 用户明确授权清理 PixivFlow、TelePost、deploy 三仓当前文件和 Git 历史。
+  原始工作与远端引用已离线备份；不在公开仓库保存原值与匿名值的对应表。
+- 源码/模板/测试/文档使用中性虚构数据；具体候选策略仅保留在私有运行配置。
+  新增 Agent 隐私约束与 `*.private.json`/bundle 忽略规则，防止旧克隆重新推回历史。
+- Git 历史、提交与标签说明均脱敏；协议 JSON 夹具相关哈希随内容同步更新。
+  当前源码 pin 改为清理后的同版本 release commit；运行服务与私有卷配置尚未变更。
+- 已发现历史下载包包含旧模板，需按正式 release repair 流程重建；保护规则与
+  Actions 仅在受控推送窗口临时调整，完成后恢复。
+- GitHub 内部 PR 引用/缓存及他人 fork、克隆需外部清理；不据远端分支清理宣称互联网副本已消除。
+
+## 2026-10-30 bot2 主主题内的候选偏好
+
+状态：IN_PROGRESS（实现与配置准备中，尚未声称线上生效）。
+
+- 用户确认保持 `テーマ乙` 主主题，只在符合主主题的候选中偏好 `テーマ甲`；要求通用上游能力。
+- PixivFlow 增加 per-target `candidateSelection`：必需 tag any-of 硬准入，偏好 tag
+  在准入后热度乘以 1.25（不叠加、不越过 seed tier、不新建搜索通道）。
+- deploy 两个 bot2 target 配置主主题别名 + `テーマ甲`/`テーマ甲別名` 偏好；bot1、排班不变。
+  原 `tagRelations.deny` 仅控制扩展搜索，可保留，不妨碍主主题内双 tag 作品获加分。
+- 用户文档：PixivFlow 中英文 CONFIG / TAG_RANKING；本仓 upgrades 候选偏好说明。
+- 待完成：上游 PR/CI/发行、deploy pin/CI、镜像部署、卷配置备份/原子替换/回读/热重载。
+  不补跑历史任务、不自动批准稿件；下一自然周期的内容效果仍待观察。
+
 ## 2026-10-29 PixivFlow 3.9.1（正式小说 Markdown 导出 + 认证输出安全）
 
 状态：VERIFIED（发行/部署/生产验收闭环）。

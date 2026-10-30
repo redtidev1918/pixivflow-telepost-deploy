@@ -254,6 +254,11 @@
                 "target": "bot2-submit"
             },
             "topic": "テーマ乙",
+            "candidateSelection": {
+                "requiredTags": ["テーマ乙", "主题乙别名", "テーマ乙別名", "主题乙", "topic-beta"],
+                "preferredTags": ["テーマ甲", "テーマ甲別名"],
+                "preferredTagBoost": 0.25
+            },
             "date": "YESTERDAY",
             "topicDiscovery": {
                 "includeR18": true,
@@ -303,6 +308,11 @@
                 }
             },
             "topic": "テーマ乙",
+            "candidateSelection": {
+                "requiredTags": ["テーマ乙", "主题乙别名", "テーマ乙別名", "主题乙", "topic-beta"],
+                "preferredTags": ["テーマ甲", "テーマ甲別名"],
+                "preferredTagBoost": 0.25
+            },
             "date": "YESTERDAY",
             "topicDiscovery": {
                 "includeR18": true,

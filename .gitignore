@@ -1,4 +1,6 @@
 # 敏感信息（Bot Token、Pixiv Token、订阅地址等）
+*.private.json
+*.bundle
 .env
 .env.*
 !.env.example
