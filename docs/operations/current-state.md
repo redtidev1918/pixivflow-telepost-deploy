@@ -5,21 +5,30 @@
 
 ## 2026-10-30 公开仓库隐私清理
 
-状态：IN_PROGRESS（隔离历史脱敏已完成，发布与远端验收进行中）。
+状态：VERIFIED（受控分支/标签、当前文件与可编辑 PR 文本）；
+EXTERNAL_ACCEPTANCE_REQUIRED（GitHub 内部缓存/旧 PR 引用、fork 与外部副本）。
 
 - 用户明确授权清理 PixivFlow、TelePost、deploy 三仓当前文件和 Git 历史。
   原始工作与远端引用已离线备份；不在公开仓库保存原值与匿名值的对应表。
 - 源码/模板/测试/文档使用中性虚构数据；具体候选策略仅保留在私有运行配置。
   新增 Agent 隐私约束与 `*.private.json`/bundle 忽略规则，防止旧克隆重新推回历史。
-- Git 历史、提交与标签说明均脱敏；协议 JSON 夹具相关哈希随内容同步更新。
-  当前源码 pin 改为清理后的同版本 release commit；运行服务与私有卷配置尚未变更。
-- 已发现历史下载包包含旧模板，需按正式 release repair 流程重建；保护规则与
-  Actions 仅在受控推送窗口临时调整，完成后恢复。
+- Git 历史、提交与标签说明已脱敏；协议 JSON 夹具哈希随内容同步更新。以明确
+  branch/tag refspec、原值 lease 和原子批次推送，未覆盖未知引用；492 个受影响引用已改写。
+- 三仓远端重新抓取复核与保护配置回读通过；分支保护、必需检查规则集与 Actions
+  均恢复原状态。原有工作与额外工作树本机配置保留，正常推送在本地可发布历史复核后恢复。
+- 下载产物已运行正式 release repair。现有资产不会自动覆盖，部署工具 v1.15.2
+  另由原清理后标签提交 `8cfe6f52cd1ebff5ddb8a03d8b4b6102dc9b4948` 重建
+  （CI run 41050583642）；六平台二进制 build-info 均匹配该标签、业务私密文本扫描
+  通过，再于维护窗口显式替换六个包、SHA256SUMS 与元数据，八件远端 digest 全部回读一致。
+  未移动发行标签；旧副本已私有备份，未将旧下载保留在公开 Release。
+- 第三方标准词汇不代表私有业务配置。PixivFlow 文档运行脚本恢复固定原件并加
+  SHA256/语法门禁（#235）；其标准标识符不得被盲目词表替换。
 - GitHub 内部 PR 引用/缓存及他人 fork、克隆需外部清理；不据远端分支清理宣称互联网副本已消除。
 
 ## 2026-10-30 PixivFlow 3.10.0 通用候选策略上线
 
-状态：IN_PROGRESS（功能与发行 PR 已合并，部署 pin 与私有配置验收进行中）。
+状态：VERIFIED（功能、发行、部署与私有配置生效）；
+EXTERNAL_ACCEPTANCE_REQUIRED（下一自然任务周期的实际候选效果）。
 
 - PixivFlow PR #232 / release PR #233（`8c7df0e3ef6dbe744932ea2b9ffb8f770b9d855a`）。
   `candidateSelection.requiredTags` 是 any-of 硬准入；偏好在准入后提供有界热度倍率，
@@ -28,21 +37,15 @@
   默认行为不变，无新增依赖或 DB migration；用户文档中英文配置参考与排名规则同步。
 - 功能 PR 全部适用 CI 通过（含真正的跨仓投递契约）；发行 PR 门禁通过。
   生产只在私有运行配置为指定 target 启用；公开仓库不记录真实主题或映射。
+- 发行产物三件齐全，GitHub digest 与 SHA256SUMS 通过；deploy pin #287 已合并，
+  `fly deploy --ha=false` 成功，`/health` = **3.10.0 / `8c7df0e3ef6d`**，
+  Code = Release = Deploy pin = Runtime。
+- 私有卷仅对两个目标增量加入策略，预检验证“偏好单独出现不可准入、主主题可准入、
+  偏好倍率不叠加”；原配置已备份为 `production.json.bak-private-selection-20261030`，
+  原子替换后回读一致，应用配置 generation **1→2**，幂等复核返回 already_applied。
+  配置原值、映射及完整配置指纹只保存在私有证据中，不进入公开记录。
 - 变更不补跑历史任务、不主动产生投稿、不自动批准审核；配置热重载与下一自然周期
   的候选效果分开验收。回滚需同时恢复代码 pin 与私有配置备份。
-
-## 2026-10-30 bot2 主主题内的候选偏好
-
-状态：IN_PROGRESS（实现与配置准备中，尚未声称线上生效）。
-
-- 用户确认保持 `テーマ乙` 主主题，只在符合主主题的候选中偏好 `テーマ甲`；要求通用上游能力。
-- PixivFlow 增加 per-target `candidateSelection`：必需 tag any-of 硬准入，偏好 tag
-  在准入后热度乘以 1.25（不叠加、不越过 seed tier、不新建搜索通道）。
-- deploy 两个 bot2 target 配置主主题别名 + `テーマ甲`/`テーマ甲別名` 偏好；bot1、排班不变。
-  原 `tagRelations.deny` 仅控制扩展搜索，可保留，不妨碍主主题内双 tag 作品获加分。
-- 用户文档：PixivFlow 中英文 CONFIG / TAG_RANKING；本仓 upgrades 候选偏好说明。
-- 待完成：上游 PR/CI/发行、deploy pin/CI、镜像部署、卷配置备份/原子替换/回读/热重载。
-  不补跑历史任务、不自动批准稿件；下一自然周期的内容效果仍待观察。
 
 ## 2026-10-29 PixivFlow 3.9.1（正式小说 Markdown 导出 + 认证输出安全）
 

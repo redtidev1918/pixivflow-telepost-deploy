@@ -8,6 +8,9 @@ pull requests and release notes must use neutral fictional examples. Keep real
 configuration on private volumes or gitignored `*.private.json` files; never export
 it into this repository. After a privacy history rewrite, migrate local patches to
 a fresh clone rather than pushing old history back to any remote branch or tag.
+Do not alter identifiers or standard vocabulary inside third-party runtimes to
+redact business settings. Keep vendored libraries pinned and integrity-checked;
+audit actual operational attribution rather than treating any word match as data.
 
 适用于：
 
