@@ -111,7 +111,8 @@ target 名称是私有运营数据，留在运行卷或 gitignored `*.private.js
 搜索、lookback、重抓/恢复、待发池与下载前复核共用策略。
 公开模板不记录任何 Bot 的实际主题别名或偏好映射；实际值仅保存在私有配置和运行卷中。
 用户文档使用中性示例说明字段，私有配置及其差异不得提交到公开仓库。
-完整字段与默认行为见 [PixivFlow 配置参考](https://redtidev1918.github.io/PixivFlow/CONFIG/#candidateselection必需-tag-与有限偏好)。
+完整字段与默认行为见 [PixivFlow 配置参考](https://redtidev1918.github.io/PixivFlow/#/CONFIG?id=candidateselection%EF%BC%9A%E5%BF%85%E9%9C%80-tag-%E4%B8%8E%E6%9C%89%E9%99%90%E5%81%8F%E5%A5%BD)。
+（PixivFlow 文档站是 docsify 哈希路由：页面地址形如 `…/PixivFlow/#/CONFIG`，章内锚点用 `?id=<标题-slug>`，不要写成 `/CONFIG/#锚点` 的静态路径形式。）
 
 ### 上传、校验与热重载
 
