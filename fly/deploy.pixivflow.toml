@@ -354,8 +354,13 @@ kill_timeout = 60
     # upstream auth errors are sanitized to bounded HTTP/errno classes (#228).
     # No delivery-protocol change; safe before/after TelePost current pin.
     # Rollback: 3.8.1 / eb70ceec4594ff993adfb5ced3b587a85b8d7d16.
-    PIXIVFLOW_REF = 'b4fce97c19232e7bd7d3c882e750f2441f1f4a14'
-    PIXIVFLOW_VERSION = '3.9.1'
+    # 3.10.0 — generic required-tag admission and bounded tag preferences.
+    # Search, lookback, recovery/refetch and inventory share the policy; no new
+    # dependency/schema or delivery contract. Operational values stay private.
+    # Rollback: 3.9.1 / b4fce97c19232e7bd7d3c882e750f2441f1f4a14,
+    # together with restoration of the private runtime configuration backup.
+    PIXIVFLOW_REF = '8c7df0e3ef6dbe744932ea2b9ffb8f770b9d855a'
+    PIXIVFLOW_VERSION = '3.10.0'
 
 [[mounts]]
   source = 'pixivflow_data'
