@@ -100,15 +100,17 @@ target 名称是私有运营数据，留在运行卷或 gitignored `*.private.js
 
 ### 候选主题偏好（PixivFlow `candidateSelection`）
 
-这是 PixivFlow 的通用 target 配置，TelePost 不参与候选排序。bot2 的插画与小说
-保持 `topic: テーマ乙`；`requiredTags` 显式列出主主题的日文/中文/英文别名（any-of），
-`preferredTags: ["テーマ甲", "テーマ甲別名"]` 仅给同时符合主主题的候选加 25% 热度分。
+这是 PixivFlow 的通用 target 配置，TelePost 不参与候选排序。
+保持原有 `topic`；`requiredTags` 显式列出主主题的别名（any-of），
+`preferredTags` 仅给同时符合主主题的候选增加热度分，默认增幅为 25%。
 偏好不创建搜索通道，也不能绕过主主题准入或 seed tier；原有相关搜索排除列表可保留。
 例如主主题候选热度 100 与双主题候选热度 90，后者按 112.5 排序；主主题热度 200
 仍排在其前面。没有双主题作品时正常选择主主题作品。
 
-调整时同步两个 bot2 target，勿改 bot1 或排班；先发布支持此字段的 PixivFlow，
-再更新卷配置。搜索、lookback、重抓/恢复、待发池与下载前复核共用策略。
+先发布支持此字段的 PixivFlow，再更新需要调整的 target 卷配置。
+搜索、lookback、重抓/恢复、待发池与下载前复核共用策略。
+公开模板不记录任何 Bot 的实际主题别名或偏好映射；实际值仅保存在私有配置和运行卷中。
+用户文档使用中性示例说明字段，私有配置及其差异不得提交到公开仓库。
 完整字段与默认行为见 [PixivFlow 配置参考](https://redtidev1918.github.io/PixivFlow/CONFIG/#candidateselection必需-tag-与有限偏好)。
 
 ### 上传、校验与热重载
