@@ -3,6 +3,37 @@
 > 业务隐私：本文及历史运维记录中的主题、别名、target 名称与内容样例均已匿名化，
 > 不代表真实运行配置。执行运维命令时从私有配置读取真实身份，不复制文中的示例值。
 
+## 2026-10-31 TelePost 2.84.10（多图相册发布布局修复）
+
+状态：VERIFIED（修复、发行、部署与 HTTP 验收）；
+BLOCKED（#224 生产账本只读归因与机内 doctor——本机 flyctl 未登录）。
+
+- 动因：审核 #224 发布后报告频道首贴不成完整相册、图片散落且系统报成功。
+  代码侧确认唯一能产生该现象的机制：相册被 Telegram 确定性拒绝后
+  `execute_plan()` / `run_item_batches()` 自动回退逐张发送仍报成功（静默降级），
+  另有 `fly.toml` 未声明 `CHANNEL_ALBUM_REPLY=discussion` 的拓扑漂移。
+- TelePost PR #367（squash `1baed23`）：确定性拒绝停止该批次（可重试、保留
+  checkpoint，不拆图）；`publish.layout` 审计记录实际相册分组与
+  complete/degraded/incomplete/failed/uncertain 布局分类；`fly.toml` 显式
+  `CHANNEL_ALBUM_REPLY=discussion`、`MEDIA_GROUP_CAPACITY=10`。合成媒体回归
+  （1/2/5/10/11/15/21 张 × chain/post/discussion、拒绝/超时、重启恢复、幂等）+
+  全量 1621 passed + 跨仓投递契约 VERIFIED；PR CI 全绿（含 Windows 套件）。
+- 发行 v2.84.10（release PR #368，8 产物 + SHA256SUMS 齐全）；deploy-fly
+  run 41194897817 自动部署成功；`/health` = **2.84.10 / `61ae2c7`**（bots 1/2），
+  `/ready` 与 bot1/bot2 v1/health 200（inbox pending=0/dead=0），smoke 4/4。
+  deploy 仓基线 PR #291 已合并（versions.json → 2.84.10）。
+- 发版基建两处既有回归（非本次修复引入）：`update-download-page` 直推 main 被
+  #364 起生效的必需检查拒绝 → 已由 TelePost PR #370 合规补推同形下载页刷新，
+  Pages 重建（docs.yml）随合并自动触发；release finalize 的 deploy-docs 仍
+  dispatch VitePress 迁移中退役的 `static.yml`（HTTP 422，`download-page.json`
+  已指向 `docs.yml`）→ 待专项修复。
+- #224 公开只读证据与事故描述不符：t.me 频道 3328 当前为 8 图完整相册（占
+  3328–3335），其后 3336/3337 与前日「1 图+5 文档」模式同构、疑为另一投稿；
+  Telegram 无法事后合成相册，故「散落单图」状态从未公开存在。最终归因需生产
+  ledger（原稿媒体总数、progress_json、机器 env）——待 flyctl 授权后只读核验。
+  历史审核 #224 本身未做任何重发、删除或修改。
+- 回滚点：TelePost 2.84.9（镜像 `ghcr.io/redtidev1918/telepost:v2.84.9`）。
+
 ## 2026-10-30 公开仓库隐私清理
 
 状态：VERIFIED（受控分支/标签、当前文件与可编辑 PR 文本）；
