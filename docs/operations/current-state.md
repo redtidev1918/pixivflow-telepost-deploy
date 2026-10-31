@@ -23,10 +23,12 @@ BLOCKED（#224 生产账本只读归因与机内 doctor——本机 flyctl 未�
   `/ready` 与 bot1/bot2 v1/health 200（inbox pending=0/dead=0），smoke 4/4。
   deploy 仓基线 PR #291 已合并（versions.json → 2.84.10）。
 - 发版基建两处既有回归（非本次修复引入）：`update-download-page` 直推 main 被
-  #364 起生效的必需检查拒绝 → 已由 TelePost PR #370 合规补推同形下载页刷新，
-  Pages 重建（docs.yml）随合并自动触发；release finalize 的 deploy-docs 仍
-  dispatch VitePress 迁移中退役的 `static.yml`（HTTP 422，`download-page.json`
-  已指向 `docs.yml`）→ 待专项修复。
+  #364 起生效的必需检查拒绝 → 当次由 TelePost PR #370 合规补推同形下载页刷新，
+  Pages 重建（docs.yml）随合并自动触发；release finalize 的 deploy-docs 曾 dispatch
+  VitePress 迁移中退役的 `static.yml`（HTTP 422）。**两者已由 TelePost PR #372 修复**
+  （deploy-docs → `docs.yml`；download-page v3：PAT 开 PR → 必需检查绿 → 自动 squash
+  合并，25 分钟上限 < releasegraph 30 分钟 max_wait，PAT 合并 push 经 docs/** 路径
+  自动重建 Pages），下次发版走全自动路径。
 - #224 公开只读证据与事故描述不符：t.me 频道 3328 当前为 8 图完整相册（占
   3328–3335），其后 3336/3337 与前日「1 图+5 文档」模式同构、疑为另一投稿；
   Telegram 无法事后合成相册，故「散落单图」状态从未公开存在。最终归因需生产
