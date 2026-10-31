@@ -29,12 +29,20 @@ BLOCKED（#224 生产账本只读归因与机内 doctor——本机 flyctl 未�
   （deploy-docs → `docs.yml`；download-page v3：PAT 开 PR → 必需检查绿 → 自动 squash
   合并，25 分钟上限 < releasegraph 30 分钟 max_wait，PAT 合并 push 经 docs/** 路径
   自动重建 Pages），下次发版走全自动路径。
-- #224 公开只读证据与事故描述不符：t.me 频道 3328 当前为 8 图完整相册（占
-  3328–3335），其后 3336/3337 与前日「1 图+5 文档」模式同构、疑为另一投稿；
-  Telegram 无法事后合成相册，故「散落单图」状态从未公开存在。最终归因需生产
-  ledger（原稿媒体总数、progress_json、机器 env）——待 flyctl 授权后只读核验。
+- #224 最终归因（flyctl 只读取证，已闭环）：bot1 库审核 #224 = PixivFlow 自动稿
+  （pixiv 151463510），**8 张 photo、0 文档**；02:36:09 批准 → 02:36:10 **一次成功**
+  发布 message 3328（related 3329–3335 = 完整 8 图相册），audit 无错误、
+  delivery_ledger 无 partial/uncertain，公开频道同构。8 ≤ 容量 10，任何 reply mode
+  预期均为单个完整 root 相册。**「首贴单图 + 散图」从未在频道发生**（疑为客户端
+  渲染异常或与审核群 8 条独立预览消息混淆）。生产 env 实测
+  `CHANNEL_ALBUM_REPLY=discussion` / `MEDIA_GROUP_CAPACITY=10`（Fly secret 一直在，
+  **从无 chain 漂移**）；2.84.10 的 fly.toml 声明与 secret 同值，属配置即代码化。
+  本次 2.84.10/2.84.11 修复为防御性加固 + 发版基建恢复，非该缺陷实际触发。
+  机内 doctor 仅 2 CRIT（inbox 死信 bot1:8/bot2:7，10-25 已知历史遗留）。
   历史审核 #224 本身未做任何重发、删除或修改。
-- 回滚点：TelePost 2.84.9（镜像 `ghcr.io/redtidev1918/telepost:v2.84.9`）。
+- 后续发版：2.84.11 已验证全自动链路（download-page v3 自动 PR + 检查绿自动合并 +
+  Pages 自动重建；post-release 五项全 success）。回滚点：TelePost 2.84.9
+  （镜像 `ghcr.io/redtidev1918/telepost:v2.84.9`）。
 
 ## 2026-10-30 公开仓库隐私清理
 
