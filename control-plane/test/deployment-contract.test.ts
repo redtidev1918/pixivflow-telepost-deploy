@@ -240,13 +240,13 @@ describe('telepress service topology', () => {
     // The package is the immutable runtime identity for this passthrough image.
     // A stale pin is how "latest release" and "running release" drift apart.
     expect(read('docker/telepress.Dockerfile')).toMatch(
-      /pip install[^\n]+"telepress\[api\]==0\.17\.2"/,
+      /pip install[^\n]+"telepress\[api\]==0\.18\.0"/,
     );
   });
 
   it('layers the same TelePress release over the immutable TelePost image', () => {
     // Two pins name the same runtime package, so they can drift apart: the
-    // overlay default stayed on 0.17.0 while the service moved to 0.17.2, and a
+    // overlay default stayed on 0.17.0 while the service moved to 0.18.0, and a
     // compose deployment would have kept the broken pagination. Derive the
     // expectation from the service pin instead of repeating the version.
     const service = read('docker/telepress.Dockerfile');
