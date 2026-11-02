@@ -3,6 +3,13 @@
 > 发布说明面向普通用户：写「对用户有什么改变」，不写内部实现细节（模块名、CI job、配置键）；
 > 技术细节放进代码注释或 `docs/`。每个 Release 的正文由本文件对应版本段自动生成。
 
+## [1.15.3](https://github.com/redtidev1918/pixivflow-telepost-deploy/compare/v1.15.2...v1.15.3) (2026-11-02)
+
+
+### Bug Fixes
+
+* **deps:** align TelePress safe-create release 0.18.1 ([#299](https://github.com/redtidev1918/pixivflow-telepost-deploy/issues/299)) ([24cc971](https://github.com/redtidev1918/pixivflow-telepost-deploy/commit/24cc9717bf510ac72947f2c9673e6eff4ff2d39e))
+
 ## [1.15.2](https://github.com/redtidev1918/pixivflow-telepost-deploy/compare/v1.15.1...v1.15.2) (2026-10-27)
 
 
