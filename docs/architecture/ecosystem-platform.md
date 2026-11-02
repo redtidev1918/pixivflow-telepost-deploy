@@ -1908,3 +1908,37 @@ classification is only a fallback for transport exceptions without an ACK.
 Regression cases include retryable 408, 503 carrying an invalid-state code, and
 permanent 400 carrying a timeout-setting code. These cases exercise the existing
 bounded outbox budget; no second retry manager is introduced.
+
+## Publication preview compensation
+
+Status: IMPLEMENTED_NOT_VERIFIED（TelePost 分支实现，尚待发行与运行验收）。
+
+Online reading is optional enrichment of the immutable publication. Preview failures
+never change review disposition, delivery topology, channel publication outcome or TXT.
+The existing publication_previews row remains the only preview truth: generation is
+claimed before remote work, diagnostic reason/stage and attempt identity are durable,
+and a succeeded URL is reused before fetching the attachment. Ordinary publication
+replay does not retry failed enrichment.
+
+Operator compensation is separate from publication: verify the owning Bot, published
+review and delivery ledger, current single root and channel edit permission; then
+reuse a successful URL or retry only preview generation and edit that root keyboard.
+It never publishes a second channel message or resends the TXT. Timeout is not proof
+that Telegraph created no page. Late success is retained; active/unknown remote work
+cannot be reclaimed by age. Reconciliation precedes retry or adoption of existing pages.
+
+Community Research: reuse TelePress's renderer/publisher, SQLite conditional claims,
+TelePost audit_events and python-telegram-bot edit_message_reply_markup. Telegram Bot
+API has no getMessage; a small read adapter observes public channel messages and fails
+closed for unavailable/private/ambiguous roots. No new queue, renderer or truth store.
+Telegraph createPage has no idempotency key: account-page reconciliation and explicit
+operator confirmation are required for ambiguous legacy/provider outcomes; a library
+content cache cannot establish publication identity. See TelePost OPERATIONS for the
+controlled CLI and its limits.
+
+The TelePress adapter guards createPage after its first failure, preventing the library
+from repeating an uncertain remote write. Renderer and pagination remain library-owned.
+Reclaim requires the same boot and a proven exited process; missing /proc or a different
+boot fails closed. Retry CAS binds the observed attempt, and live timeouts cannot be adopted.
+TelePress PR #83 fixes the same uncertain-create retry at the publisher; the TelePost
+guard remains until a released upstream version is pinned and verified.
