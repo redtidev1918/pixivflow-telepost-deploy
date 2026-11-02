@@ -5,14 +5,14 @@
 
 ## 2026-11-02 小说在线阅读补偿（IN_PROGRESS）
 
-- 历史交接取证（本次尚未重新核验）：生产 TelePost 2.84.11 / commit 5bfbc726，进程内 TelePress
+- VERIFIED（本次公网与机内只读）：生产 TelePost 2.84.11 / commit 5bfbc726，进程内 TelePress
   0.17.2；仓库依赖更新未进入该运行镜像。独立 TelePress Machine 停止，正式发布
   走 TelePost 进程内 provider。两个 Bot 使用独立 DB，预览已启用、token 已配置。
-- 历史交接取证（失败阶段）：一条小说已被 PixivFlow HTTP 201 受理进入人工审核；批准后
+- VERIFIED（失败阶段与当前账本）：一条小说已被 PixivFlow HTTP 201 受理进入人工审核；批准后
   预览落 failed / 空 URL，随后频道主贴与 TXT 回复成功，投递账本 complete。
   发布时段日志与旧源码将失败定位到 TXT 读取，未进入 provider 调用。
   旧适配器把 getFile/download 异常吞为空字节，旧账本未保存 reason；具体底层
-  异常不可追溯，不把“约 5 秒”当作已证实的 TimedOut。交接时同一 TXT 能正常读取。
+  异常不可追溯，不把“约 5 秒”当作已证实的 TimedOut。交接时同一 TXT 能正常读取；本次 bot2 审核仍 published、root 676、预览 failed / 空 URL。
 - VERIFIED（本次本地）：跨仓实际 HTTP/SQLite 投递契约与 80 个适配回归通过；
   TelePress 0.17.2 兼容/恢复 36 passed，0.18.0 定向 82 passed；docs build、
   docsite 9/9 与 navcheck 通过。新加同 boot 进程核验、超时采用保护、旧 attempt CAS，
@@ -23,9 +23,9 @@
   durable CAS + reason/stage/attempt + TXT GET 安全重试；独立 dry-run/补偿命令
   校验 owning Bot、原 publication/current root、编辑权限，只修预览与原帖 keyboard。
   未产生新投稿、未修改原频道帖、未绕过审核或发布门禁。
-- BLOCKED_EXTERNAL（本次只读）：Fly 返回 host_status=unreachable，机内 exec 408、
-  公网 health 超时；当前 runtime 与原帖无法重新核验。未重启/迁移机器或修改生产数据。
-  正常环境 GitHub 身份有效，继续提交 PR/CI；功能与 Release PR 由用户合并。
+- VERIFIED（本次只读）：Fly 曾短暂返回 host_status=unreachable / exec 408 / health 超时，
+  后恢复 host_status=ok；公网与机内 /health 一致。未重启/迁移机器或修改生产数据。
+  TelePress #83、TelePost #380 与 deploy #298 已开 PR；功能与 Release PR 由用户合并。
   发行部署与原帖补偿仍待完成；交接回滚基线为 2.84.11，部署前需重新核对。
 
 ## 2026-10-31 TelePost 2.84.10（多图相册发布布局修复）
