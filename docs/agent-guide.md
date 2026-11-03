@@ -45,15 +45,14 @@ audit actual operational attribution rather than treating any word match as data
 
 # 2. Mandatory Reading
 
-任何跨仓库任务开始前必须读取：
+本节按任务范围适用，与根目录 AGENTS.md 的默认读取规则一致；不是每次任务的全量必读清单。
 
-1. Deploy `AGENTS.md`
-2. `docs/architecture/ecosystem-platform.md`
-3. `docs/operations/current-state.md`
-4. `docs/operations/progressive-delivery-plan.md`
-6. Deploy `CONTRACT.md`
-7. 当前仓库 `AGENTS.md`
-8. 与任务相关的 architecture / operations / development 文档
+- 普通仓内开发：当前仓库 AGENTS.md、相关源码/测试及适用领域细则。
+- 跨仓接口或职责变更：另读 Deploy AGENTS.md、CONTRACT.md 与
+  `docs/architecture/ecosystem-platform.md` 的相关章节。
+- 生产变更或事故：另读 `docs/operations/current-state.md` 与相关 operations 文档；
+  涉及渐进交付时读 `docs/operations/progressive-delivery-plan.md`。
+- 历史证据按日期、PR、故障检索相关段落，不默认加载全文。
 
 如果文档与当前生产事实冲突：
 
