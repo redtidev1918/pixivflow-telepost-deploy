@@ -1,13 +1,13 @@
 # 当前生产状态
 
-截至 2026-11-05 的运行验收更新（TelePost 2.84.13 发行与只读验收完成）。
+截至 2026-11-05（晚）的运行验收更新（TelePost 2.84.14 发行与只读验收完成）。
 业务主题、别名与 target 示例均匿名化；真实身份只从私有配置读取。
 
 ## 配置基线与运行证据
 
 | 组件 | 仓库配置基线 | 运行证据边界 |
 | --- | --- | --- |
-| TelePost | `versions.json`: 2.84.13 | 11-05 只读验收：公网 `/health` = 2.84.13 / f58419b，bot1+bot2 `/ready` ok，botN health inbox pending 0 / dead_24h 0，smoke 4/4；未做机内 doctor |
+| TelePost | `versions.json`: 2.84.14 | 11-05 只读验收：公网 `/health` = 2.84.14 / 9c8752ab，bot1+bot2 `/ready` ok，botN health inbox pending 0 / dead_24h 0，smoke 4/4；Mini App 包（index-C8XZJyo3）实测含频道入口/审核频道按钮/轮询标记；未做机内 doctor |
 | PixivFlow scheduler | `fly/deploy.pixivflow.toml`: 3.10.0 | 10-30 条目记录已部署；11-05 未复核 |
 | TelePress（TelePost 内嵌） | `docker/telepost.Dockerfile`: 0.18.1 | 11-05 `/health` 实测进程内 telepress_version 0.18.1（rich markdown true） |
 
@@ -23,7 +23,7 @@
 
 ## 回滚
 
-11-05 交接记录的 TelePost 回滚基线为 2.84.12；这是历史记录，执行前核对当前部署、镜像与卷备份，并按 upgrades.md 的正式流程操作。禁止仅凭旧版本号执行回滚。
+11-05 交接记录的 TelePost 回滚基线为 2.84.13；这是历史记录，执行前核对当前部署、镜像与卷备份，并按 upgrades.md 的正式流程操作。禁止仅凭旧版本号执行回滚。
 
 ## 历史与更新规则
 
