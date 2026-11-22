@@ -122,6 +122,10 @@ describe('topology has a single source', () => {
 describe('pixivflow worker topology', () => {
   const fly = read('fly/deploy.pixivflow.toml');
 
+  it('keeps the split worker on 256 MiB', () => {
+    expect(withoutComments(fly)).toMatch(/\[\[vm\]\]\s+size\s*=\s*'shared-cpu-1x'\s+memory\s*=\s*'256mb'/);
+  });
+
   it('wakes on a trigger and lets the ledger decide when to stop', () => {
     expect(fly).toMatch(/auto_start_machines\s*=\s*true/);
     expect(fly).toMatch(/auto_stop_machines\s*=\s*false/);
@@ -171,9 +175,26 @@ describe('pixivflow runtime config', () => {
   const config = JSON.parse(read('pixivflow/config/production.json')) as {
     schedulerRuntime: Record<string, unknown>;
     storage: Record<string, string>;
-    delivery: { targets: Record<string, { type: string; url: string; fields: Record<string, string> }> };
+    schedules: Array<{ timeout: number; progressTimeoutMs: number }>;
+    delivery: { targets: Record<string, {
+      type: string; url: string; fields: Record<string, string>;
+      notificationUrl?: string; scheduleOutcomeUrl?: string;
+    }> };
   };
   const runtime = config.schedulerRuntime;
+
+  it('keeps both daily budgets and their alert routes explicit', () => {
+    expect(config.schedules).toHaveLength(2);
+    for (const schedule of config.schedules) {
+      expect(schedule.progressTimeoutMs).toBe(900_000);
+      expect(schedule.timeout).toBe(2_700_000);
+    }
+    const summaryRoutes = Object.values(config.delivery.targets).filter((route) => route.scheduleOutcomeUrl);
+    expect(summaryRoutes).toHaveLength(2);
+    for (const route of summaryRoutes) {
+      expect(route.notificationUrl).toBe(route.scheduleOutcomeUrl?.replace('/schedule/outcomes', '/notifications'));
+    }
+  });
 
   it('runs on the external clock and exits when its own ledger is empty', () => {
     expect(runtime.mode).toBe('external');

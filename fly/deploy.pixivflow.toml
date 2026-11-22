@@ -359,12 +359,18 @@ kill_timeout = 60
     # dependency/schema or delivery contract. Operational values stay private.
     # Rollback: 3.9.1 / b4fce97c19232e7bd7d3c882e750f2441f1f4a14,
     # together with restoration of the private runtime configuration backup.
-    PIXIVFLOW_REF = '8c7df0e3ef6dbe744932ea2b9ffb8f770b9d855a'
-    PIXIVFLOW_VERSION = '3.10.0'
+    # 3.10.1 — progress-aware execution budgets and durable timeout alerts.
+    # Rollback: 3.10.0 / 8c7df0e3ef6dbe744932ea2b9ffb8f770b9d855a.
+    PIXIVFLOW_REF = 'c809d10e8339b5e443299e6ad1244fe34874061a'
+    PIXIVFLOW_VERSION = '3.10.1'
 
 [[mounts]]
   source = 'pixivflow_data'
   destination = '/app/data'
+
+[[vm]]
+  size = 'shared-cpu-1x'
+  memory = '256mb'
 
 [env]
   # The config *file* is addressed absolutely on purpose and lives on the mounted
