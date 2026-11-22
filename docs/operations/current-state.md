@@ -1,14 +1,14 @@
 # 当前生产状态
 
-截至 2026-11-05（晚）的运行验收更新（TelePost 2.84.14 发行与只读验收完成）。
+截至 2026-11-22 的运行验收更新（PixivFlow 3.10.1 与 TelePost 2.84.15 已上线）。
 业务主题、别名与 target 示例均匿名化；真实身份只从私有配置读取。
 
 ## 配置基线与运行证据
 
 | 组件 | 仓库配置基线 | 运行证据边界 |
 | --- | --- | --- |
-| TelePost | `versions.json`: 2.84.14 | 11-05 只读验收：公网 `/health` = 2.84.14 / 9c8752ab，bot1+bot2 `/ready` ok，botN health inbox pending 0 / dead_24h 0，smoke 4/4；Mini App 包（index-C8XZJyo3）实测含频道入口/审核频道按钮/轮询标记；未做机内 doctor |
-| PixivFlow scheduler | `fly/deploy.pixivflow.toml`: 3.10.0 | 10-30 条目记录已部署；11-05 未复核 |
+| TelePost | `versions.json`: 2.84.15（[#315](https://github.com/redtidev1918/pixivflow-telepost-deploy/pull/315)） | 11-22 `/health` = 2.84.15 / `9591b5f52c8b`，双 Bot 就绪，inbox 无积压，HTTP 冒烟 4/4，机内 doctor 24/24 |
+| PixivFlow scheduler | `fly/deploy.pixivflow.toml`: 3.10.1 | 11-22 `/health` = 3.10.1 / `c809d10e8339`，256 MiB，空闲自停已观测 |
 | TelePress（TelePost 内嵌） | `docker/telepost.Dockerfile`: 0.18.1 | 11-05 `/health` 实测进程内 telepress_version 0.18.1（rich markdown true） |
 
 修改生产前读取实际 pin、镜像、runtime revision 与健康状态；发行、配置与运行版本分别验收。
@@ -26,8 +26,9 @@
   对空文本返回预期的 HTTP 400，没有投递诊断消息。回滚使用旧镜像 3.10.0，
   并恢复 `/app/data/production.json.bak-schedule-budget-20261122`。
 - TelePost [#395](https://github.com/redtidev1918/TelePost/pull/395) 区分待发送和已发送回执，
-  待发送返回可重试的 HTTP 503。代码已合并，2.84.15 同步发行仍在进行。真实告警
-  与小说提交要等自然周期或实际故障验收。Pin 与发行产物已核对，PixivFlow 发布后
+  待发送返回可重试的 HTTP 503。2.84.15 发行、PyPI、自动部署和只读验收 VERIFIED，
+  回滚点为 2.84.14 / `9c8752ab`。真实告警与小说提交要等自然周期或实际故障验收。
+  Pin 与发行产物已核对，PixivFlow 发布后
   的下载页刷新和独立文档调度失败，与当前 worker 的线上版本核验分开跟踪。
 - **2026-11-22 任务错峰，配置回读 VERIFIED，首个自然周期待验收。** 11-01 至
   11-21 两班每天都在北京时间 10:00 受理并成功。11-22 仍在同一分钟受理，
