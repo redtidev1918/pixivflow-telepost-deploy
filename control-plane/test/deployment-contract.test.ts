@@ -122,6 +122,10 @@ describe('topology has a single source', () => {
 describe('pixivflow worker topology', () => {
   const fly = read('fly/deploy.pixivflow.toml');
 
+  it('keeps the split worker on 256 MiB', () => {
+    expect(withoutComments(fly)).toMatch(/\[\[vm\]\]\s+size\s*=\s*'shared-cpu-1x'\s+memory\s*=\s*'256mb'/);
+  });
+
   it('wakes on a trigger and lets the ledger decide when to stop', () => {
     expect(fly).toMatch(/auto_start_machines\s*=\s*true/);
     expect(fly).toMatch(/auto_stop_machines\s*=\s*false/);
