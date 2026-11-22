@@ -171,9 +171,26 @@ describe('pixivflow runtime config', () => {
   const config = JSON.parse(read('pixivflow/config/production.json')) as {
     schedulerRuntime: Record<string, unknown>;
     storage: Record<string, string>;
-    delivery: { targets: Record<string, { type: string; url: string; fields: Record<string, string> }> };
+    schedules: Array<{ timeout: number; progressTimeoutMs: number }>;
+    delivery: { targets: Record<string, {
+      type: string; url: string; fields: Record<string, string>;
+      notificationUrl?: string; scheduleOutcomeUrl?: string;
+    }> };
   };
   const runtime = config.schedulerRuntime;
+
+  it('keeps both daily budgets and their alert routes explicit', () => {
+    expect(config.schedules).toHaveLength(2);
+    for (const schedule of config.schedules) {
+      expect(schedule.progressTimeoutMs).toBe(900_000);
+      expect(schedule.timeout).toBe(2_700_000);
+    }
+    const summaryRoutes = Object.values(config.delivery.targets).filter((route) => route.scheduleOutcomeUrl);
+    expect(summaryRoutes).toHaveLength(2);
+    for (const route of summaryRoutes) {
+      expect(route.notificationUrl).toBe(route.scheduleOutcomeUrl?.replace('/schedule/outcomes', '/notifications'));
+    }
+  });
 
   it('runs on the external clock and exits when its own ledger is empty', () => {
     expect(runtime.mode).toBe('external');

@@ -34,7 +34,8 @@
                 "bot1-illust-topic-a",
                 "bot1-novel-topic-a"
             ],
-            "timeout": 1800000,
+            "timeout": 2700000,
+            "progressTimeoutMs": 900000,
             "maxConsecutiveFailures": 5,
             "failureRetryDelay": 30000
         },
@@ -48,7 +49,8 @@
                 "bot2-illust-topic-b",
                 "bot2-novel-topic-b"
             ],
-            "timeout": 1800000,
+            "timeout": 2700000,
+            "progressTimeoutMs": 900000,
             "maxConsecutiveFailures": 5,
             "failureRetryDelay": 30000
         }
@@ -117,6 +119,7 @@
                 },
                 "maxAttempts": 3,
                 "retryDelayMs": 3000,
+                "notificationUrl": "${TELEPOST_API_BASE_URL}/api/bot1/v1/notifications",
                 "scheduleOutcomeUrl": "${TELEPOST_API_BASE_URL}/api/bot1/v1/schedule/outcomes"
             },
             "bot2-submit": {
@@ -148,6 +151,7 @@
                 },
                 "maxAttempts": 3,
                 "retryDelayMs": 3000,
+                "notificationUrl": "${TELEPOST_API_BASE_URL}/api/bot2/v1/notifications",
                 "scheduleOutcomeUrl": "${TELEPOST_API_BASE_URL}/api/bot2/v1/schedule/outcomes"
             }
         }
