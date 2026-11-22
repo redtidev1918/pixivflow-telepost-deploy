@@ -241,7 +241,7 @@ bot1
 10:00 Asia/Shanghai
 
 bot2
-10:10 Asia/Shanghai
+11:00 Asia/Shanghai
 ```
 
 检查：

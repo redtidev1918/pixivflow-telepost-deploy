@@ -40,9 +40,9 @@
         },
         {
             "id": "bot2-daily",
-            "name": "Bot2 每日 10:10 テーマ乙 非AI插画 + 中文小说 (NSFW)",
+            "name": "Bot2 每日 11:00 テーマ乙 非AI插画 + 中文小说 (NSFW)",
             "enabled": true,
-            "cron": "10 10 * * *",
+            "cron": "0 11 * * *",
             "timezone": "Asia/Shanghai",
             "targetIds": [
                 "bot2-illust-topic-b",

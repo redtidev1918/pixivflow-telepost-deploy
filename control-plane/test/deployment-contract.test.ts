@@ -317,4 +317,12 @@ describe('github actions schedule watchdog', () => {
     // watchdog is as dead as a misdirected one, only louder.
     expect(workflow).toContain('SCHEDULE_TRIGGER_TOKEN');
   });
+
+  it('routes each of the two daily watchdog triggers to its own batch', () => {
+    for (const [cron, id] of [['35 2 * * *', 'bot1-daily'], ['35 3 * * *', 'bot2-daily']]) {
+      expect(workflow).toContain(`- cron: '${cron}'`);
+      expect(workflow).toContain(`'${cron}') schedule_ids=(${id})`);
+    }
+    expect(workflow).toContain('github.event.schedule');
+  });
 });

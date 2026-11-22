@@ -28,7 +28,7 @@
  *
  * Cloudflare cron expressions are UTC. The schedules themselves are declared in
  * Asia/Shanghai in `pixivflow/config/production.json` (bot1-daily at 10:00,
- * bot2-daily at 10:10, once per day), so each expression below is that
+ * bot2-daily at 11:00, once per day), so each expression below is that
  * schedule's local time minus eight hours, plus the secondary offset.
  *
  * `deployment-contract.test.ts` fails if these keys and the `[triggers] crons`
@@ -71,11 +71,11 @@ export const CRON_MAP: Record<string, CronBinding> = {
     clockRole: 'secondary',
     primaryCron: '0 2 * * *',
   },
-  '12 2 * * *': {
+  '2 3 * * *': {
     scheduleId: 'bot2-daily',
-    label: 'bot2-daily 10:10 Asia/Shanghai (secondary clock, +2 min)',
+    label: 'bot2-daily 11:00 Asia/Shanghai (secondary clock, +2 min)',
     clockRole: 'secondary',
-    primaryCron: '10 2 * * *',
+    primaryCron: '0 3 * * *',
   },
 };
 
