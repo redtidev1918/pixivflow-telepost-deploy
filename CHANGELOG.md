@@ -3,6 +3,14 @@
 > 发布说明面向普通用户：写「对用户有什么改变」，不写内部实现细节（模块名、CI job、配置键）；
 > 技术细节放进代码注释或 `docs/`。每个 Release 的正文由本文件对应版本段自动生成。
 
+## [1.15.4](https://github.com/redtidev1918/pixivflow-telepost-deploy/compare/v1.15.3...v1.15.4) (2026-11-22)
+
+
+### Bug Fixes
+
+* **ops:** configure bounded schedule budgets and review alerts ([#313](https://github.com/redtidev1918/pixivflow-telepost-deploy/issues/313)) ([34cf8d2](https://github.com/redtidev1918/pixivflow-telepost-deploy/commit/34cf8d29fc1399d55a0f244676ff423186999deb))
+* **schedule:** stagger the daily worker batches by one hour ([#309](https://github.com/redtidev1918/pixivflow-telepost-deploy/issues/309)) ([30fee52](https://github.com/redtidev1918/pixivflow-telepost-deploy/commit/30fee52ec86d78817276eab27565b87147d408ae))
+
 ## [1.15.3](https://github.com/redtidev1918/pixivflow-telepost-deploy/compare/v1.15.2...v1.15.3) (2026-11-02)
 
 
