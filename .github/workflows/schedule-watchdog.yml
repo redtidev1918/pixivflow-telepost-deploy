@@ -2,11 +2,11 @@ name: schedule-watchdog
 
 # Tertiary external clock. PRIMARY is cron-job.org (fires at the occurrence);
 # SECONDARY is the Cloudflare Worker (`pixivflow-control-plane`, +2 min). This
-# watchdog fires at 02:35 UTC and re-triggers BOTH single-daily schedules.
+# watchdog re-triggers each daily schedule 35 minutes after its occurrence.
 # Idempotent: if either earlier clock admitted the occurrence the slot ledger
 # answers already_completed / already_running; if BOTH missed it, this run
-# creates the slot. 02:35Z is after the 02:00Z / 02:10Z occurrences and the
-# +2 min secondary, before the 90-minute grace window expires.
+# creates the slot. 02:35Z / 03:35Z follow the 02:00Z / 03:00Z occurrences and
+# their +2 minute secondary triggers, inside the 90-minute grace window.
 #
 # A red run here is a MISSING SAFETY NET, not a cosmetic failure: while this
 # clock is broken the two production clocks are the only replay paths. That is
@@ -17,6 +17,7 @@ name: schedule-watchdog
 on:
   schedule:
     - cron: '35 2 * * *'
+    - cron: '35 3 * * *'
   workflow_dispatch:
 
 permissions:
@@ -33,6 +34,7 @@ jobs:
       - name: Fire schedule trigger
         env:
           SCHEDULE_TRIGGER_TOKEN: ${{ secrets.SCHEDULE_TRIGGER_TOKEN }}
+          WATCHDOG_CRON: ${{ github.event.schedule }}
         shell: bash
         run: |
           set -u
@@ -48,8 +50,14 @@ jobs:
           # there. A secret copy of the URL is how this watchdog silently pointed
           # at an always-on but unrelated host, got a healthy /health and 404'd on
           # every real trigger, and stayed red for days without anyone noticing.
+          case "$WATCHDOG_CRON" in
+            '35 2 * * *') schedule_ids=(bot1-daily) ;;
+            '35 3 * * *') schedule_ids=(bot2-daily) ;;
+            '') schedule_ids=(bot1-daily bot2-daily) ;; # workflow_dispatch
+            *) echo 'Unmapped watchdog cron' >&2; exit 1 ;;
+          esac
           failed=0
-          for id in bot1-daily bot2-daily; do
+          for id in "${schedule_ids[@]}"; do
             if ! bash ./scripts/trigger-schedule.sh "$id"; then
               echo "watchdog ${id} failed" >> "$GITHUB_STEP_SUMMARY"
               failed=1

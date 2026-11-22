@@ -20,7 +20,8 @@
 # the evidence, and it is recorded as such.
 #
 # Usage:
-#   ./scripts/watch-schedule-window.sh                     # default: next 10:00/10:10 CST window
+#   ./scripts/watch-schedule-window.sh                     # next 10:00 Asia/Shanghai window
+#   ./scripts/watch-schedule-window.sh --primary-hour 11   # next 11:00 window
 #   ./scripts/watch-schedule-window.sh --deadline 14:30Z --out /tmp/window
 #   ./scripts/watch-schedule-window.sh --out ./evidence
 #
@@ -36,13 +37,15 @@ cd "$repo_dir" || exit 2
 app=${PIXIVFLOW_FLY_APP:-pixivflow-scheduler}
 out_dir=${PIXIVFLOW_WATCH_OUT:-/tmp/schedule-window}
 deadline_arg=""
-primary_minute="00"      # PRIMARY clock minute for the daily occurrence (10:00 CST)
+primary_hour="10"
+primary_minute="00"
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --deadline) deadline_arg=${2:-}; shift 2 ;;
     --out) out_dir=${2:-}; shift 2 ;;
     --app) app=${2:-}; shift 2 ;;
+    --primary-hour) primary_hour=${2:-}; shift 2 ;;
     --primary-minute) primary_minute=${2:-}; shift 2 ;;
     -h|--help) sed -n '2,30p' "$0"; exit 0 ;;
     *) echo "[FAIL] unknown argument: $1" >&2; exit 2 ;;
@@ -61,20 +64,17 @@ say() { printf '%s %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$*" | tee -a "$log_fi
 # --- the window -----------------------------------------------------------------
 #
 # Compute today's primary/secondary instants in UTC. The daily occurrence is
-# 10:00 / 10:10 Asia/Shanghai = 02:00Z / 02:10Z (once per day, 2026-09-19+).
-primary_epoch=$(python3 - "${primary_minute}" <<'PY'
+# 10:00 / 11:00 Asia/Shanghai = 02:00Z / 03:00Z.
+primary_epoch=$(python3 - "${primary_hour}" "${primary_minute}" <<'PY'
 import datetime, sys
-minute = int(sys.argv[1])
+hour, minute = map(int, sys.argv[1:])
 tz = datetime.timezone(datetime.timedelta(hours=8))
 now = datetime.datetime.now(tz)
-candidates = [
-    now.replace(hour=10, minute=minute, second=0, microsecond=0),
-    now.replace(hour=10, minute=minute, second=0, microsecond=0) + datetime.timedelta(days=1),
-]
-chosen = next(c for c in candidates if c > now)
-print(int(chosen.timestamp()))
+today = now.replace(hour=hour, minute=minute, second=0, microsecond=0)
+next_occurrence = today if today > now else today + datetime.timedelta(days=1)
+print(int(next_occurrence.timestamp()))
 PY
-)
+) || exit 2
 # The secondary offset has exactly one statement in this repo: the clock's own
 # cron map. Reading it here instead of repeating it keeps the two from drifting --
 # and an offset that drifts would make this watcher wait for the wrong window.
