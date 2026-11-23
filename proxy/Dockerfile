@@ -1,4 +1,4 @@
-FROM metacubex/mihomo:v1.19.33
+FROM metacubex/mihomo:v1.19.34
 
 COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
 RUN chmod +x /usr/local/bin/docker-entrypoint.sh
